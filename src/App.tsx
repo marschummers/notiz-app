@@ -298,6 +298,8 @@ export default function App() {
       <canvas
         ref={canvasRef}
         className="canvas"
+        draggable={false}
+        onDragStart={(e) => e.preventDefault()}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={endStroke}

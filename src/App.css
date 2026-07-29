@@ -57,6 +57,11 @@
   width: 100%;
   touch-action: none;
   background: #fff;
+  /* Verhindert iPadOS' native "Drag to Share"-Geste auf dem Canvas-Inhalt -
+     die "stiehlt" sonst die Touch-Sequenz komplett, bevor sie ueberhaupt bei
+     unseren Pointer-Event-Handlern ankommt (Ursache des Absetzen/Aufsetzen-Bugs). */
+  -webkit-user-drag: none;
+  -webkit-touch-callout: none;
 }
 
 .log {
