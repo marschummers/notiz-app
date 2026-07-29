@@ -52,7 +52,9 @@ function redrawAll(ctx: CanvasRenderingContext2D, width: number, height: number,
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
-  const debugRef = useRef<HTMLDivElement>(null)
+  const statusRef = useRef<HTMLDivElement>(null)
+  const logRef = useRef<HTMLDivElement>(null)
+  const logLinesRef = useRef<string[]>([])
 
   const strokesRef = useRef<Stroke[]>([])
   const currentStrokeRef = useRef<Stroke | null>(null)
@@ -120,6 +122,7 @@ export default function App() {
     // sonst greift iOS Safari seine eigene Geste (Text markieren, Lupe, ...) und
     // der naechste Pointerdown wirkt "haengen geblieben".
     e.preventDefault()
+    log(`↓ down id=${e.pointerId} type=${e.pointerType} buttons=${e.buttons} p=${e.pressure.toFixed(2)} activeWar=${activePointerIdRef.current}`)
 
     if (e.pointerType === 'pen') penDetectedRef.current = true
     // Palm rejection: sobald einmal ein Stift erkannt wurde, zeichnet nur noch der Stift.
@@ -174,6 +177,14 @@ export default function App() {
   }
 
   function finishCurrentStroke() {
+    const canvas = canvasRef.current
+    if (canvas && activePointerIdRef.current !== null) {
+      try {
+        canvas.releasePointerCapture(activePointerIdRef.current)
+      } catch {
+        // war schon freigegeben, egal
+      }
+    }
     const stroke = currentStrokeRef.current
     if (stroke) {
       strokesRef.current.push(stroke)
@@ -185,13 +196,50 @@ export default function App() {
   }
 
   function endStroke(e: React.PointerEvent<HTMLCanvasElement>) {
+    log(`${labelFor(e.type)} id=${e.pointerId} type=${e.pointerType}`)
     if (e.pointerId !== activePointerIdRef.current) return
     finishCurrentStroke()
   }
 
   function updateDebug(pointerType: string, pressure: number) {
-    if (!debugRef.current) return
-    debugRef.current.textContent = `Typ: ${pointerType} | Pencil erkannt: ${penDetectedRef.current ? 'ja' : 'nein'} | Druck: ${pressure.toFixed(2)}`
+    if (!statusRef.current) return
+    statusRef.current.textContent = `Typ: ${pointerType} | Pencil erkannt: ${penDetectedRef.current ? 'ja' : 'nein'} | Druck: ${pressure.toFixed(2)}`
+  }
+
+  function labelFor(type: string) {
+    switch (type) {
+      case 'pointerdown':
+        return '↓ down'
+      case 'pointerup':
+        return '↑ up'
+      case 'pointercancel':
+        return '✕ cancel'
+      case 'pointerleave':
+        return '⇥ leave'
+      case 'lostpointercapture':
+        return '⊘ lostcapture'
+      case 'pointerenter':
+        return '⌁ enter'
+      case 'pointerover':
+        return '⌁ over'
+      case 'pointerout':
+        return '⌁ out'
+      default:
+        return type
+    }
+  }
+
+  function log(msg: string) {
+    if (!logRef.current) return
+    const t = (performance.now() / 1000).toFixed(2)
+    logLinesRef.current.push(`${t}s ${msg}`)
+    if (logLinesRef.current.length > 30) logLinesRef.current.shift()
+    logRef.current.textContent = logLinesRef.current.join('\n')
+    logRef.current.scrollTop = logRef.current.scrollHeight
+  }
+
+  function handleHover(e: React.PointerEvent<HTMLCanvasElement>) {
+    log(`${labelFor(e.type)} id=${e.pointerId} type=${e.pointerType} buttons=${e.buttons}`)
   }
 
   function undo() {
@@ -243,7 +291,7 @@ export default function App() {
         <button onClick={clearAll} disabled={strokeCount === 0}>
           Leeren
         </button>
-        <div className="debug" ref={debugRef}>
+        <div className="status" ref={statusRef}>
           Noch keine Eingabe
         </div>
       </div>
@@ -256,7 +304,11 @@ export default function App() {
         onPointerCancel={endStroke}
         onPointerLeave={endStroke}
         onLostPointerCapture={endStroke}
+        onPointerEnter={handleHover}
+        onPointerOver={handleHover}
+        onPointerOut={handleHover}
       />
+      <div className="log" ref={logRef} />
     </div>
   )
 }

@@ -44,7 +44,7 @@
   cursor: default;
 }
 
-.debug {
+.status {
   margin-left: auto;
   font-family: ui-monospace, Consolas, monospace;
   font-size: 12px;
@@ -57,6 +57,19 @@
   width: 100%;
   touch-action: none;
   background: #fff;
+}
+
+.log {
+  height: 110px;
+  overflow-y: auto;
+  padding: 6px 10px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  background: #0d0e12;
+  color: #7ee787;
+  border-top: 1px solid #2e303a;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -72,7 +85,7 @@
   .canvas {
     background: #16171d;
   }
-  .debug {
+  .status {
     color: #9ca3af;
   }
 }
