@@ -52,6 +52,11 @@ function redrawAll(ctx: CanvasRenderingContext2D, width: number, height: number,
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
+  // Safari behandelt <canvas> mit gezeichnetem Inhalt wie ein Bild (Hover-Vorschau,
+  // "Teilen"-Angebot per Pencil) - das faengt Touch-Sequenzen komplett ab, bevor sie
+  // unsere Handler erreichen. Deshalb nimmt ein unsichtbares Overlay-Div die Eingabe
+  // entgegen, das Canvas darunter ist rein zur Darstellung da (pointer-events: none).
+  const overlayRef = useRef<HTMLDivElement>(null)
   const statusRef = useRef<HTMLDivElement>(null)
   const logRef = useRef<HTMLDivElement>(null)
   const logLinesRef = useRef<string[]>([])
@@ -113,10 +118,10 @@ export default function App() {
     return { x: e.clientX - rect.left, y: e.clientY - rect.top, pressure }
   }
 
-  function handlePointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
-    const canvas = canvasRef.current
+  function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    const overlay = overlayRef.current
     const ctx = ctxRef.current
-    if (!canvas || !ctx) return
+    if (!overlay || !ctx) return
 
     // Immer zuerst preventDefault, auch fuer Eingaben die wir gleich ignorieren -
     // sonst greift iOS Safari seine eigene Geste (Text markieren, Lupe, ...) und
@@ -139,24 +144,24 @@ export default function App() {
       return
     }
 
-    canvas.setPointerCapture(e.pointerId)
+    overlay.setPointerCapture(e.pointerId)
     activePointerIdRef.current = e.pointerId
 
-    const rect = canvas.getBoundingClientRect()
+    const rect = overlay.getBoundingClientRect()
     const point = eventToPoint(e.nativeEvent, rect)
     currentStrokeRef.current = { points: [point], color, width: baseWidth, eraser }
     updateDebug(e.pointerType, point.pressure)
   }
 
-  function handlePointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
+  function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
     if (e.pointerId !== activePointerIdRef.current) return
-    const canvas = canvasRef.current
+    const overlay = overlayRef.current
     const ctx = ctxRef.current
     const stroke = currentStrokeRef.current
-    if (!canvas || !ctx || !stroke) return
+    if (!overlay || !ctx || !stroke) return
     e.preventDefault()
 
-    const rect = canvas.getBoundingClientRect()
+    const rect = overlay.getBoundingClientRect()
     const native = e.nativeEvent
     const events = native.getCoalescedEvents ? native.getCoalescedEvents() : [native]
 
@@ -177,10 +182,10 @@ export default function App() {
   }
 
   function finishCurrentStroke() {
-    const canvas = canvasRef.current
-    if (canvas && activePointerIdRef.current !== null) {
+    const overlay = overlayRef.current
+    if (overlay && activePointerIdRef.current !== null) {
       try {
-        canvas.releasePointerCapture(activePointerIdRef.current)
+        overlay.releasePointerCapture(activePointerIdRef.current)
       } catch {
         // war schon freigegeben, egal
       }
@@ -195,7 +200,7 @@ export default function App() {
     activePointerIdRef.current = null
   }
 
-  function endStroke(e: React.PointerEvent<HTMLCanvasElement>) {
+  function endStroke(e: React.PointerEvent<HTMLDivElement>) {
     log(`${labelFor(e.type)} id=${e.pointerId} type=${e.pointerType}`)
     if (e.pointerId !== activePointerIdRef.current) return
     finishCurrentStroke()
@@ -238,7 +243,7 @@ export default function App() {
     logRef.current.scrollTop = logRef.current.scrollHeight
   }
 
-  function handleHover(e: React.PointerEvent<HTMLCanvasElement>) {
+  function handleHover(e: React.PointerEvent<HTMLDivElement>) {
     log(`${labelFor(e.type)} id=${e.pointerId} type=${e.pointerType} buttons=${e.buttons}`)
   }
 
@@ -295,21 +300,22 @@ export default function App() {
           Noch keine Eingabe
         </div>
       </div>
-      <canvas
-        ref={canvasRef}
-        className="canvas"
-        draggable={false}
-        onDragStart={(e) => e.preventDefault()}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={endStroke}
-        onPointerCancel={endStroke}
-        onPointerLeave={endStroke}
-        onLostPointerCapture={endStroke}
-        onPointerEnter={handleHover}
-        onPointerOver={handleHover}
-        onPointerOut={handleHover}
-      />
+      <div className="canvas-wrap">
+        <canvas ref={canvasRef} className="canvas" draggable={false} onDragStart={(e) => e.preventDefault()} />
+        <div
+          ref={overlayRef}
+          className="overlay"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={endStroke}
+          onPointerCancel={endStroke}
+          onPointerLeave={endStroke}
+          onLostPointerCapture={endStroke}
+          onPointerEnter={handleHover}
+          onPointerOver={handleHover}
+          onPointerOut={handleHover}
+        />
+      </div>
       <div className="log" ref={logRef} />
     </div>
   )
