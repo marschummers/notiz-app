@@ -116,12 +116,26 @@ export default function App() {
     const ctx = ctxRef.current
     if (!canvas || !ctx) return
 
+    // Immer zuerst preventDefault, auch fuer Eingaben die wir gleich ignorieren -
+    // sonst greift iOS Safari seine eigene Geste (Text markieren, Lupe, ...) und
+    // der naechste Pointerdown wirkt "haengen geblieben".
+    e.preventDefault()
+
     if (e.pointerType === 'pen') penDetectedRef.current = true
     // Palm rejection: sobald einmal ein Stift erkannt wurde, zeichnet nur noch der Stift.
     if (e.pointerType === 'touch' && penDetectedRef.current) return
-    if (activePointerIdRef.current !== null) return
 
-    e.preventDefault()
+    if (e.pointerType === 'pen') {
+      // Der Stift ist immer autoritativ: falls durch ein verpasstes pointerup/-cancel
+      // noch ein alter Strich als "aktiv" markiert ist, hier hart abschliessen statt
+      // den neuen Tipp stillschweigend zu ignorieren (das war das "2x antippen"-Problem).
+      if (activePointerIdRef.current !== null && activePointerIdRef.current !== e.pointerId) {
+        finishCurrentStroke()
+      }
+    } else if (activePointerIdRef.current !== null) {
+      return
+    }
+
     canvas.setPointerCapture(e.pointerId)
     activePointerIdRef.current = e.pointerId
 
@@ -159,8 +173,7 @@ export default function App() {
     updateDebug(e.pointerType, stroke.points[stroke.points.length - 1].pressure)
   }
 
-  function endStroke(e: React.PointerEvent<HTMLCanvasElement>) {
-    if (e.pointerId !== activePointerIdRef.current) return
+  function finishCurrentStroke() {
     const stroke = currentStrokeRef.current
     if (stroke) {
       strokesRef.current.push(stroke)
@@ -169,6 +182,11 @@ export default function App() {
     }
     currentStrokeRef.current = null
     activePointerIdRef.current = null
+  }
+
+  function endStroke(e: React.PointerEvent<HTMLCanvasElement>) {
+    if (e.pointerId !== activePointerIdRef.current) return
+    finishCurrentStroke()
   }
 
   function updateDebug(pointerType: string, pressure: number) {
@@ -237,6 +255,7 @@ export default function App() {
         onPointerUp={endStroke}
         onPointerCancel={endStroke}
         onPointerLeave={endStroke}
+        onLostPointerCapture={endStroke}
       />
     </div>
   )
