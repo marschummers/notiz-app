@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <title>Test 4: reines HTML</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+        font-family: system-ui, sans-serif;
+      }
+      header {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        padding: 10px 14px;
+        padding-top: max(10px, env(safe-area-inset-top));
+        background: #f4f3ec;
+        border-bottom: 1px solid #e5e4e7;
+        font-size: 13px;
+        line-height: 1.4;
+        z-index: 2;
+        box-sizing: border-box;
+      }
+      header button {
+        margin-top: 6px;
+        padding: 6px 10px;
+        border-radius: 6px;
+        border: 1px solid #ccc;
+        background: #fff;
+      }
+      #area {
+        position: fixed;
+        inset: 0;
+        top: 96px;
+        bottom: 140px;
+        touch-action: none;
+        background: #fff;
+      }
+      #dot {
+        position: absolute;
+        width: 14px;
+        height: 14px;
+        margin-left: -7px;
+        margin-top: -7px;
+        border-radius: 50%;
+        background: #d1263f;
+        pointer-events: none;
+        display: none;
+      }
+      #log {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 140px;
+        overflow-y: auto;
+        background: #0d0e12;
+        color: #7ee787;
+        font-family: ui-monospace, Consolas, monospace;
+        font-size: 11px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        padding: 6px 10px;
+        box-sizing: border-box;
+        border-top: 1px solid #2e303a;
+        z-index: 2;
+      }
+      @media (prefers-color-scheme: dark) {
+        header {
+          background: #1f2028;
+          border-bottom-color: #2e303a;
+          color: #f3f4f6;
+        }
+        header button {
+          background: #16171d;
+          color: #f3f4f6;
+          border-color: #2e303a;
+        }
+        #area {
+          background: #16171d;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      Test 4: reines HTML, kein React/Vite/PWA/Service Worker, kein Canvas. Nur ein
+      vollflächiges Div + Event-Log. Stift kurz absetzen, sofort wieder aufsetzen.
+      <div><button id="clear">Log leeren</button></div>
+    </header>
+    <div id="area"><div id="dot"></div></div>
+    <div id="log"></div>
+    <script>
+      var area = document.getElementById('area')
+      var dot = document.getElementById('dot')
+      var logEl = document.getElementById('log')
+      var lines = []
+      var t0 = performance.now()
+      var activeId = null
+      var lastMoveLog = 0
+
+      function log(msg) {
+        var t = ((performance.now() - t0) / 1000).toFixed(2)
+        lines.push(t + 's ' + msg)
+        if (lines.length > 60) lines.shift()
+        logEl.textContent = lines.join('\n')
+        logEl.scrollTop = logEl.scrollHeight
+      }
+
+      document.getElementById('clear').addEventListener('click', function () {
+        lines = []
+        logEl.textContent = ''
+      })
+
+      function setDot(x, y, visible) {
+        dot.style.display = visible ? 'block' : 'none'
+        dot.style.left = x + 'px'
+        dot.style.top = y + 'px'
+      }
+
+      area.addEventListener(
+        'pointerdown',
+        function (e) {
+          e.preventDefault()
+          log('↓ down id=' + e.pointerId + ' type=' + e.pointerType + ' buttons=' + e.buttons + ' p=' + e.pressure.toFixed(2))
+          activeId = e.pointerId
+          var rect = area.getBoundingClientRect()
+          setDot(e.clientX - rect.left, e.clientY - rect.top, true)
+        },
+        { passive: false },
+      )
+
+      area.addEventListener(
+        'pointermove',
+        function (e) {
+          var now = performance.now()
+          if (now - lastMoveLog > 50) {
+            log('⟲ move id=' + e.pointerId + ' type=' + e.pointerType + ' buttons=' + e.buttons + ' p=' + e.pressure.toFixed(2))
+            lastMoveLog = now
+          }
+          if (e.pointerId === activeId) {
+            e.preventDefault()
+            var rect = area.getBoundingClientRect()
+            setDot(e.clientX - rect.left, e.clientY - rect.top, true)
+          }
+        },
+        { passive: false },
+      )
+
+      area.addEventListener('pointerup', function (e) {
+        log('↑ up id=' + e.pointerId + ' type=' + e.pointerType)
+        if (e.pointerId === activeId) {
+          activeId = null
+          setDot(0, 0, false)
+        }
+      })
+
+      area.addEventListener('pointercancel', function (e) {
+        log('✕ cancel id=' + e.pointerId + ' type=' + e.pointerType)
+        if (e.pointerId === activeId) {
+          activeId = null
+          setDot(0, 0, false)
+        }
+      })
+
+      area.addEventListener('pointerenter', function (e) {
+        log('⌁ enter id=' + e.pointerId + ' type=' + e.pointerType + ' buttons=' + e.buttons)
+      })
+
+      area.addEventListener('pointerout', function (e) {
+        log('⌁ out id=' + e.pointerId + ' type=' + e.pointerType + ' buttons=' + e.buttons)
+      })
+
+      // Pointerleave beendet den Strich hier bewusst NICHT (nur Logging).
+      area.addEventListener('pointerleave', function (e) {
+        log('⇥ leave id=' + e.pointerId + ' type=' + e.pointerType + ' (Strich bleibt aktiv)')
+      })
+    </script>
+  </body>
+</html>

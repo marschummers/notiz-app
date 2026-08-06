@@ -24,6 +24,11 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        // tests4.html soll fuer die Diagnose-Testmatrix bewusst NICHT vom Service
+        // Worker vorgehalten werden - immer frisch vom Netz, kein Stale-Cache waehrend
+        // des iterativen Testens. Ein Service Worker kann Touch-/Pointer-Events selbst
+        // nicht beeinflussen (er faengt nur fetch-Requests ab), das ist reine Hygiene.
+        globIgnores: ['tests4.html'],
         cacheId: 'notiz-app',
       },
     }),
