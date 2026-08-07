@@ -11,11 +11,13 @@
   align-items: center;
   gap: 12px;
   padding: 10px 14px;
+  padding-top: max(10px, env(safe-area-inset-top));
   border-bottom: 1px solid #e5e4e7;
   font-family: system-ui, sans-serif;
 }
 
-.back-button {
+.back-button,
+.sidebar-toggle {
   padding: 6px 10px;
   border-radius: 8px;
   border: 1px solid #ccc;
@@ -102,7 +104,8 @@
   .page-tags-row {
     border-bottom-color: #2e303a;
   }
-  .back-button {
+  .back-button,
+  .sidebar-toggle {
     background: #16171d;
     color: #f3f4f6;
     border-color: #2e303a;

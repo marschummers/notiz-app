@@ -7,10 +7,12 @@ import './PageList.css'
 
 interface Props {
   selection: Selection
+  sidebarOpen: boolean
+  onToggleSidebar: () => void
   onOpenPage: (id: string) => void
 }
 
-export default function PageList({ selection, onOpenPage }: Props) {
+export default function PageList({ selection, sidebarOpen, onToggleSidebar, onOpenPage }: Props) {
   const folder = useLiveQuery(
     () => (selection.type === 'folder' && selection.id ? db.folders.get(selection.id) : undefined),
     [selection.type, selection.type === 'folder' ? selection.id : null],
@@ -38,6 +40,9 @@ export default function PageList({ selection, onOpenPage }: Props) {
   return (
     <div className="page-list">
       <div className="page-list-header">
+        <button className="sidebar-toggle" onClick={onToggleSidebar} aria-label={sidebarOpen ? 'Seitenleiste einfahren' : 'Seitenleiste ausfahren'}>
+          ☰
+        </button>
         <h1>{heading}</h1>
         {selection.type === 'folder' && (
           <button onClick={() => createPage(selection.id).then((id) => onOpenPage(id))}>+ Neue Seite</button>

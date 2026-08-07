@@ -7,6 +7,7 @@ import FolderTree from './FolderTree'
 import './Sidebar.css'
 
 interface Props {
+  open: boolean
   selection: Selection
   onSelect: (s: Selection) => void
   onSync: () => void
@@ -16,7 +17,7 @@ interface Props {
   onSignOut: () => void
 }
 
-export default function Sidebar({ selection, onSelect, onSync, syncing, syncError, userEmail, onSignOut }: Props) {
+export default function Sidebar({ open, selection, onSelect, onSync, syncing, syncError, userEmail, onSignOut }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const tags = useLiveQuery(() => db.tags.filter((t) => !t.deletedAt).sortBy('name'), [])
 
@@ -30,7 +31,7 @@ export default function Sidebar({ selection, onSelect, onSync, syncing, syncErro
   }
 
   return (
-    <div className="sidebar">
+    <div className={`sidebar${open ? '' : ' collapsed'}`}>
       <div className="sidebar-section">
         <div className="sidebar-heading">
           <span>Ordner</span>

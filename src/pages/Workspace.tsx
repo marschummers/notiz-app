@@ -11,6 +11,7 @@ export default function Workspace() {
   const { session, signOut } = useAuth()
   const [selection, setSelection] = useState<Selection>({ type: 'folder', id: undefined })
   const [openPageId, setOpenPageId] = useState<string | null>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
 
@@ -36,6 +37,7 @@ export default function Workspace() {
   return (
     <div className="workspace">
       <Sidebar
+        open={sidebarOpen}
         selection={selection}
         onSelect={(s) => {
           setSelection(s)
@@ -50,13 +52,26 @@ export default function Workspace() {
       {openPageId ? (
         <PageEditor
           pageId={openPageId}
+          sidebarOpen={sidebarOpen}
+          onToggleSidebar={() => setSidebarOpen((v) => !v)}
           onBack={() => {
             setOpenPageId(null)
+            setSidebarOpen(true)
             handleSync()
           }}
         />
       ) : (
-        <PageList selection={selection} onOpenPage={setOpenPageId} />
+        <PageList
+          selection={selection}
+          sidebarOpen={sidebarOpen}
+          onToggleSidebar={() => setSidebarOpen((v) => !v)}
+          onOpenPage={(id) => {
+            setOpenPageId(id)
+            // Beim Schreiben soll wirklich der komplette Bildschirm zur Verfuegung stehen -
+            // die Sidebar faehrt automatisch ein, laesst sich aber jederzeit wieder ausklappen.
+            setSidebarOpen(false)
+          }}
+        />
       )}
     </div>
   )

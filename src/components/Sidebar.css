@@ -5,15 +5,30 @@
   min-width: 260px;
   height: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
   background: #f4f3ec;
   border-right: 1px solid #e5e4e7;
   font-family: system-ui, sans-serif;
   font-size: 14px;
+  transition:
+    width 0.2s ease,
+    min-width 0.2s ease;
+}
+
+.sidebar.collapsed {
+  width: 0;
+  min-width: 0;
+  border-right: none;
 }
 
 .sidebar-section {
   padding: 10px 0;
+  padding-top: 10px;
   border-bottom: 1px solid #e5e4e7;
+}
+
+.sidebar-section:first-child {
+  padding-top: max(10px, env(safe-area-inset-top));
 }
 
 .sidebar-heading {

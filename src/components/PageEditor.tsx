@@ -22,10 +22,12 @@ const BACKGROUND_LABELS: Record<PageBackground, string> = {
 
 interface Props {
   pageId: string
+  sidebarOpen: boolean
+  onToggleSidebar: () => void
   onBack: () => void
 }
 
-export default function PageEditor({ pageId, onBack }: Props) {
+export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBack }: Props) {
   const [newTag, setNewTag] = useState('')
   const page = useLiveQuery(() => db.pages.get(pageId), [pageId])
   const tagLinks = useLiveQuery(() => db.pageTags.filter((pt) => !pt.deletedAt && pt.pageId === pageId).toArray(), [pageId])
@@ -47,6 +49,9 @@ export default function PageEditor({ pageId, onBack }: Props) {
   return (
     <div className="page-editor">
       <div className="page-editor-header">
+        <button className="sidebar-toggle" onClick={onToggleSidebar} aria-label={sidebarOpen ? 'Seitenleiste einfahren' : 'Seitenleiste ausfahren'}>
+          ☰
+        </button>
         <button className="back-button" onClick={onBack}>
           ← Zurück
         </button>
