@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
 import { createFolder, deleteTag } from '../lib/actions'
+import { forceUpdate } from '../lib/forceUpdate'
 import type { Selection } from '../lib/selection'
 import FolderTree from './FolderTree'
 import './Sidebar.css'
@@ -19,7 +20,13 @@ interface Props {
 
 export default function Sidebar({ open, selection, onSelect, onSync, syncing, syncError, userEmail, onSignOut }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [updating, setUpdating] = useState(false)
   const tags = useLiveQuery(() => db.tags.filter((t) => !t.deletedAt).sortBy('name'), [])
+
+  async function handleForceUpdate() {
+    setUpdating(true)
+    await forceUpdate()
+  }
 
   function toggleExpand(id: string) {
     setExpanded((prev) => {
@@ -90,6 +97,9 @@ export default function Sidebar({ open, selection, onSelect, onSync, syncing, sy
           {syncing ? 'Synchronisiere…' : 'Synchronisieren'}
         </button>
         {syncError && <p className="sidebar-error">{syncError}</p>}
+        <button onClick={handleForceUpdate} disabled={updating} title="Hilft, wenn eine alte Version haengen bleibt (z.B. auf dem iPad)">
+          {updating ? 'Aktualisiere…' : 'App aktualisieren'}
+        </button>
         {userEmail && (
           <div className="sidebar-account">
             <span>{userEmail}</span>
