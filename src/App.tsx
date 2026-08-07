@@ -49,6 +49,14 @@ function redrawAll(ctx: CanvasRenderingContext2D, width: number, height: number,
   }
 }
 
+function describeTouch(t: Touch): { touchType: string; force: number } {
+  // touchType ist eine nicht-standardisierte WebKit-Erweiterung des Touch-Interface,
+  // die im DOM-Lib-Typing von TypeScript fehlt ('stylus' fuer Apple Pencil, 'direct' fuer Finger).
+  const touchType = (t as unknown as { touchType?: string }).touchType ?? 'direct'
+  const force = typeof t.force === 'number' && t.force > 0 ? t.force : 0.5
+  return { touchType, force }
+}
+
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
@@ -58,22 +66,62 @@ export default function App() {
   // entgegen, das Canvas darunter ist rein zur Darstellung da (pointer-events: none).
   const overlayRef = useRef<HTMLDivElement>(null)
   const statusRef = useRef<HTMLDivElement>(null)
-  const logRef = useRef<HTMLDivElement>(null)
-  const logLinesRef = useRef<string[]>([])
 
   const strokesRef = useRef<Stroke[]>([])
   const currentStrokeRef = useRef<Stroke | null>(null)
-  const activePointerIdRef = useRef<number | null>(null)
-  const penDetectedRef = useRef(false)
+  const activeTouchIdRef = useRef<number | null>(null)
+  const stylusDetectedRef = useRef(false)
 
   const [color, setColor] = useState(COLORS[0])
   const [baseWidth, setBaseWidth] = useState(3)
   const [eraser, setEraser] = useState(false)
   const [strokeCount, setStrokeCount] = useState(0)
 
+  // Die Touch-Handler unten werden nur EINMAL beim Mount registriert (native
+  // addEventListener statt React-Props, siehe Kommentar weiter unten). Damit sie
+  // trotzdem immer die aktuell gewaehlte Farbe/Staerke/Radierer sehen, laufen diese
+  // Werte zusaetzlich in Refs mit.
+  const colorRef = useRef(color)
+  const baseWidthRef = useRef(baseWidth)
+  const eraserRef = useRef(eraser)
+  useEffect(() => {
+    colorRef.current = color
+  }, [color])
+  useEffect(() => {
+    baseWidthRef.current = baseWidth
+  }, [baseWidth])
+  useEffect(() => {
+    eraserRef.current = eraser
+  }, [eraser])
+
+  function persist() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(strokesRef.current))
+    } catch {
+      // z.B. Speicher voll - Zeichnung bleibt trotzdem im Speicher erhalten
+    }
+  }
+
+  function updateDebug(type: string, pressure: number) {
+    if (!statusRef.current) return
+    statusRef.current.textContent = `Typ: ${type} | Stift erkannt: ${stylusDetectedRef.current ? 'ja' : 'nein'} | Druck: ${pressure.toFixed(2)}`
+  }
+
+  function finishCurrentStroke() {
+    const stroke = currentStrokeRef.current
+    if (stroke) {
+      strokesRef.current.push(stroke)
+      setStrokeCount(strokesRef.current.length)
+      persist()
+    }
+    currentStrokeRef.current = null
+    activeTouchIdRef.current = null
+  }
+
   useEffect(() => {
     const canvas = canvasRef.current
-    if (!canvas) return
+    const overlay = overlayRef.current
+    if (!canvas || !overlay) return
 
     try {
       const saved = localStorage.getItem(STORAGE_KEY)
@@ -84,91 +132,40 @@ export default function App() {
     setStrokeCount(strokesRef.current.length)
 
     function resize() {
-      if (!canvas) return
       const dpr = window.devicePixelRatio || 1
-      const { clientWidth, clientHeight } = canvas
-      canvas.width = clientWidth * dpr
-      canvas.height = clientHeight * dpr
-      const ctx = canvas.getContext('2d')
+      const { clientWidth, clientHeight } = canvas!
+      canvas!.width = clientWidth * dpr
+      canvas!.height = clientHeight * dpr
+      const ctx = canvas!.getContext('2d')
       if (!ctx) return
       ctx.scale(dpr, dpr)
       ctxRef.current = ctx
       redrawAll(ctx, clientWidth, clientHeight, strokesRef.current)
     }
-
     resize()
     window.addEventListener('resize', resize)
     window.addEventListener('orientationchange', resize)
-    return () => {
-      window.removeEventListener('resize', resize)
-      window.removeEventListener('orientationchange', resize)
+
+    function pointFrom(clientX: number, clientY: number, pressure: number): Point {
+      const rect = overlay!.getBoundingClientRect()
+      return { x: clientX - rect.left, y: clientY - rect.top, pressure }
     }
-  }, [])
 
-  function persist() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(strokesRef.current))
-    } catch {
-      // z.B. Speicher voll - Zeichnung bleibt trotzdem im Speicher erhalten
-    }
-  }
-
-  function eventToPoint(e: PointerEvent, rect: DOMRect): Point {
-    const pressure = e.pointerType === 'pen' ? e.pressure || 0.5 : 0.5
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top, pressure }
-  }
-
-  function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
-    const overlay = overlayRef.current
-    const ctx = ctxRef.current
-    if (!overlay || !ctx) return
-
-    // Immer zuerst preventDefault, auch fuer Eingaben die wir gleich ignorieren -
-    // sonst greift iOS Safari seine eigene Geste (Text markieren, Lupe, ...) und
-    // der naechste Pointerdown wirkt "haengen geblieben".
-    e.preventDefault()
-    log(`↓ down id=${e.pointerId} type=${e.pointerType} buttons=${e.buttons} p=${e.pressure.toFixed(2)} activeWar=${activePointerIdRef.current}`)
-
-    if (e.pointerType === 'pen') penDetectedRef.current = true
-    // Palm rejection: sobald einmal ein Stift erkannt wurde, zeichnet nur noch der Stift.
-    if (e.pointerType === 'touch' && penDetectedRef.current) return
-
-    if (e.pointerType === 'pen') {
-      // Der Stift ist immer autoritativ: falls durch ein verpasstes pointerup/-cancel
-      // noch ein alter Strich als "aktiv" markiert ist, hier hart abschliessen statt
-      // den neuen Tipp stillschweigend zu ignorieren (das war das "2x antippen"-Problem).
-      if (activePointerIdRef.current !== null && activePointerIdRef.current !== e.pointerId) {
-        finishCurrentStroke()
+    function startStroke(p: Point) {
+      currentStrokeRef.current = {
+        points: [p],
+        color: colorRef.current,
+        width: baseWidthRef.current,
+        eraser: eraserRef.current,
       }
-    } else if (activePointerIdRef.current !== null) {
-      return
     }
 
-    overlay.setPointerCapture(e.pointerId)
-    activePointerIdRef.current = e.pointerId
-
-    const rect = overlay.getBoundingClientRect()
-    const point = eventToPoint(e.nativeEvent, rect)
-    currentStrokeRef.current = { points: [point], color, width: baseWidth, eraser }
-    updateDebug(e.pointerType, point.pressure)
-  }
-
-  function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
-    if (e.pointerId !== activePointerIdRef.current) return
-    const overlay = overlayRef.current
-    const ctx = ctxRef.current
-    const stroke = currentStrokeRef.current
-    if (!overlay || !ctx || !stroke) return
-    e.preventDefault()
-
-    const rect = overlay.getBoundingClientRect()
-    const native = e.nativeEvent
-    const events = native.getCoalescedEvents ? native.getCoalescedEvents() : [native]
-
-    for (const ev of events) {
-      const point = eventToPoint(ev, rect)
+    function extendStroke(p: Point) {
+      const ctx = ctxRef.current
+      const stroke = currentStrokeRef.current
+      if (!ctx || !stroke) return
       const pts = stroke.points
-      pts.push(point)
+      pts.push(p)
       const n = pts.length
       if (n >= 3) {
         const from = midPoint(pts[n - 3], pts[n - 2])
@@ -178,74 +175,89 @@ export default function App() {
         drawSegment(ctx, pts[0], pts[0], pts[1], stroke)
       }
     }
-    updateDebug(e.pointerType, stroke.points[stroke.points.length - 1].pressure)
-  }
 
-  function finishCurrentStroke() {
-    const overlay = overlayRef.current
-    if (overlay && activePointerIdRef.current !== null) {
-      try {
-        overlay.releasePointerCapture(activePointerIdRef.current)
-      } catch {
-        // war schon freigegeben, egal
+    // --- Touch Events (Apple Pencil + Finger) statt Pointer Events ---
+    // Die Diagnose-Testmatrix unter /tests hat gezeigt: Pointer Events verschlucken auf
+    // iPadOS zuverlaessig jeden Kontakt, der kurz nach einem vorherigen Loslassen kommt
+    // (Punkte, i-Punkte, Satzzeichen - also normales Handschreiben). Klassische Touch
+    // Events (touchstart/move/end/cancel) hatten dieses Problem in keinem der Tests.
+    function onTouchStart(e: TouchEvent) {
+      e.preventDefault()
+      for (const t of Array.from(e.changedTouches)) {
+        const { touchType, force } = describeTouch(t)
+        if (touchType === 'stylus') stylusDetectedRef.current = true
+        // Palm rejection: sobald einmal ein Stift erkannt wurde, zeichnet nur noch der Stift.
+        if (touchType !== 'stylus' && stylusDetectedRef.current) continue
+
+        if (activeTouchIdRef.current !== null && activeTouchIdRef.current !== t.identifier) {
+          if (touchType !== 'stylus') continue
+          // Der Stift ist autoritativ: einen liegen gebliebenen Strich hart abschliessen
+          // statt den neuen Kontakt stillschweigend zu ignorieren.
+          finishCurrentStroke()
+        }
+
+        activeTouchIdRef.current = t.identifier
+        const p = pointFrom(t.clientX, t.clientY, force)
+        startStroke(p)
+        updateDebug(touchType, force)
       }
     }
-    const stroke = currentStrokeRef.current
-    if (stroke) {
-      strokesRef.current.push(stroke)
-      setStrokeCount(strokesRef.current.length)
-      persist()
+
+    function onTouchMove(e: TouchEvent) {
+      e.preventDefault()
+      for (const t of Array.from(e.changedTouches)) {
+        if (t.identifier !== activeTouchIdRef.current) continue
+        const { touchType, force } = describeTouch(t)
+        const p = pointFrom(t.clientX, t.clientY, force)
+        extendStroke(p)
+        updateDebug(touchType, force)
+      }
     }
-    currentStrokeRef.current = null
-    activePointerIdRef.current = null
-  }
 
-  function endStroke(e: React.PointerEvent<HTMLDivElement>) {
-    log(`${labelFor(e.type)} id=${e.pointerId} type=${e.pointerType}`)
-    if (e.pointerId !== activePointerIdRef.current) return
-    finishCurrentStroke()
-  }
-
-  function updateDebug(pointerType: string, pressure: number) {
-    if (!statusRef.current) return
-    statusRef.current.textContent = `Typ: ${pointerType} | Pencil erkannt: ${penDetectedRef.current ? 'ja' : 'nein'} | Druck: ${pressure.toFixed(2)}`
-  }
-
-  function labelFor(type: string) {
-    switch (type) {
-      case 'pointerdown':
-        return '↓ down'
-      case 'pointerup':
-        return '↑ up'
-      case 'pointercancel':
-        return '✕ cancel'
-      case 'pointerleave':
-        return '⇥ leave'
-      case 'lostpointercapture':
-        return '⊘ lostcapture'
-      case 'pointerenter':
-        return '⌁ enter'
-      case 'pointerover':
-        return '⌁ over'
-      case 'pointerout':
-        return '⌁ out'
-      default:
-        return type
+    function onTouchEnd(e: TouchEvent) {
+      for (const t of Array.from(e.changedTouches)) {
+        if (t.identifier === activeTouchIdRef.current) finishCurrentStroke()
+      }
     }
-  }
 
-  function log(msg: string) {
-    if (!logRef.current) return
-    const t = (performance.now() / 1000).toFixed(2)
-    logLinesRef.current.push(`${t}s ${msg}`)
-    if (logLinesRef.current.length > 30) logLinesRef.current.shift()
-    logRef.current.textContent = logLinesRef.current.join('\n')
-    logRef.current.scrollTop = logRef.current.scrollHeight
-  }
+    overlay.addEventListener('touchstart', onTouchStart, { passive: false })
+    overlay.addEventListener('touchmove', onTouchMove, { passive: false })
+    overlay.addEventListener('touchend', onTouchEnd, { passive: false })
+    overlay.addEventListener('touchcancel', onTouchEnd, { passive: false })
 
-  function handleHover(e: React.PointerEvent<HTMLDivElement>) {
-    log(`${labelFor(e.type)} id=${e.pointerId} type=${e.pointerType} buttons=${e.buttons}`)
-  }
+    // --- Maus-Fallback nur fuers Testen am Desktop ---
+    // Touch Events feuern nie bei einer echten Maus, deshalb unabhaengig daneben.
+    let mouseDown = false
+    function onMouseDown(e: MouseEvent) {
+      mouseDown = true
+      startStroke(pointFrom(e.clientX, e.clientY, 0.5))
+      updateDebug('mouse', 0.5)
+    }
+    function onMouseMove(e: MouseEvent) {
+      if (!mouseDown) return
+      extendStroke(pointFrom(e.clientX, e.clientY, 0.5))
+    }
+    function onMouseUp() {
+      if (!mouseDown) return
+      mouseDown = false
+      finishCurrentStroke()
+    }
+    overlay.addEventListener('mousedown', onMouseDown)
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+
+    return () => {
+      window.removeEventListener('resize', resize)
+      window.removeEventListener('orientationchange', resize)
+      overlay.removeEventListener('touchstart', onTouchStart)
+      overlay.removeEventListener('touchmove', onTouchMove)
+      overlay.removeEventListener('touchend', onTouchEnd)
+      overlay.removeEventListener('touchcancel', onTouchEnd)
+      overlay.removeEventListener('mousedown', onMouseDown)
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [])
 
   function undo() {
     strokesRef.current.pop()
@@ -302,21 +314,8 @@ export default function App() {
       </div>
       <div className="canvas-wrap">
         <canvas ref={canvasRef} className="canvas" draggable={false} onDragStart={(e) => e.preventDefault()} />
-        <div
-          ref={overlayRef}
-          className="overlay"
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={endStroke}
-          onPointerCancel={endStroke}
-          onPointerLeave={endStroke}
-          onLostPointerCapture={endStroke}
-          onPointerEnter={handleHover}
-          onPointerOver={handleHover}
-          onPointerOut={handleHover}
-        />
+        <div ref={overlayRef} className="overlay" />
       </div>
-      <div className="log" ref={logRef} />
     </div>
   )
 }
