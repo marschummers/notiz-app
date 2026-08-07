@@ -90,17 +90,86 @@
   background-size: 24px 24px;
 }
 
-/* Cornell-Layout: linierter Hauptbereich, schmale Stichwort-Spalte links, Zusammenfassungs-
-   Zeile unten. */
-.drawing-background.bg-cornell {
-  background-image:
-    repeating-linear-gradient(to bottom, transparent, transparent 39px, #d8d0ba 39px, #d8d0ba 40px),
-    linear-gradient(to right, transparent calc(22% - 1px), #b7a98a calc(22% - 1px), #b7a98a 22%, transparent 22%),
-    linear-gradient(to bottom, transparent calc(80% - 1px), #b7a98a calc(80% - 1px), #b7a98a 80%, transparent 80%);
-}
-
 .drawing-background.bg-blank {
   background-image: none;
+}
+
+/* Cornell-Layout: Titel, Subject-Box, zweispaltiger Details/Key-Points-Bereich, Summary-Box
+   unten - angelehnt an das klassische Cornell-Notes-Blatt. */
+.cornell-page {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 34px 14px 14px;
+  gap: 10px;
+  box-sizing: border-box;
+}
+
+.cornell-title {
+  font-family: system-ui, sans-serif;
+  font-size: 19px;
+  font-weight: 500;
+  color: #4a4433;
+  padding-left: 4px;
+}
+
+.cornell-subject,
+.cornell-details,
+.cornell-keypoints,
+.cornell-summary {
+  position: relative;
+  border: 1.5px solid #b7a98a;
+  background-image: repeating-linear-gradient(to bottom, transparent, transparent 27px, #d8d0ba 27px, #d8d0ba 28px);
+  background-position: 0 22px;
+  box-sizing: border-box;
+}
+
+.cornell-subject {
+  height: 44px;
+  flex-shrink: 0;
+}
+
+.cornell-main {
+  flex: 1;
+  display: flex;
+  gap: 10px;
+  min-height: 0;
+}
+
+.cornell-details {
+  flex: 0 0 65%;
+}
+
+.cornell-keypoints {
+  flex: 1;
+}
+
+.cornell-summary {
+  height: 110px;
+  flex-shrink: 0;
+}
+
+.cornell-label {
+  position: absolute;
+  top: 4px;
+  left: 8px;
+  font-family: system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9c8f6f;
+}
+
+.page-updated-at {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  font-family: system-ui, sans-serif;
+  font-size: 11px;
+  color: #a89c7c;
+  pointer-events: none;
 }
 
 .drawing-overlay {

@@ -97,6 +97,8 @@ export default function PageEditor({ pageId, onBack }: Props) {
           key={pageId}
           initialStrokes={page.strokes}
           background={page.background ?? 'lined'}
+          title={page.title}
+          updatedAt={page.updatedAt}
           onChange={(strokes) => updatePageStrokes(pageId, strokes)}
         />
       </div>

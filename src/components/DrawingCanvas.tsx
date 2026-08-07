@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PageBackground, Point, Stroke } from '../db/types'
+import { formatRelativeTime } from '../lib/format'
 import './DrawingCanvas.css'
 
 const COLORS = ['#08060d', '#d1263f', '#1d5fd6']
@@ -48,9 +49,11 @@ interface Props {
   initialStrokes: Stroke[]
   onChange: (strokes: Stroke[]) => void
   background: PageBackground
+  title: string
+  updatedAt: number
 }
 
-export default function DrawingCanvas({ initialStrokes, onChange, background }: Props) {
+export default function DrawingCanvas({ initialStrokes, onChange, background, title, updatedAt }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
   // Safari behandelt <canvas> mit gezeichnetem Inhalt wie ein Bild (Hover-Vorschau,
@@ -290,7 +293,28 @@ export default function DrawingCanvas({ initialStrokes, onChange, background }: 
         {/* Eigenes Element statt CSS-Hintergrund direkt auf dem <canvas>: WebKit aktualisiert
             den Compositor-Layer eines Canvas-Elements beim Klassenwechsel manchmal nicht
             zuverlässig (Papiermuster blieb nach "Leer" -> "Liniert" bis zum Neuladen falsch). */}
-        <div key={background} className={`drawing-background bg-${background}`} />
+        <div key={background} className={`drawing-background bg-${background}`}>
+          {background === 'cornell' && (
+            <div className="cornell-page">
+              <div className="cornell-title">{title || 'Ohne Titel'}</div>
+              <div className="cornell-subject">
+                <span className="cornell-label">Subject</span>
+              </div>
+              <div className="cornell-main">
+                <div className="cornell-details">
+                  <span className="cornell-label">Details</span>
+                </div>
+                <div className="cornell-keypoints">
+                  <span className="cornell-label">Key Points</span>
+                </div>
+              </div>
+              <div className="cornell-summary">
+                <span className="cornell-label">Summary</span>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="page-updated-at">Bearbeitet {formatRelativeTime(updatedAt)}</div>
         <canvas ref={canvasRef} className="drawing-canvas" draggable={false} onDragStart={(e) => e.preventDefault()} />
         <div ref={overlayRef} className="drawing-overlay" />
       </div>
