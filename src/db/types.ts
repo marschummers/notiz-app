@@ -26,6 +26,11 @@ export interface Folder {
   deletedAt?: number
 }
 
+// Papiermuster fuer den Seitenhintergrund. 'lined' ist der Standard (liniert mit
+// grosszuegigem Zeilenabstand fuers Handschreiben), 'cornell' kombiniert das mit einer
+// schmalen Stichwort-Spalte links und einer Zusammenfassungs-Zeile unten.
+export type PageBackground = 'lined' | 'dotted' | 'cornell' | 'blank'
+
 // Eine Notizseite. `folderId` optional (undefined = unabgelegt, direkt in der Wurzel sichtbar).
 // Die Striche liegen direkt auf der Seite (nicht in einer eigenen Tabelle) - fuer eine
 // Handschrift-App mit Last-Write-Wins-Sync ist eine Seite als Ganzes die sinnvolle Einheit.
@@ -34,6 +39,7 @@ export interface Page {
   folderId?: string
   title: string
   strokes: Stroke[]
+  background?: PageBackground
   order: number
   updatedAt: number
   deletedAt?: number

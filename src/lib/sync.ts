@@ -82,6 +82,7 @@ interface RemotePage {
   folder_id: string | null
   title: string
   strokes: Stroke[]
+  background: string
   order: number
   updated_at: string
   deleted_at: string | null
@@ -145,6 +146,7 @@ export async function syncAll(): Promise<void> {
       folder_id: p.folderId ?? null,
       title: p.title,
       strokes: p.strokes,
+      background: p.background ?? 'lined',
       order: p.order,
       updated_at: iso(p.updatedAt),
       deleted_at: p.deletedAt ? iso(p.deletedAt) : null,
@@ -154,6 +156,7 @@ export async function syncAll(): Promise<void> {
       folderId: r.folder_id ?? undefined,
       title: r.title,
       strokes: r.strokes,
+      background: (r.background as Page['background']) ?? 'lined',
       order: r.order,
       updatedAt: ms(r.updated_at),
       deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined,

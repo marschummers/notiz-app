@@ -1,5 +1,5 @@
 import { db, newId } from '../db/db'
-import type { Stroke } from '../db/types'
+import type { PageBackground, Stroke } from '../db/types'
 
 export async function createFolder(parentId: string | undefined, name = 'Neuer Ordner'): Promise<string> {
   const id = newId()
@@ -31,7 +31,7 @@ export async function deleteFolder(id: string): Promise<void> {
 export async function createPage(folderId: string | undefined, title = 'Neue Seite'): Promise<string> {
   const id = newId()
   const now = Date.now()
-  await db.pages.add({ id, folderId, title, strokes: [], order: now, updatedAt: now })
+  await db.pages.add({ id, folderId, title, strokes: [], background: 'lined', order: now, updatedAt: now })
   return id
 }
 
@@ -41,6 +41,10 @@ export async function renamePage(id: string, title: string): Promise<void> {
 
 export async function updatePageStrokes(id: string, strokes: Stroke[]): Promise<void> {
   await db.pages.update(id, { strokes, updatedAt: Date.now() })
+}
+
+export async function updatePageBackground(id: string, background: PageBackground): Promise<void> {
+  await db.pages.update(id, { background, updatedAt: Date.now() })
 }
 
 export async function movePage(id: string, folderId: string | undefined): Promise<void> {

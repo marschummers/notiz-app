@@ -83,6 +83,15 @@
   background: transparent;
 }
 
+.background-select {
+  margin-left: auto;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #fff;
+  font-size: 13px;
+}
+
 .page-editor-canvas {
   flex: 1;
   min-height: 0;
@@ -108,5 +117,10 @@
   .tag-input {
     border-color: #444;
     color: #f3f4f6;
+  }
+  .background-select {
+    background: #16171d;
+    color: #f3f4f6;
+    border-color: #2e303a;
   }
 }

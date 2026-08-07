@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
 import { createPage, deletePage } from '../lib/actions'
+import { formatRelativeTime } from '../lib/format'
 import type { Selection } from '../lib/selection'
 import './PageList.css'
 
@@ -46,7 +47,7 @@ export default function PageList({ selection, onOpenPage }: Props) {
       <div className="page-grid">
         {(pages ?? []).map((page) => (
           <div key={page.id} className="page-tile" onClick={() => onOpenPage(page.id)}>
-            <div className="page-tile-preview">{page.strokes.length === 0 ? 'Leer' : `${page.strokes.length} Striche`}</div>
+            <div className="page-tile-preview">Bearbeitet {formatRelativeTime(page.updatedAt)}</div>
             <div className="page-tile-title">{page.title || 'Ohne Titel'}</div>
             <button
               className="page-tile-delete"

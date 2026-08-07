@@ -19,7 +19,9 @@ create table if not exists notiz_folders (
   user_id uuid not null references auth.users (id) on delete cascade,
   parent_id uuid references notiz_folders (id) on delete cascade,
   name text not null,
-  "order" integer not null default 0,
+  -- bigint statt integer: "order" wird clientseitig als Date.now() (Millisekunden seit
+  -- 1970) vergeben, das sprengt den Wertebereich von integer (max. ca. 2.1 Milliarden).
+  "order" bigint not null default 0,
   updated_at timestamptz not null default now(),
   deleted_at timestamptz
 );
@@ -30,7 +32,9 @@ create table if not exists notiz_pages (
   folder_id uuid references notiz_folders (id) on delete set null,
   title text not null default '',
   strokes jsonb not null default '[]'::jsonb,
-  "order" integer not null default 0,
+  "order" bigint not null default 0,
+  -- Seiten-Hintergrund ('lined'/'dotted'/'cornell'/'blank'), siehe src/db/types.ts.
+  background text not null default 'lined',
   updated_at timestamptz not null default now(),
   deleted_at timestamptz
 );

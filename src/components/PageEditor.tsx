@@ -1,9 +1,24 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
-import { addTagToPage, findOrCreateTag, removeTagFromPage, renamePage, updatePageStrokes } from '../lib/actions'
+import {
+  addTagToPage,
+  findOrCreateTag,
+  removeTagFromPage,
+  renamePage,
+  updatePageBackground,
+  updatePageStrokes,
+} from '../lib/actions'
+import type { PageBackground } from '../db/types'
 import DrawingCanvas from './DrawingCanvas'
 import './PageEditor.css'
+
+const BACKGROUND_LABELS: Record<PageBackground, string> = {
+  lined: 'Liniert',
+  dotted: 'Gepunktet',
+  cornell: 'Cornell',
+  blank: 'Leer',
+}
 
 interface Props {
   pageId: string
@@ -64,9 +79,26 @@ export default function PageEditor({ pageId, onBack }: Props) {
           onBlur={submitNewTag}
           placeholder="+ Tag"
         />
+        <select
+          className="background-select"
+          value={page.background ?? 'lined'}
+          onChange={(e) => updatePageBackground(pageId, e.target.value as PageBackground)}
+          aria-label="Seitenhintergrund"
+        >
+          {Object.entries(BACKGROUND_LABELS).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
       </div>
       <div className="page-editor-canvas">
-        <DrawingCanvas key={pageId} initialStrokes={page.strokes} onChange={(strokes) => updatePageStrokes(pageId, strokes)} />
+        <DrawingCanvas
+          key={pageId}
+          initialStrokes={page.strokes}
+          background={page.background ?? 'lined'}
+          onChange={(strokes) => updatePageStrokes(pageId, strokes)}
+        />
       </div>
     </div>
   )

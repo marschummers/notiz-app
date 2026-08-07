@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Point, Stroke } from '../db/types'
+import type { PageBackground, Point, Stroke } from '../db/types'
 import './DrawingCanvas.css'
 
 const COLORS = ['#08060d', '#d1263f', '#1d5fd6']
@@ -47,9 +47,10 @@ function describeTouch(t: Touch): { touchType: string; force: number } {
 interface Props {
   initialStrokes: Stroke[]
   onChange: (strokes: Stroke[]) => void
+  background: PageBackground
 }
 
-export default function DrawingCanvas({ initialStrokes, onChange }: Props) {
+export default function DrawingCanvas({ initialStrokes, onChange, background }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
   // Safari behandelt <canvas> mit gezeichnetem Inhalt wie ein Bild (Hover-Vorschau,
@@ -286,7 +287,12 @@ export default function DrawingCanvas({ initialStrokes, onChange }: Props) {
         </div>
       </div>
       <div className="drawing-canvas-wrap">
-        <canvas ref={canvasRef} className="drawing-canvas" draggable={false} onDragStart={(e) => e.preventDefault()} />
+        <canvas
+          ref={canvasRef}
+          className={`drawing-canvas bg-${background}`}
+          draggable={false}
+          onDragStart={(e) => e.preventDefault()}
+        />
         <div ref={overlayRef} className="drawing-overlay" />
       </div>
     </div>
