@@ -45,6 +45,24 @@ function describeTouch(t: Touch): { touchType: string; force: number } {
   return { touchType, force }
 }
 
+interface ViewState {
+  scale: number
+  x: number
+  y: number
+}
+
+const MIN_SCALE = 0.5
+const MAX_SCALE = 4
+
+interface PinchState {
+  startDist: number
+  startScale: number
+  startMidX: number
+  startMidY: number
+  startPanX: number
+  startPanY: number
+}
+
 interface Props {
   initialStrokes: Stroke[]
   onChange: (strokes: Stroke[]) => void
@@ -61,6 +79,7 @@ export default function DrawingCanvas({ initialStrokes, onChange, background, ti
   // Handler erreichen. Deshalb nimmt ein unsichtbares Overlay-Div die Eingabe entgegen, das
   // Canvas darunter ist rein zur Darstellung da (pointer-events: none).
   const overlayRef = useRef<HTMLDivElement>(null)
+  const backgroundRef = useRef<HTMLDivElement>(null)
   const statusRef = useRef<HTMLDivElement>(null)
 
   const strokesRef = useRef<Stroke[]>(initialStrokes)
@@ -68,10 +87,18 @@ export default function DrawingCanvas({ initialStrokes, onChange, background, ti
   const activeTouchIdRef = useRef<number | null>(null)
   const stylusDetectedRef = useRef(false)
 
+  // Zwei-Finger-Zoom/Pan: eigener Zustand getrennt von der Zeichen-Logik. fingersRef verfolgt
+  // aktive Finger-Kontakte (nicht Stift), pinchStateRef nur waehrend einer aktiven Zoom-Geste.
+  const viewRef = useRef<ViewState>({ scale: 1, x: 0, y: 0 })
+  const fingersRef = useRef<Map<number, { x: number; y: number }>>(new Map())
+  const pinchStateRef = useRef<PinchState | null>(null)
+  const resetZoomRef = useRef<() => void>(() => {})
+
   const [color, setColor] = useState(COLORS[0])
   const [baseWidth, setBaseWidth] = useState(3)
   const [eraser, setEraser] = useState(false)
   const [strokeCount, setStrokeCount] = useState(initialStrokes.length)
+  const [zoomPercent, setZoomPercent] = useState(100)
 
   const colorRef = useRef(color)
   const baseWidthRef = useRef(baseWidth)
@@ -110,7 +137,8 @@ export default function DrawingCanvas({ initialStrokes, onChange, background, ti
   useEffect(() => {
     const canvas = canvasRef.current
     const overlay = overlayRef.current
-    if (!canvas || !overlay) return
+    const background = backgroundRef.current
+    if (!canvas || !overlay || !background) return
 
     function resize() {
       const dpr = window.devicePixelRatio || 1
@@ -127,9 +155,60 @@ export default function DrawingCanvas({ initialStrokes, onChange, background, ti
     window.addEventListener('resize', resize)
     window.addEventListener('orientationchange', resize)
 
+    // Zoom/Pan wird rein per CSS-Transform auf Hintergrund+Canvas dargestellt (das Overlay,
+    // also die Touch-Zielflaeche, bleibt unveraendert auf voller Groesse) - die Striche selbst
+    // bleiben in unskaliertem Koordinatenraum gespeichert, nur die Darstellung skaliert.
+    function applyView(scale: number, x: number, y: number) {
+      const clamped = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale))
+      viewRef.current = { scale: clamped, x, y }
+      const transform = `translate(${x}px, ${y}px) scale(${clamped})`
+      canvas!.style.transform = transform
+      background!.style.transform = transform
+    }
+
+    function resetZoom() {
+      applyView(1, 0, 0)
+      setZoomPercent(100)
+    }
+    resetZoomRef.current = resetZoom
+
     function pointFrom(clientX: number, clientY: number, pressure: number): Point {
       const rect = overlay!.getBoundingClientRect()
-      return { x: clientX - rect.left, y: clientY - rect.top, pressure }
+      const view = viewRef.current
+      return { x: (clientX - rect.left - view.x) / view.scale, y: (clientY - rect.top - view.y) / view.scale, pressure }
+    }
+
+    function startPinch() {
+      const pts = Array.from(fingersRef.current.values())
+      if (pts.length !== 2) return
+      const [a, b] = pts
+      pinchStateRef.current = {
+        startDist: Math.hypot(b.x - a.x, b.y - a.y),
+        startScale: viewRef.current.scale,
+        startMidX: (a.x + b.x) / 2,
+        startMidY: (a.y + b.y) / 2,
+        startPanX: viewRef.current.x,
+        startPanY: viewRef.current.y,
+      }
+    }
+
+    function updatePinch(ax: number, ay: number, bx: number, by: number) {
+      const state = pinchStateRef.current
+      if (!state || state.startDist < 1) return
+      const dist = Math.hypot(bx - ax, by - ay)
+      const midX = (ax + bx) / 2
+      const midY = (ay + by) / 2
+      const rect = overlay!.getBoundingClientRect()
+      const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, state.startScale * (dist / state.startDist)))
+      // Der Punkt unter der urspruenglichen Fingermitte soll unter der neuen Fingermitte bleiben
+      // (klassisches Pinch-to-Point-Zoomverhalten statt Zoom immer zur Ecke hin).
+      const startLocalX = state.startMidX - rect.left
+      const startLocalY = state.startMidY - rect.top
+      const contentX = (startLocalX - state.startPanX) / state.startScale
+      const contentY = (startLocalY - state.startPanY) / state.startScale
+      const newLocalX = midX - rect.left
+      const newLocalY = midY - rect.top
+      applyView(newScale, newLocalX - contentX * newScale, newLocalY - contentY * newScale)
     }
 
     function startStroke(p: Point) {
@@ -166,6 +245,27 @@ export default function DrawingCanvas({ initialStrokes, onChange, background, ti
       for (const t of Array.from(e.changedTouches)) {
         const { touchType, force } = describeTouch(t)
         if (touchType === 'stylus') stylusDetectedRef.current = true
+
+        // Zwei-Finger-Zoom: Fingerposition immer mitverfolgen (auch waehrend Palm Rejection -
+        // ein bewusstes Auseinander-/Zusammenziehen zweier Finger ist etwas anderes als eine
+        // ruhende Handflaeche). Bei genau zwei aktiven Fingern startet eine Pinch-Geste statt
+        // zu zeichnen; ein dritter Finger wird ignoriert.
+        if (touchType === 'direct') {
+          fingersRef.current.set(t.identifier, { x: t.clientX, y: t.clientY })
+          if (fingersRef.current.size === 2) {
+            if (activeTouchIdRef.current !== null && !stylusDetectedRef.current) {
+              // Ein laufender Finger-Strich (nur moeglich, solange noch nie ein Stift benutzt
+              // wurde) wird verworfen statt committet, damit kein ungewollter Strich stehen bleibt.
+              currentStrokeRef.current = null
+              activeTouchIdRef.current = null
+            }
+            startPinch()
+            continue
+          }
+          if (fingersRef.current.size > 2) continue
+        }
+
+        // Palm rejection: sobald einmal ein Stift erkannt wurde, zeichnet nur noch der Stift.
         if (touchType !== 'stylus' && stylusDetectedRef.current) continue
 
         if (activeTouchIdRef.current !== null && activeTouchIdRef.current !== t.identifier) {
@@ -182,6 +282,18 @@ export default function DrawingCanvas({ initialStrokes, onChange, background, ti
 
     function onTouchMove(e: TouchEvent) {
       e.preventDefault()
+      if (fingersRef.current.size === 2 && pinchStateRef.current) {
+        // e.touches (nicht nur changedTouches) enthaelt immer den vollen aktuellen Stand
+        // beider verfolgter Finger, unabhaengig davon welcher sich gerade bewegt hat.
+        const ids = Array.from(fingersRef.current.keys())
+        const pts = Array.from(e.touches).filter((t) => ids.includes(t.identifier))
+        if (pts.length === 2) {
+          fingersRef.current.set(pts[0].identifier, { x: pts[0].clientX, y: pts[0].clientY })
+          fingersRef.current.set(pts[1].identifier, { x: pts[1].clientX, y: pts[1].clientY })
+          updatePinch(pts[0].clientX, pts[0].clientY, pts[1].clientX, pts[1].clientY)
+        }
+        return
+      }
       for (const t of Array.from(e.changedTouches)) {
         if (t.identifier !== activeTouchIdRef.current) continue
         const { touchType, force } = describeTouch(t)
@@ -193,6 +305,14 @@ export default function DrawingCanvas({ initialStrokes, onChange, background, ti
 
     function onTouchEnd(e: TouchEvent) {
       for (const t of Array.from(e.changedTouches)) {
+        const { touchType } = describeTouch(t)
+        if (touchType === 'direct') {
+          fingersRef.current.delete(t.identifier)
+          if (fingersRef.current.size < 2) {
+            pinchStateRef.current = null
+            setZoomPercent(Math.round(viewRef.current.scale * 100))
+          }
+        }
         if (t.identifier === activeTouchIdRef.current) finishCurrentStroke()
       }
     }
@@ -246,6 +366,7 @@ export default function DrawingCanvas({ initialStrokes, onChange, background, ti
   }
 
   function clearAll() {
+    if (!window.confirm('Zeichenfläche wirklich komplett leeren? Das kann nicht rückgängig gemacht werden.')) return
     strokesRef.current = []
     setStrokeCount(0)
     const canvas = canvasRef.current
@@ -285,6 +406,9 @@ export default function DrawingCanvas({ initialStrokes, onChange, background, ti
         <button onClick={clearAll} disabled={strokeCount === 0}>
           Leeren
         </button>
+        {zoomPercent !== 100 && (
+          <button onClick={() => resetZoomRef.current()}>Zoom {zoomPercent}% zurücksetzen</button>
+        )}
         <div className="drawing-status" ref={statusRef}>
           Noch keine Eingabe
         </div>
@@ -293,7 +417,12 @@ export default function DrawingCanvas({ initialStrokes, onChange, background, ti
         {/* Eigenes Element statt CSS-Hintergrund direkt auf dem <canvas>: WebKit aktualisiert
             den Compositor-Layer eines Canvas-Elements beim Klassenwechsel manchmal nicht
             zuverlässig (Papiermuster blieb nach "Leer" -> "Liniert" bis zum Neuladen falsch). */}
-        <div key={background} className={`drawing-background bg-${background}`}>
+        <div
+          key={background}
+          ref={backgroundRef}
+          className={`drawing-background bg-${background}`}
+          style={{ transform: `translate(${viewRef.current.x}px, ${viewRef.current.y}px) scale(${viewRef.current.scale})` }}
+        >
           {background === 'cornell' && (
             <div className="cornell-page">
               <div className="cornell-title">{title || 'Ohne Titel'}</div>
