@@ -1,85 +1,17 @@
-.app {
-  display: flex;
-  flex-direction: column;
-  height: 100dvh;
-  width: 100vw;
-}
-
-.toolbar {
+.auth-loading {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  padding-top: max(10px, env(safe-area-inset-top));
-  background: #f4f3ec;
-  border-bottom: 1px solid #e5e4e7;
-  flex-wrap: wrap;
-}
-
-.swatch {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: 1px solid #ccc;
-  padding: 0;
-  cursor: pointer;
-}
-
-.toolbar button {
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid #ccc;
-  background: #fff;
-  cursor: pointer;
-}
-
-.toolbar button.active {
-  background: #1d5fd6;
-  color: #fff;
-  border-color: #1d5fd6;
-}
-
-.toolbar button:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.status {
-  margin-left: auto;
-  font-family: ui-monospace, Consolas, monospace;
-  font-size: 12px;
+  justify-content: center;
+  height: 100dvh;
+  padding: 24px;
+  text-align: center;
+  font-family: system-ui, sans-serif;
   color: #666;
-  white-space: nowrap;
 }
 
-.canvas-wrap {
-  position: relative;
-  flex: 1;
-  width: 100%;
-  min-height: 0;
-}
-
-.canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  background: #fff;
-  /* Nur Darstellung, keine Eingabe: Safari behandelt <canvas> mit gezeichnetem
-     Inhalt wie ein Bild (Hover-Vorschau/"Teilen" per Pencil), das faengt Touch-
-     Sequenzen ab bevor sie unsere Handler erreichen. Das Overlay-Div daneben
-     nimmt die Eingabe entgegen, das Canvas selbst bekommt gar keine Events mehr. */
-  pointer-events: none;
-}
-
-.overlay {
-  position: absolute;
-  inset: 0;
-  touch-action: none;
-  -webkit-user-drag: none;
-  -webkit-touch-callout: none;
-}
-
+/* Wird von den Diagnose-Testseiten unter /tests global mitgenutzt (siehe src/pages/tests.css) -
+   dort nicht erneut definiert, da CSS-Importe in diesem Projekt global statt komponenten-
+   gescoped sind. */
 .log {
   height: 110px;
   overflow-y: auto;
@@ -94,19 +26,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  .toolbar {
-    background: #1f2028;
-    border-bottom-color: #2e303a;
-  }
-  .toolbar button {
-    background: #16171d;
-    color: #f3f4f6;
-    border-color: #2e303a;
-  }
-  .canvas {
-    background: #16171d;
-  }
-  .status {
+  .auth-loading {
     color: #9ca3af;
   }
 }

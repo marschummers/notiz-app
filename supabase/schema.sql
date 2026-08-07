@@ -1,0 +1,75 @@
+-- Notiz-App: eigene, per RLS strikt getrennte Tabellen im selben Supabase-Projekt wie die
+-- Gym App (siehe supabase/coach_snapshot.sql dort) - deshalb "notiz_"-Prefix, um mit den
+-- bestehenden Tabellen dieses Projekts nicht zu kollidieren. Jede Zeile gehoert genau einem
+-- Account (user_id = auth.uid()); RLS stellt sicher, dass niemand fremde Zeilen lesen oder
+-- schreiben kann, auch nicht ueber den oeffentlichen Anon-Key.
+--
+-- Ordner sind rekursiv verschachtelbar (parent_id -> notiz_folders.id, beliebige Tiefe).
+-- Seiten gehoeren optional zu einem Ordner (folder_id NULL = "unabgelegt"). Die Striche einer
+-- Seite (siehe Point/Stroke in src/App.tsx) werden als JSON direkt auf der Seite gespeichert,
+-- nicht in einer eigenen Tabelle - fuer eine Handschrift-Notizapp mit Last-Write-Wins-Sync ist
+-- eine Seite als atomare Einheit einfacher und robuster als strichweiser Sync.
+--
+-- `updated_at`/`deleted_at` folgen demselben Last-Write-Wins-/Softdelete-Muster wie in den
+-- anderen Projekten (siehe src/lib/sync.ts) - eine Loeschung ist eine ganz normale Aenderung,
+-- die sich per neuerem updated_at genauso verteilt wie jede andere.
+
+create table if not exists notiz_folders (
+  id uuid primary key,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  parent_id uuid references notiz_folders (id) on delete cascade,
+  name text not null,
+  "order" integer not null default 0,
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz
+);
+
+create table if not exists notiz_pages (
+  id uuid primary key,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  folder_id uuid references notiz_folders (id) on delete set null,
+  title text not null default '',
+  strokes jsonb not null default '[]'::jsonb,
+  "order" integer not null default 0,
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz
+);
+
+create table if not exists notiz_tags (
+  id uuid primary key,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  name text not null,
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz
+);
+
+create table if not exists notiz_page_tags (
+  id uuid primary key,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  page_id uuid not null references notiz_pages (id) on delete cascade,
+  tag_id uuid not null references notiz_tags (id) on delete cascade,
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz
+);
+
+create index if not exists notiz_folders_user_id_idx on notiz_folders (user_id);
+create index if not exists notiz_pages_user_id_idx on notiz_pages (user_id);
+create index if not exists notiz_tags_user_id_idx on notiz_tags (user_id);
+create index if not exists notiz_page_tags_user_id_idx on notiz_page_tags (user_id);
+
+alter table notiz_folders enable row level security;
+alter table notiz_pages enable row level security;
+alter table notiz_tags enable row level security;
+alter table notiz_page_tags enable row level security;
+
+create policy "notiz_folders_owner_only" on notiz_folders
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy "notiz_pages_owner_only" on notiz_pages
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy "notiz_tags_owner_only" on notiz_tags
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy "notiz_page_tags_owner_only" on notiz_page_tags
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
