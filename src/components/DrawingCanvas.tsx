@@ -246,30 +246,19 @@ export default function DrawingCanvas({ initialStrokes, onChange, background, ti
         const { touchType, force } = describeTouch(t)
         if (touchType === 'stylus') stylusDetectedRef.current = true
 
-        // Zwei-Finger-Zoom: Fingerposition immer mitverfolgen (auch waehrend Palm Rejection -
-        // ein bewusstes Auseinander-/Zusammenziehen zweier Finger ist etwas anderes als eine
-        // ruhende Handflaeche). Bei genau zwei aktiven Fingern startet eine Pinch-Geste statt
-        // zu zeichnen; ein dritter Finger wird ignoriert.
+        // Finger zeichnen nie, nur der Stift darf - ein einzelner Finger wird komplett
+        // ignoriert (kein Testfallback mehr), zwei Finger gleichzeitig starten stattdessen
+        // eine Pinch-Zoom-Geste; ein dritter Finger wird ignoriert.
         if (touchType === 'direct') {
           fingersRef.current.set(t.identifier, { x: t.clientX, y: t.clientY })
-          if (fingersRef.current.size === 2) {
-            if (activeTouchIdRef.current !== null && !stylusDetectedRef.current) {
-              // Ein laufender Finger-Strich (nur moeglich, solange noch nie ein Stift benutzt
-              // wurde) wird verworfen statt committet, damit kein ungewollter Strich stehen bleibt.
-              currentStrokeRef.current = null
-              activeTouchIdRef.current = null
-            }
-            startPinch()
-            continue
-          }
-          if (fingersRef.current.size > 2) continue
+          if (fingersRef.current.size === 2) startPinch()
+          continue
         }
 
-        // Palm rejection: sobald einmal ein Stift erkannt wurde, zeichnet nur noch der Stift.
-        if (touchType !== 'stylus' && stylusDetectedRef.current) continue
-
+        // Der Stift ist immer autoritativ: falls durch ein verpasstes touchend/-cancel noch
+        // ein alter Strich als "aktiv" markiert ist, hier hart abschliessen statt den neuen
+        // Kontakt zu ignorieren.
         if (activeTouchIdRef.current !== null && activeTouchIdRef.current !== t.identifier) {
-          if (touchType !== 'stylus') continue
           finishCurrentStroke()
         }
 
