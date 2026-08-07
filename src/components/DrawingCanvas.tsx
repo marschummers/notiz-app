@@ -287,12 +287,11 @@ export default function DrawingCanvas({ initialStrokes, onChange, background }: 
         </div>
       </div>
       <div className="drawing-canvas-wrap">
-        <canvas
-          ref={canvasRef}
-          className={`drawing-canvas bg-${background}`}
-          draggable={false}
-          onDragStart={(e) => e.preventDefault()}
-        />
+        {/* Eigenes Element statt CSS-Hintergrund direkt auf dem <canvas>: WebKit aktualisiert
+            den Compositor-Layer eines Canvas-Elements beim Klassenwechsel manchmal nicht
+            zuverlässig (Papiermuster blieb nach "Leer" -> "Liniert" bis zum Neuladen falsch). */}
+        <div key={background} className={`drawing-background bg-${background}`} />
+        <canvas ref={canvasRef} className="drawing-canvas" draggable={false} onDragStart={(e) => e.preventDefault()} />
         <div ref={overlayRef} className="drawing-overlay" />
       </div>
     </div>
