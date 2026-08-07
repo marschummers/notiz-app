@@ -152,8 +152,12 @@ export default function DrawingCanvas({ initialStrokes, onChange, background, ti
       redrawAll(ctx, clientWidth, clientHeight, strokesRef.current)
     }
     resize()
-    window.addEventListener('resize', resize)
-    window.addEventListener('orientationchange', resize)
+    // ResizeObserver statt nur window-'resize': die Zeichenflaeche aendert ihre Groesse auch,
+    // wenn die Sidebar per CSS-Transition ein-/ausfaehrt (kein Browser-weites Resize-Event) -
+    // ohne das blieb die interne Canvas-Aufloesung auf dem alten (schmaleren) Stand stehen und
+    // der Browser streckte das Bild optisch, was Eingabe und Tinte gegeneinander verschob.
+    const resizeObserver = new ResizeObserver(() => resize())
+    resizeObserver.observe(canvas)
 
     // Zoom/Pan wird rein per CSS-Transform auf Hintergrund+Canvas dargestellt (das Overlay,
     // also die Touch-Zielflaeche, bleibt unveraendert auf voller Groesse) - die Striche selbst
@@ -332,8 +336,7 @@ export default function DrawingCanvas({ initialStrokes, onChange, background, ti
     window.addEventListener('mouseup', onMouseUp)
 
     return () => {
-      window.removeEventListener('resize', resize)
-      window.removeEventListener('orientationchange', resize)
+      resizeObserver.disconnect()
       overlay.removeEventListener('touchstart', onTouchStart)
       overlay.removeEventListener('touchmove', onTouchMove)
       overlay.removeEventListener('touchend', onTouchEnd)
