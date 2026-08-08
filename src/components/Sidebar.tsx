@@ -10,9 +10,10 @@ import './Sidebar.css'
 interface Props {
   open: boolean
   selection: Selection
-  activeView: 'notes' | 'tasks'
+  activeView: 'notes' | 'tasks' | 'search'
   onSelect: (s: Selection) => void
   onSelectTasks: () => void
+  onSelectSearch: () => void
   onSync: () => void
   syncing: boolean
   syncError: string | null
@@ -26,6 +27,7 @@ export default function Sidebar({
   activeView,
   onSelect,
   onSelectTasks,
+  onSelectSearch,
   onSync,
   syncing,
   syncError,
@@ -51,11 +53,11 @@ export default function Sidebar({
     })
   }
 
-  // Solange die Aufgaben-Ansicht aktiv ist, soll in Ordnern/Tags nichts als "ausgewaehlt"
-  // markiert sein, auch wenn `selection` (fuer den Rueckweg zu Notizen) noch den letzten
-  // Ordner/Tag im Speicher haelt. Ein Platzhalter, der nie zu einem echten Ordner passt, statt
-  // FolderTree selbst anzufassen.
-  const visibleSelection: Selection = activeView === 'tasks' ? { type: 'folder', id: '__none__' } : selection
+  // Solange die Aufgaben- oder Such-Ansicht aktiv ist, soll in Ordnern/Tags nichts als
+  // "ausgewaehlt" markiert sein, auch wenn `selection` (fuer den Rueckweg zu Notizen) noch den
+  // letzten Ordner/Tag im Speicher haelt. Ein Platzhalter, der nie zu einem echten Ordner passt,
+  // statt FolderTree selbst anzufassen.
+  const visibleSelection: Selection = activeView === 'tasks' || activeView === 'search' ? { type: 'folder', id: '__none__' } : selection
 
   return (
     <div className={`sidebar${open ? '' : ' collapsed'}`}>
@@ -63,6 +65,9 @@ export default function Sidebar({
         <div className={`tree-row${activeView === 'tasks' ? ' selected' : ''}`} onClick={onSelectTasks}>
           <span className="tree-label">☑ Aufgaben</span>
           {!!openTaskCount && <span className="task-badge">{openTaskCount}</span>}
+        </div>
+        <div className={`tree-row${activeView === 'search' ? ' selected' : ''}`} onClick={onSelectSearch}>
+          <span className="tree-label">🔍 Suche</span>
         </div>
       </div>
 

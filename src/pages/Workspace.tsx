@@ -6,12 +6,13 @@ import Sidebar from '../components/Sidebar'
 import PageList from '../components/PageList'
 import PageEditor from '../components/PageEditor'
 import TasksView from '../components/TasksView'
+import SearchView from '../components/SearchView'
 import './Workspace.css'
 
 export default function Workspace() {
   const { session, signOut } = useAuth()
   const [selection, setSelection] = useState<Selection>({ type: 'folder', id: undefined })
-  const [activeView, setActiveView] = useState<'notes' | 'tasks'>('notes')
+  const [activeView, setActiveView] = useState<'notes' | 'tasks' | 'search'>('notes')
   const [openPageId, setOpenPageId] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [syncing, setSyncing] = useState(false)
@@ -43,19 +44,41 @@ export default function Workspace() {
     setSidebarOpen(false)
   }
 
+  // Gemeinsam von Sidebar (Ordner-/Tag-Klick) UND SearchView (Ordner-/Tag-Treffer) genutzt,
+  // damit ein Suchergebnis genau dorthin springt, wo ein normaler Sidebar-Klick auch hinfuehrt.
+  function selectFolderOrTag(s: Selection) {
+    setSelection(s)
+    setActiveView('notes')
+    setOpenPageId(null)
+  }
+
+  // Ctrl+K/Cmd+K oeffnet die Suche von ueberall im Workspace aus, wie in den meisten Apps mit
+  // Befehls-/Suchpalette ueblich.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setActiveView('search')
+        setOpenPageId(null)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
   return (
     <div className="workspace">
       <Sidebar
         open={sidebarOpen}
         selection={selection}
         activeView={activeView}
-        onSelect={(s) => {
-          setSelection(s)
-          setActiveView('notes')
-          setOpenPageId(null)
-        }}
+        onSelect={selectFolderOrTag}
         onSelectTasks={() => {
           setActiveView('tasks')
+          setOpenPageId(null)
+        }}
+        onSelectSearch={() => {
+          setActiveView('search')
           setOpenPageId(null)
         }}
         onSync={handleSync}
@@ -77,6 +100,12 @@ export default function Workspace() {
         />
       ) : activeView === 'tasks' ? (
         <TasksView onOpenPage={openPage} />
+      ) : activeView === 'search' ? (
+        <SearchView
+          onOpenPage={openPage}
+          onSelectFolder={(id) => selectFolderOrTag({ type: 'folder', id })}
+          onSelectTag={(id) => selectFolderOrTag({ type: 'tag', id })}
+        />
       ) : (
         <PageList selection={selection} sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((v) => !v)} onOpenPage={openPage} />
       )}
