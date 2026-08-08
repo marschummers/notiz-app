@@ -1,9 +1,31 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import type { PageBackground, Point, Stroke } from '../db/types'
 import { formatRelativeTime } from '../lib/format'
 import { parseLinkedText } from '../lib/pageLinks'
-import { BroomIcon, EraserIcon, UndoIcon } from './icons'
+import type { RenderedPdfPage } from '../lib/pdfRender'
+import { BroomIcon, EraserIcon, PdfIcon, UndoIcon } from './icons'
 import './DrawingCanvas.css'
+
+// Vertikaler Abstand zwischen zwei uebereinander gestapelten PDF-Seiten (siehe .pdf-layer
+// weiter unten) - eigene Konstante statt CSS-Margin, damit die JS-Berechnung der benoetigten
+// Gesamthoehe (siehe contentHeight) exakt mit der tatsaechlichen Darstellung uebereinstimmt.
+const PDF_PAGE_GAP = 14
+
+// Haengt ein bereits von pdf.js gerendertes <canvas> (siehe lib/pdfRender.ts) direkt in den DOM
+// statt es erneut ueber eine DataURL zu kodieren - das Original bleibt ein einziges, nur im
+// Speicher gehaltenes Canvas-Element pro Seite.
+function PdfPageHost({ canvas, style }: { canvas: HTMLCanvasElement; style?: CSSProperties }) {
+  const hostRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+    host.appendChild(canvas)
+    return () => {
+      if (host.contains(canvas)) host.removeChild(canvas)
+    }
+  }, [canvas])
+  return <div className="pdf-page" ref={hostRef} style={style} />
+}
 
 const COLORS = ['#08060d', '#d1263f', '#1d5fd6']
 
@@ -715,6 +737,9 @@ export default function DrawingCanvas({
   const backgroundRef = useRef<HTMLDivElement>(null)
   const taskLayerRef = useRef<HTMLDivElement>(null)
   const statusRef = useRef<HTMLDivElement>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const pdfLayerRef = useRef<HTMLDivElement>(null)
+  const pdfFileInputRef = useRef<HTMLInputElement>(null)
 
   const strokesRef = useRef<Stroke[]>(initialStrokes)
   const currentStrokeRef = useRef<Stroke | null>(null)
@@ -749,6 +774,64 @@ export default function DrawingCanvas({
     canvasWidthRef.current = w
     setCanvasWidth(w)
   }, [])
+
+  // PDF-Anzeige (siehe lib/pdfRender.ts): rein lokaler, nicht persistierter Zustand - beim
+  // Wechsel der Seite erzeugt PageEditor.tsx ueber "key={pageId}" ohnehin eine komplett neue
+  // DrawingCanvas-Instanz, ein geladenes PDF verschwindet damit automatisch wieder (siehe
+  // Anforderung "nur in der aktuellen Sitzung", kein Speichern des Originals oder gerenderter
+  // Seiten).
+  const [pdfPages, setPdfPages] = useState<RenderedPdfPage[]>([])
+  const [pdfLoading, setPdfLoading] = useState(false)
+
+  // Eigene Hoehe der Zeichenflaeche (unabhaengig von canvasWidth/-Height des Canvas selbst, das
+  // spaeter genau auf contentHeight unten waechst) - Basis fuer "wie hoch ist die Flaeche
+  // mindestens, auch ohne PDF" (siehe contentHeight weiter unten).
+  const [wrapHeight, setWrapHeight] = useState(0)
+  useLayoutEffect(() => {
+    const wrap = wrapRef.current
+    if (!wrap) return
+    setWrapHeight(wrap.clientHeight)
+    const ro = new ResizeObserver(() => setWrapHeight(wrap.clientHeight))
+    ro.observe(wrap)
+    return () => ro.disconnect()
+  }, [])
+
+  // Gesamthoehe der Zeichenflaeche: mindestens die sichtbare Wrap-Hoehe, oder - falls ein PDF
+  // geladen ist und mehr Platz braucht - die Summe aller (responsiv auf canvasWidth skalierten)
+  // PDF-Seitenhoehen. Hintergrund/Canvas/Task-Ebene/PDF-Ebene bekommen unten alle dieselbe
+  // Hoehe, dadurch bleibt die Handschrift exakt ueber den PDF-Seiten, auch beim Zoomen/Panning
+  // (dieselbe CSS-Transform-Logik wie bisher, siehe applyView).
+  const pdfContentHeight = pdfPages.reduce(
+    (sum, p) => sum + (canvasWidth > 0 ? (canvasWidth * p.height) / p.width : 0),
+    0,
+  ) + Math.max(0, pdfPages.length - 1) * PDF_PAGE_GAP
+  const contentHeight = Math.max(wrapHeight, pdfContentHeight)
+  const contentHeightStyle = contentHeight > 0 ? `${contentHeight}px` : undefined
+
+  async function handlePdfFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setPdfLoading(true)
+    try {
+      // Dynamischer Import statt statischem: pdf.js (inkl. eigenem Worker-Bundle, mehrere MB)
+      // landet dadurch in einem eigenen Chunk, der nur geladen wird, wenn tatsaechlich ein PDF
+      // eingefuegt wird - sonst waere das jedem Nutzer beim App-Start/PWA-Precache aufgebuerdet,
+      // auch ohne die Funktion je zu benutzen.
+      const { renderPdfPages } = await import('../lib/pdfRender')
+      const pages = await renderPdfPages(file, canvasWidthRef.current || 800)
+      setPdfPages(pages)
+    } catch (err) {
+      console.error(err)
+      window.alert('PDF konnte nicht geladen werden.')
+    } finally {
+      setPdfLoading(false)
+    }
+  }
+
+  function clearPdf() {
+    setPdfPages([])
+  }
 
   const colorRef = useRef(color)
   const baseWidthRef = useRef(baseWidth)
@@ -845,6 +928,7 @@ export default function DrawingCanvas({
       canvas!.style.transform = transform
       background!.style.transform = transform
       if (taskLayerRef.current) taskLayerRef.current.style.transform = transform
+      if (pdfLayerRef.current) pdfLayerRef.current.style.transform = transform
     }
 
     function resetZoom() {
@@ -1110,6 +1194,28 @@ export default function DrawingCanvas({
         <button className="icon-button" onClick={clearAll} disabled={strokeCount === 0} aria-label="Leeren" title="Leeren">
           <BroomIcon />
         </button>
+        <input
+          ref={pdfFileInputRef}
+          type="file"
+          accept="application/pdf"
+          className="pdf-file-input"
+          onChange={handlePdfFileChange}
+        />
+        <button
+          className={`icon-button${pdfPages.length > 0 ? ' active' : ''}`}
+          onClick={() => pdfFileInputRef.current?.click()}
+          disabled={pdfLoading}
+          aria-label="PDF einfügen"
+          title="PDF einfügen"
+        >
+          <PdfIcon />
+        </button>
+        {pdfPages.length > 0 && (
+          <button className="icon-button" onClick={clearPdf} aria-label="PDF entfernen" title="PDF entfernen">
+            ✕
+          </button>
+        )}
+        {pdfLoading && <span className="drawing-status">PDF wird geladen …</span>}
         {zoomPercent !== 100 && (
           <button onClick={() => resetZoomRef.current()}>Zoom {zoomPercent}% zurücksetzen</button>
         )}
@@ -1118,7 +1224,7 @@ export default function DrawingCanvas({
           Noch keine Eingabe
         </div>
       </div>
-      <div className="drawing-canvas-wrap">
+      <div className="drawing-canvas-wrap" ref={wrapRef}>
         {/* Eigenes Element statt CSS-Hintergrund direkt auf dem <canvas>: WebKit aktualisiert
             den Compositor-Layer eines Canvas-Elements beim Klassenwechsel manchmal nicht
             zuverlässig (Papiermuster blieb nach "Leer" -> "Liniert" bis zum Neuladen falsch). */}
@@ -1126,7 +1232,10 @@ export default function DrawingCanvas({
           key={background}
           ref={backgroundRef}
           className={`drawing-background bg-${background}`}
-          style={{ transform: `translate(${viewRef.current.x}px, ${viewRef.current.y}px) scale(${viewRef.current.scale})` }}
+          style={{
+            height: contentHeightStyle,
+            transform: `translate(${viewRef.current.x}px, ${viewRef.current.y}px) scale(${viewRef.current.scale})`,
+          }}
         >
           {background === 'cornell' && (
             <div className="cornell-page">
@@ -1148,8 +1257,26 @@ export default function DrawingCanvas({
             </div>
           )}
         </div>
+        {/* PDF-Seiten (siehe lib/pdfRender.ts) liegen ueber dem Papierhintergrund, aber unter der
+            Tinte - genau wie Hintergrund/Canvas/Task-Ebene bekommt diese Ebene dieselbe Hoehe und
+            denselben Zoom/Pan-Transform (siehe applyView), damit Geschriebenes exakt ausgerichtet
+            bleibt. pointer-events:none (siehe CSS) - die Seiten sind reine Anzeige, nicht
+            verschiebbar, Tipp-/Zeichen-Eingaben erreichen ungehindert das Overlay darunter. */}
+        {pdfPages.length > 0 && (
+          <div ref={pdfLayerRef} className="pdf-layer" style={{ height: contentHeightStyle }}>
+            {pdfPages.map((p, i) => (
+              <PdfPageHost key={i} canvas={p.canvas} style={{ marginBottom: i < pdfPages.length - 1 ? PDF_PAGE_GAP : 0 }} />
+            ))}
+          </div>
+        )}
         <div className="page-updated-at">Bearbeitet {formatRelativeTime(updatedAt)}</div>
-        <canvas ref={canvasRef} className="drawing-canvas" draggable={false} onDragStart={(e) => e.preventDefault()} />
+        <canvas
+          ref={canvasRef}
+          className="drawing-canvas"
+          style={{ height: contentHeightStyle }}
+          draggable={false}
+          onDragStart={(e) => e.preventDefault()}
+        />
         <div ref={overlayRef} className="drawing-overlay" />
         {/* Liegt ueber .drawing-overlay (spaeter im DOM = oben in der Stapelreihenfolge) - ein
             Tap auf einen Task-Block trifft dadurch immer den Block selbst, nie das Zeichen-
@@ -1159,7 +1286,10 @@ export default function DrawingCanvas({
         <div
           ref={taskLayerRef}
           className={`task-layer${taskMode ? ' task-mode' : ''}${textBlockMode ? ' text-mode' : ''}`}
-          style={{ transform: `translate(${viewRef.current.x}px, ${viewRef.current.y}px) scale(${viewRef.current.scale})` }}
+          style={{
+            height: contentHeightStyle,
+            transform: `translate(${viewRef.current.x}px, ${viewRef.current.y}px) scale(${viewRef.current.scale})`,
+          }}
           onClick={handleTaskLayerClick}
         >
           {tasks.map((t) => (

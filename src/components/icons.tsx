@@ -82,3 +82,17 @@ export function InfoIcon(props: SVGProps<SVGSVGElement>) {
     </IconBase>
   )
 }
+
+// Dokument mit eingeknickter Ecke fuer den "PDF einfuegen"-Button (DrawingCanvas-Toolbar) -
+// bewusst ein einfaches generisches Datei-Symbol statt kleingedruckter "PDF"-Buchstaben, die bei
+// 20px Icon-Groesse nicht mehr lesbar waeren.
+export function PdfIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <IconBase {...props}>
+      <path d="M7 3h7l4 4v14H7z" />
+      <path d="M14 3v4h4" />
+      <path d="M9.5 13h5" />
+      <path d="M9.5 16.5h5" />
+    </IconBase>
+  )
+}

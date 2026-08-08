@@ -61,6 +61,12 @@
   padding: 0;
 }
 
+/* Verstecktes natives Datei-Auswahlfeld fuer "PDF einfuegen" - der sichtbare Button daneben
+   loest den Klick aus (siehe DrawingCanvas.tsx pdfFileInputRef). */
+.pdf-file-input {
+  display: none;
+}
+
 .drawing-status {
   margin-left: auto;
   font-family: ui-monospace, Consolas, monospace;
@@ -194,6 +200,24 @@
   font-size: 11px;
   color: #a89c7c;
   pointer-events: none;
+}
+
+/* PDF-Seiten (siehe lib/pdfRender.ts) - liegt zwischen Papierhintergrund und Tinten-Canvas,
+   bekommt denselben Zoom/Pan-Transform wie die anderen Ebenen (siehe applyView in
+   DrawingCanvas.tsx). pointer-events:none: rein visuell, nicht verschiebbar/interaktiv, jede
+   Eingabe faellt durch bis zum .drawing-overlay darunter. */
+.pdf-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+.pdf-page {
+  width: 100%;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
 }
 
 .drawing-overlay {

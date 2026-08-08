@@ -31,7 +31,13 @@ export default defineConfig({
         // Worker vorgehalten werden - immer frisch vom Netz, kein Stale-Cache waehrend
         // des iterativen Testens. Ein Service Worker kann Touch-/Pointer-Events selbst
         // nicht beeinflussen (er faengt nur fetch-Requests ab), das ist reine Hygiene.
-        globIgnores: ['tests4.html'],
+        //
+        // pdf.js (Worker + Render-Code, siehe lib/pdfRender.ts) wird per dynamischem Import
+        // nur bei tatsaechlicher PDF-Nutzung nachgeladen und bewusst vom Precache
+        // ausgeschlossen - mehrere MB, die sonst jede Installation/jeder App-Start laden
+        // wuerde, auch ohne die Funktion je zu benutzen. Offline-PDF-Einfuegen ist fuer
+        // diese erste Version explizit nicht vorgesehen.
+        globIgnores: ['tests4.html', 'assets/pdf.worker-*.mjs', 'assets/pdfRender-*.js'],
         cacheId: 'notiz-app',
       },
     }),
