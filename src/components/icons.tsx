@@ -96,3 +96,32 @@ export function PdfIcon(props: SVGProps<SVGSVGElement>) {
     </IconBase>
   )
 }
+
+// Gestrichelte, freie Schlaufe mit kleinem Seil-Ende fuer den Lasso-Auswahl-Button
+// (DrawingCanvas-Toolbar) - die gestrichelte Kontur greift optisch vorweg, wie die tatsaechliche
+// Auswahlkontur beim Zeichnen aussieht (siehe drawDashedPath in DrawingCanvas.tsx).
+export function LassoIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <IconBase {...props}>
+      <path
+        d="M12 4c3 0 5.5 1.1 7 2.9 1.3 1.6 1.3 3.6 0 5.2-1.7 2-4.6 3.1-7.6 3.1-2.3 0-4.4-.6-5.8-1.8-1.3-1.1-1.7-2.5-1.1-3.8C5.6 6.7 8.6 4 12 4Z"
+        strokeDasharray="2.3 2.3"
+      />
+      <path d="M9.3 13.6c-.5 1.1-.2 2.4.7 3 .9.6 2.1.2 2.5-.9" />
+    </IconBase>
+  )
+}
+
+// Kleiner Papierkorb fuer den "Auswahl löschen"-Button, der erscheint, sobald eine
+// Lasso-Auswahl aktiv ist (DrawingCanvas-Toolbar).
+export function TrashIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <IconBase {...props}>
+      <path d="M4 7h16" />
+      <path d="M9 7V4.5h6V7" />
+      <path d="M6 7l1 13h10l1-13" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+    </IconBase>
+  )
+}

@@ -4,7 +4,7 @@ import { formatRelativeTime } from '../lib/format'
 import { parseLinkedText } from '../lib/pageLinks'
 import type { RenderedPdfPage } from '../lib/pdfRender'
 import { loadPdfBlob } from '../lib/pdfStorage'
-import { BroomIcon, EraserIcon, PdfIcon, UndoIcon } from './icons'
+import { BroomIcon, EraserIcon, PdfIcon, TrashIcon, UndoIcon } from './icons'
 import './DrawingCanvas.css'
 
 // Vertikaler Abstand zwischen zwei uebereinander gestapelten PDF-Seiten (siehe .pdf-layer
@@ -206,6 +206,178 @@ function toDrawableStrokes(
 // x-Umrechnung wie bisher.
 function toSavedStrokes(strokes: Stroke[], canvasWidth: number): Stroke[] {
   return strokes.map((s) => (s.pdfAnchor ? s : { ...s, points: s.points.map((p) => ({ ...p, x: toStoredX(p.x, canvasWidth) })) }))
+}
+
+// --- Lasso-Auswahl (siehe Props.lassoMode, redrawCanvas, startLassoGesture etc.) ---
+// Ray-Casting-Punkt-in-Polygon-Test (Standardalgorithmus) - bewusst keine Bibliothek fuer so
+// eine kleine, gut verstandene Funktion.
+function isPointInPolygon(point: Point, polygon: Point[]): boolean {
+  let inside = false
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].x
+    const yi = polygon[i].y
+    const xj = polygon[j].x
+    const yj = polygon[j].y
+    const intersect = yi > point.y !== yj > point.y && point.x < ((xj - xi) * (point.y - yi)) / (yj - yi) + xi
+    if (intersect) inside = !inside
+  }
+  return inside
+}
+
+// Waehlt alle Striche aus, von denen mindestens ein Punkt innerhalb der Lasso-Kontur liegt -
+// deckt sowohl vollstaendig umschlossene als auch von der Kontur "sinnvoll geschnittene" Striche
+// ab, ohne echte Linien-Polygon-Schnittberechnung zu brauchen. Arbeitet auf den absoluten
+// (gerenderten) Positionen (siehe toDrawableStrokes), damit PDF-gebundene Striche exakt dort
+// erkannt werden, wo sie gerade tatsaechlich angezeigt werden.
+function computeStrokesInLasso(
+  strokes: Stroke[],
+  lassoPoints: Point[],
+  canvasWidth: number,
+  pdfPages: RenderedPdfPage[],
+  activePrintoutId: string | undefined,
+): Set<number> {
+  const selected = new Set<number>()
+  strokes.forEach((stroke, idx) => {
+    const abs = strokeToAbsolute(stroke, canvasWidth, pdfPages, activePrintoutId)
+    if (abs.points.some((p) => isPointInPolygon(p, lassoPoints))) selected.add(idx)
+  })
+  return selected
+}
+
+interface SelectionBox {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
+// Umschliessendes Rechteck aller ausgewaehlten Striche (absolute Positionen, optional um einen
+// laufenden Verschiebe-Versatz ergaenzt) - dient gleichzeitig als visueller Auswahlrahmen UND
+// als Trefferflaeche zum Greifen/Verschieben der ganzen Auswahl (siehe pointInSelectionBox).
+function computeSelectionBox(
+  strokes: Stroke[],
+  selectedIndices: Set<number>,
+  canvasWidth: number,
+  pdfPages: RenderedPdfPage[],
+  activePrintoutId: string | undefined,
+  dragDx: number,
+  dragDy: number,
+): SelectionBox | null {
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const idx of selectedIndices) {
+    const stroke = strokes[idx]
+    if (!stroke) continue
+    const abs = strokeToAbsolute(stroke, canvasWidth, pdfPages, activePrintoutId)
+    for (const p of abs.points) {
+      const x = p.x + dragDx
+      const y = p.y + dragDy
+      if (x < minX) minX = x
+      if (x > maxX) maxX = x
+      if (y < minY) minY = y
+      if (y > maxY) maxY = y
+    }
+  }
+  if (minX === Infinity) return null
+  const PAD = 12 // etwas Rand um die Striche, leichter zu sehen/greifen
+  return { left: minX - PAD, top: minY - PAD, right: maxX + PAD, bottom: maxY + PAD }
+}
+
+// Begrenzt einen rohen Verschiebe-Versatz so, dass KEIN an eine PDF-Seite gebundener Strich der
+// Auswahl seine Seite verlassen wuerde ("duerfen nur innerhalb ihrer zugehoerigen PDF-Seite
+// verschoben werden") - die Begrenzung gilt fuer die GESAMTE Auswahl gemeinsam (nicht pro
+// Strich), damit sich alle ausgewaehlten Striche weiterhin exakt um denselben Abstand bewegen;
+// nicht gebundene Striche schraenken den Versatz nicht ein (bewegen sich frei wie bisher).
+function computeDragClamp(
+  rawDx: number,
+  rawDy: number,
+  strokes: Stroke[],
+  selectedIndices: Set<number>,
+  canvasWidth: number,
+  pdfPages: RenderedPdfPage[],
+  activePrintoutId: string | undefined,
+): { dx: number; dy: number } {
+  let minDx = -Infinity
+  let maxDx = Infinity
+  let minDy = -Infinity
+  let maxDy = Infinity
+  for (const idx of selectedIndices) {
+    const stroke = strokes[idx]
+    if (!stroke?.pdfAnchor) continue
+    const box = pdfPageBox(stroke.pdfAnchor, activePrintoutId, pdfPages, canvasWidth)
+    if (!box) continue
+    const abs = strokeToAbsolute(stroke, canvasWidth, pdfPages, activePrintoutId)
+    const xs = abs.points.map((p) => p.x)
+    const ys = abs.points.map((p) => p.y)
+    const strokeMinX = Math.min(...xs)
+    const strokeMaxX = Math.max(...xs)
+    const strokeMinY = Math.min(...ys)
+    const strokeMaxY = Math.max(...ys)
+    minDx = Math.max(minDx, box.left - strokeMinX)
+    maxDx = Math.min(maxDx, box.left + box.width - strokeMaxX)
+    minDy = Math.max(minDy, box.top - strokeMinY)
+    maxDy = Math.min(maxDy, box.top + box.height - strokeMaxY)
+  }
+  // minDx > maxDx koennte nur bei einer Auswahl mit widerspruechlichen Grenzen auftreten (z.B.
+  // Striche von zwei verschiedenen PDF-Seiten in einer Auswahl - fuer diese erste Version nicht
+  // vorgesehen) - dann lieber gar keine Bewegung als eine widerspruechliche.
+  const dx = minDx > maxDx ? 0 : Math.min(Math.max(rawDx, minDx), maxDx)
+  const dy = minDy > maxDy ? 0 : Math.min(Math.max(rawDy, minDy), maxDy)
+  return { dx, dy }
+}
+
+// Verschiebt alle ausgewaehlten Striche endgueltig um denselben absoluten Versatz (bereits
+// begrenzt, siehe computeDragClamp) und liefert ein neues Array (strokesRef.current selbst wird
+// hier nicht veraendert, das macht der Aufrufer). PDF-gebundene Striche werden dabei ueber
+// strokeToAbsolute/strokeToStored durch ihre eigene Seiten-Bruchteils-Form geschleust (bleiben
+// also exakt an ihre Seite gebunden), nicht gebundene direkt in absoluten Pixeln verschoben.
+function applySelectionMove(
+  strokes: Stroke[],
+  selectedIndices: Set<number>,
+  dx: number,
+  dy: number,
+  canvasWidth: number,
+  pdfPages: RenderedPdfPage[],
+  activePrintoutId: string | undefined,
+): Stroke[] {
+  return strokes.map((stroke, idx) => {
+    if (!selectedIndices.has(idx)) return stroke
+    if (stroke.pdfAnchor) {
+      const abs = strokeToAbsolute(stroke, canvasWidth, pdfPages, activePrintoutId)
+      const moved = { ...abs, points: abs.points.map((p) => ({ ...p, x: p.x + dx, y: p.y + dy })) }
+      return strokeToStored(moved, canvasWidth, pdfPages, activePrintoutId) ?? stroke
+    }
+    return { ...stroke, points: stroke.points.map((p) => ({ ...p, x: p.x + dx, y: p.y + dy })) }
+  })
+}
+
+function drawDashedPath(ctx: CanvasRenderingContext2D, points: Point[]) {
+  if (points.length < 2) return
+  ctx.save()
+  ctx.globalCompositeOperation = 'source-over' // ueberschreibt einen evtl. vom letzten Strich (Radierer) uebrig gebliebenen Blend-Modus
+  ctx.setLineDash([6, 4])
+  ctx.strokeStyle = '#1d5fd6'
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  ctx.moveTo(points[0].x, points[0].y)
+  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y)
+  ctx.closePath()
+  ctx.stroke()
+  ctx.restore()
+}
+
+function drawSelectionBox(ctx: CanvasRenderingContext2D, box: SelectionBox) {
+  ctx.save()
+  ctx.globalCompositeOperation = 'source-over'
+  ctx.fillStyle = 'rgba(29, 95, 214, 0.08)'
+  ctx.fillRect(box.left, box.top, box.right - box.left, box.bottom - box.top)
+  ctx.setLineDash([6, 4])
+  ctx.strokeStyle = '#1d5fd6'
+  ctx.lineWidth = 1.5
+  ctx.strokeRect(box.left, box.top, box.right - box.left, box.bottom - box.top)
+  ctx.restore()
 }
 
 // Sucht rueckwaerts vom Cursor aus nach einem offenen "[[" (ohne dazwischenliegendes "]]" oder
@@ -825,6 +997,12 @@ interface Props {
   pdfPrintout?: { id: string; fileName: string; storagePath: string } | null
   onAttachPdf?: (file: File) => Promise<void> | void
   onRemovePdf?: () => void
+  // Lasso-Auswahl fuer Handschrift-Striche - der Modus selbst wird wie taskMode/textBlockMode
+  // von aussen gesteuert (PageEditor.tsx, gleiche gegenseitige Ausschluss-Logik), die Auswahl
+  // selbst (welche Striche, Verschieben, Loeschen) ist reiner DrawingCanvas-interner Zustand,
+  // da sie nur die ohnehin schon geladenen Striche betrifft und ueber dieselbe onChange-Pipeline
+  // wie jede andere Tinten-Aenderung gespeichert wird.
+  lassoMode?: boolean
   toolbarExtra?: ReactNode
 }
 
@@ -852,6 +1030,7 @@ export default function DrawingCanvas({
   pdfPrintout = null,
   onAttachPdf,
   onRemovePdf,
+  lassoMode = false,
   toolbarExtra,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -945,6 +1124,148 @@ export default function DrawingCanvas({
     pdfPrintoutRef.current = pdfPrintout
   }, [pdfPrintout])
 
+  // Lasso-Auswahl: lassoModeRef fuer den Mount-Effekt (siehe colorRef-Muster). selectedIndices
+  // sind Indizes in strokesRef.current statt einer stabilen Id (Strokes haben keine) - sicher,
+  // solange sich die Reihenfolge waehrend einer aktiven Auswahl nicht aendert. Das ist
+  // sichergestellt, weil im Lasso-Modus keine neuen Striche gezeichnet werden (kein push) und
+  // undo()/clearAll() die Auswahl explizit mit aufraeumen (kein ueberraschendes pop/Ersetzen
+  // unter einer bestehenden Auswahl).
+  const lassoModeRef = useRef(lassoMode)
+  useEffect(() => {
+    lassoModeRef.current = lassoMode
+  }, [lassoMode])
+  const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set())
+  const selectedIndicesRef = useRef<Set<number>>(new Set())
+  const lassoPathRef = useRef<Point[]>([])
+  const lassoGestureRef = useRef<'none' | 'drawing' | 'dragging'>('none')
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null)
+  const dragOffsetRef = useRef<{ dx: number; dy: number } | null>(null)
+  const lassoActiveTouchIdRef = useRef<number | null>(null)
+
+  function clearSelectionState() {
+    selectedIndicesRef.current = new Set()
+    setSelectedIndices(new Set())
+  }
+
+  // Verlaesst man den Lasso-Modus, soll keine "Geister"-Auswahl uebrig bleiben - Auswahl,
+  // Loeschen-Button und Verschieben haengen alle am aktiven Lasso-Modus.
+  useEffect(() => {
+    if (!lassoMode) {
+      clearSelectionState()
+      lassoPathRef.current = []
+      lassoGestureRef.current = 'none'
+      dragOffsetRef.current = null
+      redrawCanvas()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lassoMode])
+
+  // Trefferflaeche fuers Greifen der gesamten Auswahl (siehe computeSelectionBox) - null ohne
+  // aktive Auswahl.
+  function selectionBoxNow(): SelectionBox | null {
+    return computeSelectionBox(
+      strokesRef.current,
+      selectedIndicesRef.current,
+      canvasWidthRef.current,
+      pdfPagesRef.current,
+      pdfPrintoutRef.current?.id,
+      0,
+      0,
+    )
+  }
+
+  // Startet je nach Antippstelle entweder das Verschieben der bestehenden Auswahl (Antippen
+  // innerhalb ihres Rahmens) oder eine neue Lasso-Kontur (Antippen ausserhalb - hebt dabei eine
+  // evtl. vorhandene Auswahl sofort auf, siehe "Klick/Tap ausserhalb hebt Auswahl auf").
+  function startLassoGesture(p: Point) {
+    const box = selectionBoxNow()
+    if (box && p.x >= box.left && p.x <= box.right && p.y >= box.top && p.y <= box.bottom) {
+      lassoGestureRef.current = 'dragging'
+      dragStartRef.current = { x: p.x, y: p.y }
+      dragOffsetRef.current = { dx: 0, dy: 0 }
+    } else {
+      if (selectedIndicesRef.current.size > 0) clearSelectionState()
+      lassoGestureRef.current = 'drawing'
+      lassoPathRef.current = [p]
+    }
+    redrawCanvas()
+  }
+
+  function updateLassoGesture(p: Point) {
+    if (lassoGestureRef.current === 'dragging') {
+      const start = dragStartRef.current
+      if (!start) return
+      dragOffsetRef.current = computeDragClamp(
+        p.x - start.x,
+        p.y - start.y,
+        strokesRef.current,
+        selectedIndicesRef.current,
+        canvasWidthRef.current,
+        pdfPagesRef.current,
+        pdfPrintoutRef.current?.id,
+      )
+      redrawCanvas()
+    } else if (lassoGestureRef.current === 'drawing') {
+      lassoPathRef.current.push(p)
+      redrawCanvas()
+    }
+  }
+
+  function finishLassoGesture() {
+    if (lassoGestureRef.current === 'dragging') {
+      const offset = dragOffsetRef.current
+      if (offset && (offset.dx !== 0 || offset.dy !== 0)) {
+        strokesRef.current = applySelectionMove(
+          strokesRef.current,
+          selectedIndicesRef.current,
+          offset.dx,
+          offset.dy,
+          canvasWidthRef.current,
+          pdfPagesRef.current,
+          pdfPrintoutRef.current?.id,
+        )
+        onChangeRef.current(toSavedStrokes(strokesRef.current, canvasWidthRef.current))
+      }
+      dragOffsetRef.current = null
+      dragStartRef.current = null
+    } else if (lassoGestureRef.current === 'drawing') {
+      const path = lassoPathRef.current
+      if (path.length >= 3) {
+        const selected = computeStrokesInLasso(strokesRef.current, path, canvasWidthRef.current, pdfPagesRef.current, pdfPrintoutRef.current?.id)
+        selectedIndicesRef.current = selected
+        setSelectedIndices(selected)
+      }
+      lassoPathRef.current = []
+    }
+    lassoGestureRef.current = 'none'
+    redrawCanvas()
+  }
+
+  function deleteSelection() {
+    if (selectedIndicesRef.current.size === 0) return
+    strokesRef.current = strokesRef.current.filter((_, idx) => !selectedIndicesRef.current.has(idx))
+    setStrokeCount(strokesRef.current.length)
+    clearSelectionState()
+    redrawCanvas()
+    onChangeRef.current(toSavedStrokes(strokesRef.current, canvasWidthRef.current))
+  }
+
+  // Entf/Backspace loescht die aktive Auswahl (Desktop) - nicht, wenn der Fokus gerade in einem
+  // Eingabefeld liegt (Seitentitel, Tag, Aufgaben-/Textfeld-Text), sonst wuerde ein normales
+  // Loeschen von Text darin versehentlich die Lasso-Auswahl mitloeschen.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return
+      if (selectedIndicesRef.current.size === 0) return
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      e.preventDefault()
+      deleteSelection()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // true, sobald die Breite (siehe SETTLE_MS im Mount-Effekt) sich einmal beruhigt hat und
   // normale (nicht PDF-gebundene) Tinte einmalig in absolute Pixel aufgeloest wurde. Bis dahin
   // bleibt die Flaeche leer statt Tinte kurz an falscher Position aufblitzen zu lassen.
@@ -958,8 +1279,29 @@ export default function DrawingCanvas({
     const canvas = canvasRef.current
     const ctx = ctxRef.current
     if (!canvas || !ctx) return
-    const drawable = toDrawableStrokes(strokesRef.current, canvasWidthRef.current, pdfPagesRef.current, pdfPrintoutRef.current?.id)
+    const width = canvasWidthRef.current
+    const pages = pdfPagesRef.current
+    const activeId = pdfPrintoutRef.current?.id
+    const offset = dragOffsetRef.current
+    let drawable = toDrawableStrokes(strokesRef.current, width, pages, activeId)
+    // Waehrend eines laufenden Verschiebens der Auswahl werden nur die ausgewaehlten Striche
+    // fuer DIESEN Zeichenaufruf transient um den (bereits begrenzten) Versatz verschoben -
+    // strokesRef.current selbst bleibt bis zum Loslassen unveraendert (siehe finishLassoGesture).
+    if (offset && selectedIndicesRef.current.size > 0) {
+      const selected = selectedIndicesRef.current
+      drawable = drawable.map((s, idx) =>
+        selected.has(idx) ? { ...s, points: s.points.map((p) => ({ ...p, x: p.x + offset.dx, y: p.y + offset.dy })) } : s,
+      )
+    }
     redrawAll(ctx, canvas.clientWidth, canvas.clientHeight, drawable)
+
+    if (lassoGestureRef.current === 'drawing') {
+      drawDashedPath(ctx, lassoPathRef.current)
+    }
+    if (selectedIndicesRef.current.size > 0) {
+      const box = computeSelectionBox(strokesRef.current, selectedIndicesRef.current, width, pages, activeId, offset?.dx ?? 0, offset?.dy ?? 0)
+      if (box) drawSelectionBox(ctx, box)
+    }
   }
 
   // Sobald sich das geladene PDF aendert (fertig geladen, entfernt, oder durch ein anderes
@@ -1230,6 +1572,21 @@ export default function DrawingCanvas({
         const { touchType, force } = describeTouch(t)
         if (touchType === 'stylus') stylusDetectedRef.current = true
 
+        // Lasso-Modus: sowohl Finger als auch Stift zeichnen die Auswahlkontur bzw. verschieben
+        // die Auswahl (anders als normale Tinte, die nur auf den Stift reagiert - eine
+        // Auswahlgeste ist wie in OneNote bewusst auch mit dem Finger nutzbar). Nur der ERSTE
+        // Finger/Stift ohne bereits laufende Lasso-Geste zaehlt, damit ein zusaetzlicher zweiter
+        // Finger weiterhin ganz normal die bestehende Pinch-Zoom-Geste ausloesen kann.
+        if (
+          lassoModeRef.current &&
+          lassoActiveTouchIdRef.current === null &&
+          (touchType === 'stylus' || (touchType === 'direct' && fingersRef.current.size === 0))
+        ) {
+          lassoActiveTouchIdRef.current = t.identifier
+          startLassoGesture(pointFrom(t.clientX, t.clientY, force))
+          continue
+        }
+
         // Finger zeichnen nie, nur der Stift darf - ein einzelner Finger wird komplett
         // ignoriert (kein Testfallback mehr), zwei Finger gleichzeitig starten stattdessen
         // eine Pinch-Zoom-Geste; ein dritter Finger wird ignoriert.
@@ -1255,6 +1612,11 @@ export default function DrawingCanvas({
 
     function onTouchMove(e: TouchEvent) {
       e.preventDefault()
+      for (const t of Array.from(e.changedTouches)) {
+        if (t.identifier !== lassoActiveTouchIdRef.current) continue
+        const { force } = describeTouch(t)
+        updateLassoGesture(pointFrom(t.clientX, t.clientY, force))
+      }
       if (fingersRef.current.size === 2 && pinchStateRef.current) {
         // e.touches (nicht nur changedTouches) enthaelt immer den vollen aktuellen Stand
         // beider verfolgter Finger, unabhaengig davon welcher sich gerade bewegt hat.
@@ -1278,6 +1640,11 @@ export default function DrawingCanvas({
 
     function onTouchEnd(e: TouchEvent) {
       for (const t of Array.from(e.changedTouches)) {
+        if (t.identifier === lassoActiveTouchIdRef.current) {
+          finishLassoGesture()
+          lassoActiveTouchIdRef.current = null
+          continue
+        }
         const { touchType } = describeTouch(t)
         if (touchType === 'direct') {
           fingersRef.current.delete(t.identifier)
@@ -1297,16 +1664,31 @@ export default function DrawingCanvas({
 
     // --- Maus-Fallback nur fuers Testen am Desktop ---
     let mouseDown = false
+    let lassoMouseActive = false
     function onMouseDown(e: MouseEvent) {
+      if (lassoModeRef.current) {
+        lassoMouseActive = true
+        startLassoGesture(pointFrom(e.clientX, e.clientY, 0.5))
+        return
+      }
       mouseDown = true
       startStroke(pointFrom(e.clientX, e.clientY, 0.5))
       updateDebug('mouse', 0.5)
     }
     function onMouseMove(e: MouseEvent) {
+      if (lassoMouseActive) {
+        updateLassoGesture(pointFrom(e.clientX, e.clientY, 0.5))
+        return
+      }
       if (!mouseDown) return
       extendStroke(pointFrom(e.clientX, e.clientY, 0.5))
     }
     function onMouseUp() {
+      if (lassoMouseActive) {
+        lassoMouseActive = false
+        finishLassoGesture()
+        return
+      }
       if (!mouseDown) return
       mouseDown = false
       finishCurrentStroke()
@@ -1328,12 +1710,12 @@ export default function DrawingCanvas({
     // ±3) statt Pixeln - hochskalieren, sonst wirkt Scrollen dort quaelend langsam.
     const WHEEL_LINE_HEIGHT_PX = 24
     function onWheel(e: WheelEvent) {
-      // Waehrend aktiv mit Maus oder Stift gezeichnet wird, soll ein Wheel-Event (z.B. ein
-      // versehentlich beruehrtes Trackpad) weder pannen/zoomen noch den laufenden Strich
-      // beeinflussen - preventDefault trotzdem, damit kein natives Scrollen/Browser-Zoom
-      // dazwischenfunkt.
+      // Waehrend aktiv mit Maus oder Stift gezeichnet ODER eine Lasso-Geste ausgefuehrt wird,
+      // soll ein Wheel-Event (z.B. ein versehentlich beruehrtes Trackpad) weder pannen/zoomen
+      // noch den laufenden Strich/die Auswahlgeste beeinflussen - preventDefault trotzdem,
+      // damit kein natives Scrollen/Browser-Zoom dazwischenfunkt.
       e.preventDefault()
-      if (mouseDown || activeTouchIdRef.current !== null) return
+      if (mouseDown || activeTouchIdRef.current !== null || lassoMouseActive || lassoActiveTouchIdRef.current !== null) return
 
       const factor = e.deltaMode === 1 ? WHEEL_LINE_HEIGHT_PX : 1
       const dx = e.deltaX * factor
@@ -1376,6 +1758,9 @@ export default function DrawingCanvas({
   function undo() {
     strokesRef.current.pop()
     setStrokeCount(strokesRef.current.length)
+    // Ein pop() koennte die Indizes einer laufenden Lasso-Auswahl verschieben - sicherheitshalber
+    // aufheben statt mit potenziell falschen Indizes weiterzumachen.
+    clearSelectionState()
     redrawCanvas()
     onChangeRef.current(toSavedStrokes(strokesRef.current, canvasWidthRef.current))
   }
@@ -1384,6 +1769,7 @@ export default function DrawingCanvas({
     if (!window.confirm('Zeichenfläche wirklich komplett leeren? Das kann nicht rückgängig gemacht werden.')) return
     strokesRef.current = []
     setStrokeCount(0)
+    clearSelectionState()
     redrawCanvas()
     onChangeRef.current(toSavedStrokes(strokesRef.current, canvasWidthRef.current))
   }
@@ -1476,6 +1862,11 @@ export default function DrawingCanvas({
         )}
         {pdfLoading && <span className="drawing-status">PDF wird geladen …</span>}
         {pdfError && <span className="drawing-status pdf-error">{pdfError}</span>}
+        {selectedIndices.size > 0 && (
+          <button className="icon-button lasso-delete" onClick={deleteSelection} aria-label="Auswahl löschen" title="Auswahl löschen (Entf)">
+            <TrashIcon />
+          </button>
+        )}
         {zoomPercent !== 100 && (
           <button onClick={() => resetZoomRef.current()}>Zoom {zoomPercent}% zurücksetzen</button>
         )}

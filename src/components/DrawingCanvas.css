@@ -71,6 +71,18 @@
   color: var(--bad, #d1263f);
 }
 
+/* Erscheint nur, wenn eine Lasso-Auswahl aktiv ist (siehe DrawingCanvas.tsx selectedIndices) -
+   dezent rot markiert, da destruktiv. */
+.drawing-toolbar button.icon-button.lasso-delete {
+  color: var(--bad, #d1263f);
+  border-color: var(--bad, #d1263f);
+}
+
+.drawing-toolbar button.icon-button.lasso-delete:hover {
+  background: var(--bad, #d1263f);
+  color: #fff;
+}
+
 .drawing-status {
   margin-left: auto;
   font-family: ui-monospace, Consolas, monospace;

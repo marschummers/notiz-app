@@ -24,7 +24,7 @@ import {
 import type { PageBackground } from '../db/types'
 import Backlinks from './Backlinks'
 import DrawingCanvas from './DrawingCanvas'
-import { TaskIcon, TextFieldIcon } from './icons'
+import { LassoIcon, TaskIcon, TextFieldIcon } from './icons'
 import PageProperties from './PageProperties'
 import './PageEditor.css'
 
@@ -47,6 +47,7 @@ export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBac
   const [newTag, setNewTag] = useState('')
   const [taskMode, setTaskMode] = useState(false)
   const [textBlockMode, setTextBlockMode] = useState(false)
+  const [lassoMode, setLassoMode] = useState(false)
   const page = useLiveQuery(() => db.pages.get(pageId), [pageId])
   const tagLinks = useLiveQuery(() => db.pageTags.filter((pt) => !pt.deletedAt && pt.pageId === pageId).toArray(), [pageId])
   const allTags = useLiveQuery(() => db.tags.filter((t) => !t.deletedAt).toArray(), [])
@@ -178,6 +179,7 @@ export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBac
           onRemovePdf={() => {
             if (pdfPrintout) removePdfFromPage(pdfPrintout.id)
           }}
+          lassoMode={lassoMode}
           toolbarExtra={
             <>
               <button
@@ -185,6 +187,7 @@ export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBac
                 onClick={() => {
                   setTaskMode((v) => !v)
                   setTextBlockMode(false)
+                  setLassoMode(false)
                 }}
                 aria-label="Aufgabe"
                 title="Aufgabe"
@@ -196,11 +199,24 @@ export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBac
                 onClick={() => {
                   setTextBlockMode((v) => !v)
                   setTaskMode(false)
+                  setLassoMode(false)
                 }}
                 aria-label="Textfeld"
                 title="Textfeld"
               >
                 <TextFieldIcon />
+              </button>
+              <button
+                className={`icon-button${lassoMode ? ' active' : ''}`}
+                onClick={() => {
+                  setLassoMode((v) => !v)
+                  setTaskMode(false)
+                  setTextBlockMode(false)
+                }}
+                aria-label="Lasso-Auswahl"
+                title="Lasso-Auswahl"
+              >
+                <LassoIcon />
               </button>
             </>
           }
