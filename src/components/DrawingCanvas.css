@@ -384,11 +384,11 @@
   align-items: flex-start;
   gap: 6px;
   min-width: 140px;
-  /* Deutlich grosszuegiger als frueher (320px) - siehe .text-block-input resize:horizontal,
-     laesst sich beim Bearbeiten breiter ziehen, damit lange Texte eher breit als hoch werden
-     koennen. Eine per Ziehen gewaehlte Breite (siehe block.width, inline style weiter unten)
-     gilt bis zu dieser Obergrenze. */
-  max-width: 680px;
+  /* Bewusst KEIN max-width: eine per Ziehen gewaehlte Breite (siehe block.width, inline style
+     weiter unten) wuerde sonst beim naechsten Rendern wieder auf die Obergrenze zurueckgestutzt -
+     je nachdem wie breit gezogen wurde, sah das wie ein Zurueckspringen aus. Der Nutzer soll die
+     Breite frei bestimmen koennen (siehe .text-block-input resize:horizontal); .drawing-canvas-
+     wrap (overflow:hidden) faengt eine absurd breite Auswahl noetigenfalls optisch ab. */
   padding: 6px 8px;
   border-radius: 8px;
   border: 1px solid transparent;
