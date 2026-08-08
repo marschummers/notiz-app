@@ -242,6 +242,39 @@
   z-index: 5;
 }
 
+/* Greif-Punkt zum Verschieben: 6 kleine Punkte (2x3), links am Block. Reagiert auf Finger
+   (sofortiges Ziehen, kein Long-Press noetig) und auf die Maus (fuer PC-Bedienung/-Tests, wo
+   ein normaler Mausklick sonst wie ein Stift-Tap behandelt wuerde). */
+.task-drag-handle {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 2px;
+  width: 10px;
+  height: 15px;
+  margin-top: 4px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.task-drag-handle span {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.35;
+}
+
+.task-block:hover .task-drag-handle span,
+.task-block.dragging .task-drag-handle span {
+  opacity: 0.65;
+}
+
+.task-block.dragging .task-drag-handle {
+  cursor: grabbing;
+}
+
 .task-checkbox {
   flex-shrink: 0;
   width: 16px;

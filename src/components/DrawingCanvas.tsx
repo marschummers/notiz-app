@@ -113,16 +113,48 @@ function TaskBlock({
   const draggingRef = useRef(false)
   const startClientRef = useRef<{ x: number; y: number } | null>(null)
   const justDraggedRef = useRef(false)
+  const mouseMoveHandlerRef = useRef<((e: MouseEvent) => void) | null>(null)
+  const mouseUpHandlerRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     if (editing) setDraft(task.text)
   }, [editing, task.text])
+
+  // Laufende Maus-Listener am Fenster entfernen, falls der Block waehrend eines Ziehens
+  // verschwindet (z.B. durch Loeschen) - sonst haengen sie auf window herum.
+  useEffect(() => {
+    return () => {
+      if (mouseMoveHandlerRef.current) window.removeEventListener('mousemove', mouseMoveHandlerRef.current)
+      if (mouseUpHandlerRef.current) window.removeEventListener('mouseup', mouseUpHandlerRef.current)
+    }
+  }, [])
 
   function clearLongPressTimer() {
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current)
       longPressTimerRef.current = null
     }
+  }
+
+  function startDrag(clientX: number, clientY: number) {
+    draggingRef.current = true
+    setDragPos(clientToContent(clientX, clientY))
+  }
+
+  function updateDrag(clientX: number, clientY: number) {
+    setDragPos(clientToContent(clientX, clientY))
+  }
+
+  function finishDrag() {
+    draggingRef.current = false
+    justDraggedRef.current = true
+    setTimeout(() => {
+      justDraggedRef.current = false
+    }, 300)
+    setDragPos((pos) => {
+      if (pos) onMove(pos.x, pos.y)
+      return null
+    })
   }
 
   function handleTouchStart(e: React.TouchEvent<HTMLDivElement>) {
@@ -137,8 +169,7 @@ function TaskBlock({
     clearLongPressTimer()
     longPressTimerRef.current = setTimeout(() => {
       if (!longPressArmedRef.current) return
-      draggingRef.current = true
-      setDragPos(clientToContent(t.clientX, t.clientY))
+      startDrag(t.clientX, t.clientY)
     }, LONG_PRESS_MS)
   }
 
@@ -159,24 +190,46 @@ function TaskBlock({
     // das wuerde nur eine Konsolenwarnung erzeugen. touch-action: none (siehe .task-block in
     // DrawingCanvas.css) unterdrueckt Scrollen/Zoomen bereits auf CSS-Ebene.
     e.stopPropagation()
-    setDragPos(clientToContent(t.clientX, t.clientY))
+    updateDrag(t.clientX, t.clientY)
   }
 
   function handleTouchEnd() {
     clearLongPressTimer()
     longPressArmedRef.current = false
     startClientRef.current = null
-    if (draggingRef.current) {
-      draggingRef.current = false
-      justDraggedRef.current = true
-      setTimeout(() => {
-        justDraggedRef.current = false
-      }, 300)
-      setDragPos((pos) => {
-        if (pos) onMove(pos.x, pos.y)
-        return null
-      })
+    if (draggingRef.current) finishDrag()
+  }
+
+  // Der Greif-Punkt links am Block: hier startet das Ziehen sofort (kein Warten wie beim
+  // Long-Press auf dem restlichen Block noetig, da das Greifen hier eindeutig beabsichtigt ist)
+  // - und funktioniert zusaetzlich mit der Maus, fuer Tests/Bedienung am PC ohne Touchscreen.
+  function handleHandleTouchStart(e: React.TouchEvent<HTMLDivElement>) {
+    e.stopPropagation()
+    const t = e.touches[0]
+    if (!t) return
+    const touchType = (t as unknown as { touchType?: string }).touchType ?? 'direct'
+    if (touchType !== 'direct') return
+    clearLongPressTimer()
+    longPressArmedRef.current = false
+    startDrag(t.clientX, t.clientY)
+  }
+
+  function handleHandleMouseDown(e: React.MouseEvent<HTMLDivElement>) {
+    e.stopPropagation()
+    e.preventDefault()
+    startDrag(e.clientX, e.clientY)
+    const onMove = (ev: MouseEvent) => updateDrag(ev.clientX, ev.clientY)
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      mouseMoveHandlerRef.current = null
+      mouseUpHandlerRef.current = null
+      finishDrag()
     }
+    mouseMoveHandlerRef.current = onMove
+    mouseUpHandlerRef.current = onUp
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
   }
 
   const pos = dragPos ?? { x: task.x, y: task.y }
@@ -191,6 +244,19 @@ function TaskBlock({
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
     >
+      <div
+        className="task-drag-handle"
+        onTouchStart={handleHandleTouchStart}
+        onMouseDown={handleHandleMouseDown}
+        aria-hidden="true"
+      >
+        <span />
+        <span />
+        <span />
+        <span />
+        <span />
+        <span />
+      </div>
       <input
         type="checkbox"
         className="task-checkbox"
