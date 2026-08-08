@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie'
-import type { Folder, Page, Tag, PageTag, Task, TextBlock, Template } from './types'
+import type { Folder, Page, Tag, PageTag, Task, TextBlock, Template, PdfPrintout, PdfBlobCache } from './types'
 
 export const db = new Dexie('notiz-app') as Dexie & {
   folders: EntityTable<Folder, 'id'>
@@ -9,6 +9,8 @@ export const db = new Dexie('notiz-app') as Dexie & {
   tasks: EntityTable<Task, 'id'>
   textBlocks: EntityTable<TextBlock, 'id'>
   templates: EntityTable<Template, 'id'>
+  pdfPrintouts: EntityTable<PdfPrintout, 'id'>
+  pdfBlobs: EntityTable<PdfBlobCache, 'id'>
 }
 
 db.version(1).stores({
@@ -34,6 +36,15 @@ db.version(3).stores({
 // Vorlagen referenzieren keine Seite mehr, sobald sie gespeichert sind.
 db.version(4).stores({
   templates: 'id',
+})
+
+// Neue Tabellen fuer den dauerhaften PDF-Dateiausdruck (siehe db/types.ts PdfPrintout/
+// PdfBlobCache): pdfPrintouts ist die synchronisierte Metadaten-Tabelle (analog zu allen
+// anderen), pdfBlobs der rein lokale, nie synchronisierte Cache der Original-PDF-Bytes - beide
+// in einem Versionsschritt, da beide brandneu sind.
+db.version(5).stores({
+  pdfPrintouts: 'id, pageId',
+  pdfBlobs: 'id',
 })
 
 export function newId(): string {

@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
 import {
   addTagToPage,
+  attachPdfToPage,
   createTask,
   createTextBlock,
   deleteTask,
@@ -10,6 +11,7 @@ import {
   findOrCreateTag,
   moveTask,
   moveTextBlock,
+  removePdfFromPage,
   removeTagFromPage,
   renamePage,
   toggleFavorite,
@@ -50,6 +52,12 @@ export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBac
   const allTags = useLiveQuery(() => db.tags.filter((t) => !t.deletedAt).toArray(), [])
   const tasks = useLiveQuery(() => db.tasks.filter((t) => !t.deletedAt && t.pageId === pageId).toArray(), [pageId])
   const textBlocks = useLiveQuery(() => db.textBlocks.filter((t) => !t.deletedAt && t.pageId === pageId).toArray(), [pageId])
+  // Eine Seite traegt hoechstens einen aktiven PDF-Ausdruck (siehe lib/actions.ts
+  // attachPdfToPage) - .first() statt .toArray(), es gibt nie mehr als eine passende Zeile.
+  const pdfPrintout = useLiveQuery(
+    () => db.pdfPrintouts.filter((p) => !p.deletedAt && p.pageId === pageId).first(),
+    [pageId],
+  )
   // Fuer die [[-Seitenlink-Autocomplete in Textfeldern - dieselben Daten, die auch die globale
   // Suche (SearchView.tsx) schon verwendet, hier nur auf id+title reduziert.
   const pageLinkCandidates = useLiveQuery(
@@ -163,6 +171,13 @@ export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBac
           onDeleteTextBlock={(id) => deleteTextBlock(id)}
           onMoveTextBlock={(id, x, y) => moveTextBlock(id, x, y)}
           onOpenPageLink={(targetPageId) => onOpenPage(targetPageId)}
+          pdfPrintout={pdfPrintout ?? null}
+          onAttachPdf={async (file) => {
+            await attachPdfToPage(pageId, file)
+          }}
+          onRemovePdf={() => {
+            if (pdfPrintout) removePdfFromPage(pdfPrintout.id)
+          }}
           toolbarExtra={
             <>
               <button

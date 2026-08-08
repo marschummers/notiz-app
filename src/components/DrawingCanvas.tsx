@@ -3,6 +3,7 @@ import type { PageBackground, Point, Stroke } from '../db/types'
 import { formatRelativeTime } from '../lib/format'
 import { parseLinkedText } from '../lib/pageLinks'
 import type { RenderedPdfPage } from '../lib/pdfRender'
+import { loadPdfBlob } from '../lib/pdfStorage'
 import { BroomIcon, EraserIcon, PdfIcon, UndoIcon } from './icons'
 import './DrawingCanvas.css'
 
@@ -701,6 +702,14 @@ interface Props {
   onDeleteTextBlock?: (id: string) => void
   onMoveTextBlock?: (id: string, x: number, y: number) => void
   onOpenPageLink?: (pageId: string) => void
+  // PDF-Dateiausdruck (siehe db/types.ts PdfPrintout, lib/pdfStorage.ts) - gleiches optionales
+  // Muster wie Task/Textfeld: pdfPrintout ist nur die (persistierte) Metadaten-Zeile, das
+  // eigentliche Laden/Rendern der Seiten passiert intern in DrawingCanvas (braucht canvasWidth,
+  // das kennt nur diese Komponente). onAttachPdf/onRemovePdf uebernehmen Storage-Upload bzw.
+  // Soft-Delete - beides lebt in lib/actions.ts, nicht hier.
+  pdfPrintout?: { id: string; fileName: string; storagePath: string } | null
+  onAttachPdf?: (file: File) => Promise<void> | void
+  onRemovePdf?: () => void
   toolbarExtra?: ReactNode
 }
 
@@ -725,6 +734,9 @@ export default function DrawingCanvas({
   onDeleteTextBlock,
   onMoveTextBlock,
   onOpenPageLink,
+  pdfPrintout = null,
+  onAttachPdf,
+  onRemovePdf,
   toolbarExtra,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -775,13 +787,14 @@ export default function DrawingCanvas({
     setCanvasWidth(w)
   }, [])
 
-  // PDF-Anzeige (siehe lib/pdfRender.ts): rein lokaler, nicht persistierter Zustand - beim
-  // Wechsel der Seite erzeugt PageEditor.tsx ueber "key={pageId}" ohnehin eine komplett neue
-  // DrawingCanvas-Instanz, ein geladenes PDF verschwindet damit automatisch wieder (siehe
-  // Anforderung "nur in der aktuellen Sitzung", kein Speichern des Originals oder gerenderter
-  // Seiten).
+  // PDF-Anzeige (siehe db/types.ts PdfPrintout, lib/pdfStorage.ts, lib/pdfRender.ts): die
+  // gerenderten Canvases selbst sind weiterhin rein lokaler Zustand (nie gespeichert, siehe
+  // PdfPageHost oben) - was sich mit der dauerhaften Speicherung aendert, ist nur WOHER die
+  // Bytes kommen (siehe Lade-Effekt unten, reagiert auf die von aussen (PageEditor.tsx)
+  // uebergebene pdfPrintout-Metadaten-Zeile statt nur auf die lokale Dateiauswahl).
   const [pdfPages, setPdfPages] = useState<RenderedPdfPage[]>([])
   const [pdfLoading, setPdfLoading] = useState(false)
+  const [pdfError, setPdfError] = useState<string | null>(null)
 
   // Eigene Hoehe der Zeichenflaeche (unabhaengig von canvasWidth/-Height des Canvas selbst, das
   // spaeter genau auf contentHeight unten waechst) - Basis fuer "wie hoch ist die Flaeche
@@ -808,29 +821,59 @@ export default function DrawingCanvas({
   const contentHeight = Math.max(wrapHeight, pdfContentHeight)
   const contentHeightStyle = contentHeight > 0 ? `${contentHeight}px` : undefined
 
+  // Laedt + rendert den aktuellen pdfPrintout, sobald er sich aendert (neu gesetzt, entfernt,
+  // oder durch einen anderen ersetzt - erkennbar an einer anderen id). loadPdfBlob (siehe
+  // lib/pdfStorage.ts) nutzt zuerst den lokalen Blob-Cache und laedt nur bei einem Cache-Miss aus
+  // Supabase Storage nach - dadurch funktioniert ein bereits einmal geoeffnetes PDF auch offline,
+  // und ein normaler Seitenaufruf laedt die Datei nicht bei jedem Mal neu herunter.
+  useEffect(() => {
+    if (!pdfPrintout) {
+      setPdfPages([])
+      setPdfError(null)
+      return
+    }
+    let cancelled = false
+    setPdfLoading(true)
+    setPdfError(null)
+    ;(async () => {
+      try {
+        // Nur pdf.js selbst (inkl. eigenem Worker-Bundle, mehrere MB) per dynamischem Import -
+        // landet dadurch in einem eigenen Chunk, der nur geladen wird, wenn tatsaechlich ein PDF
+        // angezeigt wird. lib/pdfStorage.ts ist dagegen winzig und steckt ueber lib/actions.ts
+        // ohnehin schon im Hauptbundle, ein dynamischer Import haette dort keinen Vorteil.
+        const { renderPdfPages } = await import('../lib/pdfRender')
+        const blob = await loadPdfBlob(pdfPrintout)
+        if (cancelled) return
+        const pages = await renderPdfPages(blob, canvasWidthRef.current || 800)
+        if (!cancelled) setPdfPages(pages)
+      } catch (err) {
+        console.error(err)
+        if (!cancelled) setPdfError('PDF konnte nicht geladen werden.')
+      } finally {
+        if (!cancelled) setPdfLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pdfPrintout?.id])
+
   async function handlePdfFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     e.target.value = ''
-    if (!file) return
+    if (!file || !onAttachPdf) return
     setPdfLoading(true)
+    setPdfError(null)
     try {
-      // Dynamischer Import statt statischem: pdf.js (inkl. eigenem Worker-Bundle, mehrere MB)
-      // landet dadurch in einem eigenen Chunk, der nur geladen wird, wenn tatsaechlich ein PDF
-      // eingefuegt wird - sonst waere das jedem Nutzer beim App-Start/PWA-Precache aufgebuerdet,
-      // auch ohne die Funktion je zu benutzen.
-      const { renderPdfPages } = await import('../lib/pdfRender')
-      const pages = await renderPdfPages(file, canvasWidthRef.current || 800)
-      setPdfPages(pages)
+      await onAttachPdf(file)
     } catch (err) {
       console.error(err)
-      window.alert('PDF konnte nicht geladen werden.')
-    } finally {
+      setPdfError('PDF konnte nicht hochgeladen werden.')
       setPdfLoading(false)
     }
-  }
-
-  function clearPdf() {
-    setPdfPages([])
+    // Kein setPdfLoading(false) im Erfolgsfall hier: sobald PageEditor.tsx die neue
+    // pdfPrintout-Zeile liefert, uebernimmt der Lade-Effekt oben (setzt pdfLoading selbst).
   }
 
   const colorRef = useRef(color)
@@ -1202,7 +1245,7 @@ export default function DrawingCanvas({
           onChange={handlePdfFileChange}
         />
         <button
-          className={`icon-button${pdfPages.length > 0 ? ' active' : ''}`}
+          className={`icon-button${pdfPrintout ? ' active' : ''}`}
           onClick={() => pdfFileInputRef.current?.click()}
           disabled={pdfLoading}
           aria-label="PDF einfügen"
@@ -1210,12 +1253,13 @@ export default function DrawingCanvas({
         >
           <PdfIcon />
         </button>
-        {pdfPages.length > 0 && (
-          <button className="icon-button" onClick={clearPdf} aria-label="PDF entfernen" title="PDF entfernen">
+        {pdfPrintout && (
+          <button className="icon-button" onClick={() => onRemovePdf?.()} aria-label="PDF entfernen" title="PDF entfernen">
             ✕
           </button>
         )}
         {pdfLoading && <span className="drawing-status">PDF wird geladen …</span>}
+        {pdfError && <span className="drawing-status pdf-error">{pdfError}</span>}
         {zoomPercent !== 100 && (
           <button onClick={() => resetZoomRef.current()}>Zoom {zoomPercent}% zurücksetzen</button>
         )}

@@ -1,5 +1,7 @@
 import { db, newId } from '../db/db'
-import type { PageBackground, PageType, Stroke } from '../db/types'
+import type { PageBackground, PageType, PdfPrintout, Stroke } from '../db/types'
+import { uploadPdf } from './pdfStorage'
+import { supabase } from './supabaseClient'
 
 export async function createFolder(parentId: string | undefined, name = 'Neuer Ordner'): Promise<string> {
   const id = newId()
@@ -118,7 +120,46 @@ export async function deletePage(id: string): Promise<void> {
   for (const block of pageTextBlocks) {
     await db.textBlocks.update(block.id, { deletedAt: now, updatedAt: now })
   }
+  const pdfPrintouts = await db.pdfPrintouts.where('pageId').equals(id).toArray()
+  for (const printout of pdfPrintouts) {
+    await db.pdfPrintouts.update(printout.id, { deletedAt: now, updatedAt: now })
+    await db.pdfBlobs.delete(printout.id)
+  }
   await db.pages.update(id, { deletedAt: now, updatedAt: now })
+}
+
+// Heftet ein PDF an eine Seite: laedt das Original zuerst in Supabase Storage hoch (siehe
+// lib/pdfStorage.ts) und legt danach die synchronisierte Metadaten-Zeile an - in dieser
+// Reihenfolge, damit nie eine Zeile existiert, deren storagePath noch gar nicht hochgeladen ist.
+// Ein evtl. vorhandener aktiver PDF-Ausdruck derselben Seite wird weich geloescht (eine Seite
+// traegt fuer diese erste Version genau einen aktiven Ausdruck) - die dazugehoerige Datei bleibt
+// unangetastet in Storage liegen (gleiche "nie hart loeschen"-Haltung wie ueberall sonst).
+export async function attachPdfToPage(pageId: string, file: File): Promise<PdfPrintout> {
+  if (!supabase) throw new Error('Supabase ist nicht konfiguriert.')
+  const { data: userData, error } = await supabase.auth.getUser()
+  if (error || !userData.user) throw new Error('Nicht eingeloggt.')
+
+  const now = Date.now()
+  const id = newId()
+  const storagePath = await uploadPdf(userData.user.id, id, file)
+
+  const existing = await db.pdfPrintouts.filter((p) => p.pageId === pageId && !p.deletedAt).toArray()
+  for (const p of existing) {
+    await db.pdfPrintouts.update(p.id, { deletedAt: now, updatedAt: now })
+  }
+
+  const printout: PdfPrintout = { id, pageId, fileName: file.name, storagePath, createdAt: now, updatedAt: now }
+  await db.pdfPrintouts.add(printout)
+  return printout
+}
+
+// Entfernt einen PDF-Ausdruck weich (siehe lib/sync.ts) - die Datei bleibt in Storage liegen,
+// nur der lokale Blob-Cache (siehe db/types.ts PdfBlobCache) wird sofort geleert, da der nie
+// synchronisiert wird und ohne aktive Metadaten-Zeile ohnehin nicht mehr erreichbar waere.
+export async function removePdfFromPage(id: string): Promise<void> {
+  const now = Date.now()
+  await db.pdfPrintouts.update(id, { deletedAt: now, updatedAt: now })
+  await db.pdfBlobs.delete(id)
 }
 
 // Findet einen bestehenden Tag mit diesem Namen (case-insensitiv) oder legt einen neuen an -

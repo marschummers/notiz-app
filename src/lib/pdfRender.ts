@@ -23,10 +23,12 @@ export interface RenderedPdfPage {
 const MAX_RENDER_WIDTH = 1600
 const MIN_RENDER_WIDTH = 900
 
-// Rendert alle Seiten eines PDFs zu Canvas-Elementen fuer die Anzeige - rein im Speicher fuer
-// die aktuelle Sitzung, das Original-PDF wird an keiner Stelle dauerhaft gespeichert (siehe
-// Anforderung "PDF als Dateiausdruck" v1: nur lokale Anzeige, kein Storage/Sync).
-export async function renderPdfPages(file: File, noteWidthPx: number): Promise<RenderedPdfPage[]> {
+// Rendert alle Seiten eines PDFs zu Canvas-Elementen fuer die Anzeige - die gerenderten Canvases
+// selbst werden nirgends dauerhaft gespeichert (nie als PNG/DataURL persistiert), nur zur
+// Anzeige verwendet. Das Original bleibt entweder die vom Nutzer ausgewaehlte Datei oder ein aus
+// Supabase Storage/dem lokalen Cache geladener Blob (siehe lib/pdfStorage.ts) - File erweitert
+// Blob, ein Blob-Parameter deckt beide Faelle ab.
+export async function renderPdfPages(file: Blob, noteWidthPx: number): Promise<RenderedPdfPage[]> {
   const data = await file.arrayBuffer()
   const pdf = await pdfjsLib.getDocument({ data }).promise
   const dpr = Math.min(window.devicePixelRatio || 1, 2)

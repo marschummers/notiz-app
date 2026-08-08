@@ -1,6 +1,6 @@
 import type { EntityTable } from 'dexie'
 import { db } from '../db/db'
-import type { Folder, Page, PageBackground, PageType, Tag, PageTag, Task, TextBlock, Template, TemplateTextBlock, TemplateTask, Stroke } from '../db/types'
+import type { Folder, Page, PageBackground, PageType, Tag, PageTag, Task, TextBlock, Template, TemplateTextBlock, TemplateTask, Stroke, PdfPrintout } from '../db/types'
 import { supabase } from './supabaseClient'
 
 // Faengt fehlende/kaputte Zeitstempel ab, statt dass new Date(...).toISOString() mit
@@ -147,9 +147,24 @@ interface RemoteTemplate {
   deleted_at: string | null
 }
 
-// Zieht Ordner, Seiten, Tasks, Tags und deren Verknuepfungen mit Supabase zusammen. Ordner
-// zuerst: pages/tasks/page_tags referenzieren folder_id/page_id/tag_id als Fremdschluessel,
-// die Zeile muss also dort existieren, bevor die anderen pushen.
+// Nur Metadaten (siehe db/types.ts PdfPrintout) - die eigentliche Datei liegt in Supabase
+// Storage (Bucket "notiz-pdfs", siehe lib/pdfStorage.ts) und wird von mergeTable NIE angefasst,
+// nur diese kleine Zeile laeuft ueber den normalen Last-Write-Wins-Abgleich.
+interface RemotePdfPrintout {
+  id: string
+  user_id: string
+  page_id: string
+  file_name: string
+  storage_path: string
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+}
+
+// Zieht Ordner, Seiten, Tasks, Tags, PDF-Ausdruck-Metadaten und deren Verknuepfungen mit
+// Supabase zusammen. Ordner zuerst: pages/tasks/page_tags/pdf_printouts referenzieren
+// folder_id/page_id/tag_id als Fremdschluessel, die Zeile muss also dort existieren, bevor die
+// anderen pushen.
 export async function syncAll(): Promise<void> {
   if (!supabase) throw new Error('Supabase ist nicht konfiguriert.')
   const client = supabase
@@ -210,6 +225,31 @@ export async function syncAll(): Promise<void> {
       pageType: (r.page_type as PageType) || undefined,
       customDate: r.custom_date ? ms(r.custom_date) : undefined,
       afns: r.afns && r.afns.length > 0 ? r.afns : undefined,
+    }),
+  )
+
+  // Referenziert page_id als Fremdschluessel, deshalb nach Pages.
+  await mergeTable<PdfPrintout, RemotePdfPrintout>(
+    db.pdfPrintouts,
+    'notiz_pdf_printouts',
+    (p) => ({
+      id: p.id,
+      user_id: userId,
+      page_id: p.pageId,
+      file_name: p.fileName,
+      storage_path: p.storagePath,
+      created_at: iso(p.createdAt),
+      updated_at: iso(p.updatedAt),
+      deleted_at: p.deletedAt ? iso(p.deletedAt) : null,
+    }),
+    (r) => ({
+      id: r.id,
+      pageId: r.page_id,
+      fileName: r.file_name,
+      storagePath: r.storage_path,
+      createdAt: ms(r.created_at),
+      updatedAt: ms(r.updated_at),
+      deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined,
     }),
   )
 

@@ -145,3 +145,29 @@ export interface Template {
   updatedAt: number
   deletedAt?: number
 }
+
+// Metadaten eines an eine Seite angehefteten PDF-Dateiausdrucks (siehe components/
+// DrawingCanvas.tsx, lib/pdfStorage.ts). Die eigentliche PDF-Datei liegt NICHT hier, sondern im
+// Supabase-Storage-Bucket "notiz-pdfs" unter `storagePath` - diese Zeile ist nur der Last-Write-
+// Wins-synchronisierte Verweis darauf (gleiches Muster wie jede andere Tabelle, siehe
+// lib/sync.ts). Eine Seite traegt fuer diese erste Version genau einen aktiven (nicht weich
+// geloeschten) PDF-Ausdruck.
+export interface PdfPrintout {
+  id: string
+  pageId: string
+  fileName: string
+  storagePath: string
+  createdAt: number
+  updatedAt: number
+  deletedAt?: number
+}
+
+// Rein lokaler Cache der Original-PDF-Bytes zu einem PdfPrintout (id === PdfPrintout.id) - NIE
+// Teil des Dexie/Supabase-Sync (kein updatedAt/deletedAt, wird nie ueber mergeTable abgeglichen).
+// Existiert nur, damit ein bereits einmal heruntergeladenes PDF beim naechsten Oeffnen der Seite
+// (auch offline) ohne erneuten Storage-Download angezeigt werden kann, siehe lib/pdfStorage.ts.
+export interface PdfBlobCache {
+  id: string
+  blob: Blob
+  cachedAt: number
+}

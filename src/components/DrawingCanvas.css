@@ -67,6 +67,10 @@
   display: none;
 }
 
+.drawing-status.pdf-error {
+  color: var(--bad, #d1263f);
+}
+
 .drawing-status {
   margin-left: auto;
   font-family: ui-monospace, Consolas, monospace;
