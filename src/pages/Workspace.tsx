@@ -81,6 +81,7 @@ export default function Workspace() {
           setActiveView('search')
           setOpenPageId(null)
         }}
+        onSelectFavorite={openPage}
         onSync={handleSync}
         syncing={syncing}
         syncError={syncError}

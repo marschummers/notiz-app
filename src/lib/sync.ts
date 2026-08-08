@@ -86,6 +86,7 @@ interface RemotePage {
   order: number
   updated_at: string
   deleted_at: string | null
+  favorited_at: string | null
 }
 
 interface RemoteTag {
@@ -175,6 +176,7 @@ export async function syncAll(): Promise<void> {
       order: p.order,
       updated_at: iso(p.updatedAt),
       deleted_at: p.deletedAt ? iso(p.deletedAt) : null,
+      favorited_at: p.favoritedAt ? iso(p.favoritedAt) : null,
     }),
     (r) => ({
       id: r.id,
@@ -185,6 +187,7 @@ export async function syncAll(): Promise<void> {
       order: r.order,
       updatedAt: ms(r.updated_at),
       deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined,
+      favoritedAt: r.favorited_at ? ms(r.favorited_at) : undefined,
     }),
   )
 

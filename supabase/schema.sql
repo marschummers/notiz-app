@@ -36,7 +36,10 @@ create table if not exists notiz_pages (
   -- Seiten-Hintergrund ('lined'/'dotted'/'cornell'/'blank'), siehe src/db/types.ts.
   background text not null default 'lined',
   updated_at timestamptz not null default now(),
-  deleted_at timestamptz
+  deleted_at timestamptz,
+  -- Favoriten-Status: nullable Zeitstempel statt Boolean, gleiches Muster wie deleted_at -
+  -- liefert Status UND "zuletzt favorisiert"-Sortierung in einer Spalte.
+  favorited_at timestamptz
 );
 
 create table if not exists notiz_tags (

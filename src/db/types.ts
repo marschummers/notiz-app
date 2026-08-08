@@ -34,6 +34,9 @@ export type PageBackground = 'lined' | 'dotted' | 'cornell' | 'blank'
 // Eine Notizseite. `folderId` optional (undefined = unabgelegt, direkt in der Wurzel sichtbar).
 // Die Striche liegen direkt auf der Seite (nicht in einer eigenen Tabelle) - fuer eine
 // Handschrift-App mit Last-Write-Wins-Sync ist eine Seite als Ganzes die sinnvolle Einheit.
+// `favoritedAt` folgt demselben Muster wie `deletedAt`: undefined = kein Favorit, Zeitstempel =
+// wann favorisiert wurde. Liefert Status UND Sortierung ("zuletzt favorisiert zuerst") in einem
+// Feld, ohne separates Boolean-Feld - kein Dexie-Schema-Update noetig, da kein Index darauf liegt.
 export interface Page {
   id: string
   folderId?: string
@@ -43,6 +46,7 @@ export interface Page {
   order: number
   updatedAt: number
   deletedAt?: number
+  favoritedAt?: number
 }
 
 export interface Tag {

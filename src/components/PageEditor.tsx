@@ -12,6 +12,7 @@ import {
   moveTextBlock,
   removeTagFromPage,
   renamePage,
+  toggleFavorite,
   toggleTask,
   updatePageBackground,
   updatePageStrokes,
@@ -83,6 +84,14 @@ export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBac
           onChange={(e) => renamePage(pageId, e.target.value)}
           placeholder="Ohne Titel"
         />
+        <button
+          className={`favorite-toggle${page.favoritedAt ? ' active' : ''}`}
+          onClick={() => toggleFavorite(pageId, !page.favoritedAt)}
+          aria-label={page.favoritedAt ? 'Favorit entfernen' : 'Als Favorit markieren'}
+          title={page.favoritedAt ? 'Favorit entfernen' : 'Als Favorit markieren'}
+        >
+          {page.favoritedAt ? '★' : '☆'}
+        </button>
       </div>
       <div className="page-tags-row">
         {pageTags.map((tag) => (

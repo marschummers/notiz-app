@@ -70,6 +70,11 @@ export async function movePage(id: string, folderId: string | undefined): Promis
   await db.pages.update(id, { folderId, updatedAt: Date.now() })
 }
 
+export async function toggleFavorite(id: string, favorite: boolean): Promise<void> {
+  const now = Date.now()
+  await db.pages.update(id, { favoritedAt: favorite ? now : undefined, updatedAt: now })
+}
+
 export async function deletePage(id: string): Promise<void> {
   const now = Date.now()
   const links = await db.pageTags.where('pageId').equals(id).toArray()

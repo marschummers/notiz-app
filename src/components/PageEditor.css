@@ -50,6 +50,26 @@
   border-radius: 6px;
 }
 
+.favorite-toggle {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 22px;
+  line-height: 1;
+  padding: 4px 6px;
+  cursor: pointer;
+  border-radius: var(--radius-control);
+}
+
+.favorite-toggle:hover {
+  color: var(--accent-strong);
+}
+
+.favorite-toggle.active {
+  color: var(--accent-strong);
+}
+
 .page-tags-row {
   display: flex;
   flex-wrap: wrap;

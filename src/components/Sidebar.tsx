@@ -14,6 +14,7 @@ interface Props {
   onSelect: (s: Selection) => void
   onSelectTasks: () => void
   onSelectSearch: () => void
+  onSelectFavorite: (pageId: string) => void
   onSync: () => void
   syncing: boolean
   syncError: string | null
@@ -28,6 +29,7 @@ export default function Sidebar({
   onSelect,
   onSelectTasks,
   onSelectSearch,
+  onSelectFavorite,
   onSync,
   syncing,
   syncError,
@@ -38,6 +40,13 @@ export default function Sidebar({
   const [updating, setUpdating] = useState(false)
   const tags = useLiveQuery(() => db.tags.filter((t) => !t.deletedAt).sortBy('name'), [])
   const openTaskCount = useLiveQuery(() => db.tasks.filter((t) => !t.deletedAt && !t.completed).count(), [])
+  // Zuletzt favorisiert zuerst - favoritedAt liefert Status und Sortierung in einem Feld
+  // (siehe db/types.ts Page), keine separate Sortierlogik noetig. Sortierung ueber eine Kopie
+  // statt .sort()/.reverse() direkt auf dem useLiveQuery-Ergebnis: das kann ueber mehrere
+  // Renders hinweg dieselbe Array-Referenz liefern, ein In-Place-Reverse wuerde die Reihenfolge
+  // dann bei jedem weiteren (auch fachfremden) Rerender erneut umdrehen.
+  const favoritesRaw = useLiveQuery(() => db.pages.filter((p) => !p.deletedAt && !!p.favoritedAt).toArray(), [])
+  const favorites = favoritesRaw ? [...favoritesRaw].sort((a, b) => (b.favoritedAt ?? 0) - (a.favoritedAt ?? 0)) : undefined
 
   async function handleForceUpdate() {
     setUpdating(true)
@@ -70,6 +79,19 @@ export default function Sidebar({
           <span className="tree-label">🔍 Suche</span>
         </div>
       </div>
+
+      {!!favorites?.length && (
+        <div className="sidebar-section">
+          <div className="sidebar-heading">
+            <span>Favoriten</span>
+          </div>
+          {favorites.map((page) => (
+            <div key={page.id} className="tree-row" onClick={() => onSelectFavorite(page.id)}>
+              <span className="tree-label">★ {page.title || 'Ohne Titel'}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="sidebar-section">
         <div className="sidebar-heading">
