@@ -50,6 +50,17 @@
   cursor: default;
 }
 
+/* Icon-Buttons statt Text (Radierer/Rückgängig/Leeren/Aufgabe/Textfeld) - kompakt, quadratisch,
+   passend zu den vom Nutzer vorgegebenen Referenz-Icons (siehe components/icons.tsx). */
+.drawing-toolbar button.icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+}
+
 .drawing-status {
   margin-left: auto;
   font-family: ui-monospace, Consolas, monospace;

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { PageBackground, Point, Stroke } from '../db/types'
 import { formatRelativeTime } from '../lib/format'
+import { BroomIcon, EraserIcon, UndoIcon } from './icons'
 import './DrawingCanvas.css'
 
 const COLORS = ['#08060d', '#d1263f', '#1d5fd6']
@@ -1122,14 +1123,14 @@ export default function DrawingCanvas({
           value={baseWidth}
           onChange={(e) => setBaseWidth(Number(e.target.value))}
         />
-        <button className={eraser ? 'active' : ''} onClick={() => setEraser((v) => !v)}>
-          Radierer
+        <button className={`icon-button${eraser ? ' active' : ''}`} onClick={() => setEraser((v) => !v)} aria-label="Radierer" title="Radierer">
+          <EraserIcon />
         </button>
-        <button onClick={undo} disabled={strokeCount === 0}>
-          Rückgängig
+        <button className="icon-button" onClick={undo} disabled={strokeCount === 0} aria-label="Rückgängig" title="Rückgängig">
+          <UndoIcon />
         </button>
-        <button onClick={clearAll} disabled={strokeCount === 0}>
-          Leeren
+        <button className="icon-button" onClick={clearAll} disabled={strokeCount === 0} aria-label="Leeren" title="Leeren">
+          <BroomIcon />
         </button>
         {zoomPercent !== 100 && (
           <button onClick={() => resetZoomRef.current()}>Zoom {zoomPercent}% zurücksetzen</button>

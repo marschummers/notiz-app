@@ -20,6 +20,7 @@ import {
 } from '../lib/actions'
 import type { PageBackground } from '../db/types'
 import DrawingCanvas from './DrawingCanvas'
+import { TaskIcon, TextFieldIcon } from './icons'
 import './PageEditor.css'
 
 const BACKGROUND_LABELS: Record<PageBackground, string> = {
@@ -153,22 +154,26 @@ export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBac
           toolbarExtra={
             <>
               <button
-                className={taskMode ? 'active' : ''}
+                className={`icon-button${taskMode ? ' active' : ''}`}
                 onClick={() => {
                   setTaskMode((v) => !v)
                   setTextBlockMode(false)
                 }}
+                aria-label="Aufgabe"
+                title="Aufgabe"
               >
-                {taskMode ? '☑' : '☐'} Aufgabe
+                <TaskIcon />
               </button>
               <button
-                className={textBlockMode ? 'active' : ''}
+                className={`icon-button${textBlockMode ? ' active' : ''}`}
                 onClick={() => {
                   setTextBlockMode((v) => !v)
                   setTaskMode(false)
                 }}
+                aria-label="Textfeld"
+                title="Textfeld"
               >
-                📝 Textfeld
+                <TextFieldIcon />
               </button>
             </>
           }
