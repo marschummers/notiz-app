@@ -86,6 +86,24 @@ export async function updatePageCustomDate(id: string, customDate: number | unde
   await db.pages.update(id, { customDate, updatedAt: Date.now() })
 }
 
+// Fuegt eine AFN (numerische Referenznummer) hinzu bzw. entfernt sie wieder - echtes Array-Feld
+// auf der Seite selbst (kein Tag, keine eigene Tabelle), Duplikate werden stillschweigend
+// ignoriert statt einen Fehler zu werfen.
+export async function addAfnToPage(id: string, afn: number): Promise<void> {
+  const page = await db.pages.get(id)
+  if (!page) return
+  const current = page.afns ?? []
+  if (current.includes(afn)) return
+  await db.pages.update(id, { afns: [...current, afn], updatedAt: Date.now() })
+}
+
+export async function removeAfnFromPage(id: string, afn: number): Promise<void> {
+  const page = await db.pages.get(id)
+  if (!page) return
+  const current = page.afns ?? []
+  await db.pages.update(id, { afns: current.filter((a) => a !== afn), updatedAt: Date.now() })
+}
+
 export async function deletePage(id: string): Promise<void> {
   const now = Date.now()
   const links = await db.pageTags.where('pageId').equals(id).toArray()

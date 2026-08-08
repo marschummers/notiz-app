@@ -97,6 +97,82 @@
   color: var(--bad);
 }
 
+.properties-afn-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.properties-afn-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.properties-afn-chip button {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  font-size: 11px;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.properties-afn-chip button:hover {
+  opacity: 1;
+}
+
+.properties-afn-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.properties-afn-add input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.properties-afn-add button {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.properties-afn-add button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.properties-afn-add button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .properties-divider {
   height: 1px;
   background: var(--border-soft);

@@ -36,7 +36,13 @@ export default function SearchView({ onOpenPage, onSelectFolder, onSelectTag }: 
 
   const pageTitleById = new Map((pages ?? []).map((p) => [p.id, p.title || 'Ohne Titel']))
 
-  const matchedPages = active ? sortByRelevance((pages ?? []).filter((p) => (p.title || '').toLowerCase().includes(q)), (p: Page) => p.title || '', q) : []
+  const matchedPages = active
+    ? sortByRelevance(
+        (pages ?? []).filter((p) => (p.title || '').toLowerCase().includes(q) || (p.afns ?? []).some((afn) => String(afn).includes(q))),
+        (p: Page) => p.title || '',
+        q,
+      )
+    : []
   const matchedTasks = active ? sortByRelevance((tasks ?? []).filter((t) => (t.text || '').toLowerCase().includes(q)), (t: Task) => t.text || '', q) : []
   const matchedTags = active ? sortByRelevance((tags ?? []).filter((t) => t.name.toLowerCase().includes(q)), (t: Tag) => t.name, q) : []
   const matchedFolders = active ? sortByRelevance((folders ?? []).filter((f) => f.name.toLowerCase().includes(q)), (f: Folder) => f.name, q) : []
@@ -64,7 +70,12 @@ export default function SearchView({ onOpenPage, onSelectFolder, onSelectTag }: 
           {matchedPages.map((p) => (
             <div key={p.id} className="search-row" onClick={() => onOpenPage(p.id)}>
               <span className="search-row-icon">📄</span>
-              <span className="search-row-title">{p.title || 'Ohne Titel'}</span>
+              <div className="search-row-text">
+                <div className="search-row-title">{p.title || 'Ohne Titel'}</div>
+                {!!p.afns && p.afns.length > 0 && (
+                  <div className="search-row-sub">{p.afns.map((afn) => `AFN ${afn}`).join(', ')}</div>
+                )}
+              </div>
             </div>
           ))}
         </div>

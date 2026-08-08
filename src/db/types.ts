@@ -44,6 +44,9 @@ export type PageType = 'Allgemein' | 'Meeting' | 'Gesprächsnotiz' | 'Idee' | 'K
 // Feld, ohne separates Boolean-Feld - kein Dexie-Schema-Update noetig, da kein Index darauf liegt.
 // `customDate` ist ein frei waehlbares Datum (Properties-Panel), unabhaengig von `updatedAt` -
 // undefined = nicht gesetzt.
+// `afns` sind echte Seiten-Properties (keine Tags): rein numerische Referenznummern (1-999999),
+// eine Seite kann mehrere haben, deshalb ein Array statt Einzelwert. undefined/fehlend bedeutet
+// "keine AFN", bestehende Seiten ohne das Feld brauchen dadurch keine Migration.
 export interface Page {
   id: string
   folderId?: string
@@ -56,6 +59,7 @@ export interface Page {
   favoritedAt?: number
   pageType?: PageType
   customDate?: number
+  afns?: number[]
 }
 
 export interface Tag {

@@ -37,7 +37,8 @@
   letter-spacing: 0.05em;
 }
 
-.filter-field select {
+.filter-field select,
+.filter-field input {
   padding: 6px 8px;
   border-radius: var(--radius-control);
   border: 1px solid var(--border);
@@ -125,6 +126,14 @@
 
 .all-notes-row-tag {
   white-space: nowrap;
+}
+
+.all-notes-row-afn {
+  white-space: nowrap;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 1px 8px;
 }
 
 .all-notes-row-folder {

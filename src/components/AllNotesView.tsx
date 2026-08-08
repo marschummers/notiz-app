@@ -53,6 +53,7 @@ export default function AllNotesView({ onOpenPage }: Props) {
   const [dateFilter, setDateFilter] = useState<DateFilter>('Alle')
   const [tagFilter, setTagFilter] = useState('Alle')
   const [folderFilter, setFolderFilter] = useState('Alle')
+  const [afnFilter, setAfnFilter] = useState('')
 
   const pages = useLiveQuery(() => db.pages.filter((p) => !p.deletedAt).toArray(), [])
   const folders = useLiveQuery(() => db.folders.filter((f) => !f.deletedAt).toArray(), [])
@@ -68,13 +69,15 @@ export default function AllNotesView({ onOpenPage }: Props) {
     tagIdsByPageId.set(link.pageId, list)
   }
 
-  const hasActiveFilters = typeFilter !== 'Alle' || dateFilter !== 'Alle' || tagFilter !== 'Alle' || folderFilter !== 'Alle'
+  const hasActiveFilters =
+    typeFilter !== 'Alle' || dateFilter !== 'Alle' || tagFilter !== 'Alle' || folderFilter !== 'Alle' || afnFilter.trim() !== ''
 
   function resetFilters() {
     setTypeFilter('Alle')
     setDateFilter('Alle')
     setTagFilter('Alle')
     setFolderFilter('Alle')
+    setAfnFilter('')
   }
 
   const filtered = (pages ?? [])
@@ -86,6 +89,9 @@ export default function AllNotesView({ onOpenPage }: Props) {
       if (folderFilter === ROOT_FOLDER) return !p.folderId
       return p.folderId === folderFilter
     })
+    // Exakter Treffer statt Teilstring - eine AFN identifiziert eindeutig, "1816" soll nicht
+    // ungewollt auch "181657" mitliefern.
+    .filter((p) => afnFilter.trim() === '' || (p.afns ?? []).some((afn) => String(afn) === afnFilter.trim()))
     // Zuletzt bearbeitet zuerst - am ehesten nuetzlich fuer eine geraeteweite Uebersichtsliste.
     .sort((a, b) => b.updatedAt - a.updatedAt)
 
@@ -138,6 +144,16 @@ export default function AllNotesView({ onOpenPage }: Props) {
             ))}
           </select>
         </div>
+        <div className="filter-field">
+          <label>AFN</label>
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder="z. B. 181657"
+            value={afnFilter}
+            onChange={(e) => setAfnFilter(e.target.value.replace(/\D/g, '').slice(0, 6))}
+          />
+        </div>
         {hasActiveFilters && (
           <button className="all-notes-reset" onClick={resetFilters}>
             Filter zurücksetzen
@@ -159,9 +175,14 @@ export default function AllNotesView({ onOpenPage }: Props) {
                 <span className="all-notes-row-title">{p.title || 'Ohne Titel'}</span>
                 <span className="all-notes-row-type">{p.pageType ?? 'Allgemein'}</span>
               </div>
-              {(p.customDate || pageTagNames.length > 0 || folder) && (
+              {(p.customDate || pageTagNames.length > 0 || folder || (p.afns && p.afns.length > 0)) && (
                 <div className="all-notes-row-meta">
                   {!!p.customDate && <span className="all-notes-row-date">{formatDate(p.customDate)}</span>}
+                  {(p.afns ?? []).map((afn) => (
+                    <span key={afn} className="all-notes-row-afn">
+                      AFN {afn}
+                    </span>
+                  ))}
                   {pageTagNames.map((name) => (
                     <span key={name} className="all-notes-row-tag">
                       #{name}

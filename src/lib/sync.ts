@@ -89,6 +89,7 @@ interface RemotePage {
   favorited_at: string | null
   page_type: string | null
   custom_date: string | null
+  afns: number[]
 }
 
 interface RemoteTag {
@@ -194,6 +195,7 @@ export async function syncAll(): Promise<void> {
       favorited_at: p.favoritedAt ? iso(p.favoritedAt) : null,
       page_type: p.pageType ?? null,
       custom_date: p.customDate ? iso(p.customDate) : null,
+      afns: p.afns ?? [],
     }),
     (r) => ({
       id: r.id,
@@ -207,6 +209,7 @@ export async function syncAll(): Promise<void> {
       favoritedAt: r.favorited_at ? ms(r.favorited_at) : undefined,
       pageType: (r.page_type as PageType) || undefined,
       customDate: r.custom_date ? ms(r.custom_date) : undefined,
+      afns: r.afns && r.afns.length > 0 ? r.afns : undefined,
     }),
   )
 

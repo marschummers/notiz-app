@@ -1,10 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PageType } from '../db/types'
-import { saveAsTemplate, updatePageCustomDate, updatePageType } from '../lib/actions'
+import { addAfnToPage, removeAfnFromPage, saveAsTemplate, updatePageCustomDate, updatePageType } from '../lib/actions'
 import { InfoIcon } from './icons'
 import './PageProperties.css'
 
 const PAGE_TYPES: PageType[] = ['Allgemein', 'Meeting', 'Gesprächsnotiz', 'Idee', 'Konzept', 'Protokoll', 'Recherche']
+
+// AFN: rein numerische Referenznummer, 1-999999 (siehe db/types.ts Page.afns).
+function isValidAfnInput(value: string): boolean {
+  if (!/^\d+$/.test(value)) return false
+  const n = Number(value)
+  return n >= 1 && n <= 999999
+}
 
 // `<input type="date">` erwartet/liefert "YYYY-MM-DD" in LOKALER Zeit - ueber
 // toISOString()/new Date(string) (beide UTC-basiert) wuerde das Datum je nach Zeitzone einen Tag
@@ -28,13 +35,21 @@ interface Props {
   pageId: string
   pageType: PageType | undefined
   customDate: number | undefined
+  afns: number[] | undefined
 }
 
 // Kompaktes Popover statt eigenem Bereich auf der Seite - nimmt dauerhaft keinen Platz weg,
 // nur der kleine Info-Button bleibt sichtbar (siehe page-editor-header in PageEditor.tsx).
-export default function PageProperties({ pageId, pageType, customDate }: Props) {
+export default function PageProperties({ pageId, pageType, customDate, afns }: Props) {
   const [open, setOpen] = useState(false)
+  const [afnInput, setAfnInput] = useState('')
   const containerRef = useRef<HTMLDivElement>(null)
+
+  function handleAddAfn() {
+    if (!isValidAfnInput(afnInput)) return
+    addAfnToPage(pageId, Number(afnInput))
+    setAfnInput('')
+  }
 
   useEffect(() => {
     if (!open) return
@@ -85,6 +100,43 @@ export default function PageProperties({ pageId, pageType, customDate }: Props) 
                   ✕
                 </button>
               )}
+            </div>
+          </label>
+          <label className="properties-field">
+            <span className="properties-label">AFN</span>
+            {!!afns && afns.length > 0 && (
+              <div className="properties-afn-list">
+                {afns.map((afn) => (
+                  <span key={afn} className="properties-afn-chip">
+                    AFN {afn}
+                    <button
+                      onClick={() => removeAfnFromPage(pageId, afn)}
+                      aria-label={`AFN ${afn} entfernen`}
+                      title="Entfernen"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="properties-afn-add">
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="z. B. 181657"
+                value={afnInput}
+                onChange={(e) => setAfnInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    handleAddAfn()
+                  }
+                }}
+              />
+              <button onClick={handleAddAfn} disabled={!isValidAfnInput(afnInput)}>
+                +
+              </button>
             </div>
           </label>
           <div className="properties-divider" />

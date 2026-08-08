@@ -43,7 +43,10 @@ create table if not exists notiz_pages (
   -- Einfache Seiten-Properties (siehe src/db/types.ts PageType) - feste Typenliste statt
   -- generischem Property-System, custom_date ist ein frei waehlbares, optionales Datum.
   page_type text,
-  custom_date timestamptz
+  custom_date timestamptz,
+  -- AFN: numerische Referenznummer(n), echtes Property (kein Tag) - eine Seite kann mehrere
+  -- haben, siehe src/db/types.ts Page.afns.
+  afns integer[] not null default '{}'
 );
 
 create table if not exists notiz_tags (

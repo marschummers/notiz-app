@@ -93,7 +93,7 @@ export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBac
         >
           {page.favoritedAt ? '★' : '☆'}
         </button>
-        <PageProperties pageId={pageId} pageType={page.pageType} customDate={page.customDate} />
+        <PageProperties pageId={pageId} pageType={page.pageType} customDate={page.customDate} afns={page.afns} />
       </div>
       <div className="page-tags-row">
         {pageTags.map((tag) => (
