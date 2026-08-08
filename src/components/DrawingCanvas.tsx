@@ -1315,6 +1315,49 @@ export default function DrawingCanvas({
     window.addEventListener('mousemove', onMouseMove)
     window.addEventListener('mouseup', onMouseUp)
 
+    // --- Mausrad/Trackpad (Desktop): normales Scrollen pannt, Ctrl/Cmd+Scrollen zoomt ---
+    // Nutzt dieselbe applyView/viewRef-Logik wie der Zwei-Finger-Touch-Pinch oben (kein
+    // eigener Scroll-Mechanismus) - vor allem gedacht fuer mehrseitige PDFs: auf dem iPad
+    // erreicht man tiefere Seiten schon per Zwei-Finger-Pan, auf dem PC gibt es dafuer bisher
+    // keine Eingabe. Ctrl/Cmd+Wheel statt normalem Wheel fuers Zoomen deckt sich mit dem
+    // Browser-Standard: Trackpad-Pinch-Gesten erzeugen automatisch Wheel-Events mit
+    // ctrlKey:true, die bestehende Pinch-Geste funktioniert also unveraendert weiter, nur eben
+    // ueber Wheel statt Touch.
+    const WHEEL_ZOOM_SPEED = 0.0015
+    // Klassische Mausraeder melden oft deltaMode 1 ("Zeile") mit sehr kleinen Werten (haeufig
+    // ±3) statt Pixeln - hochskalieren, sonst wirkt Scrollen dort quaelend langsam.
+    const WHEEL_LINE_HEIGHT_PX = 24
+    function onWheel(e: WheelEvent) {
+      // Waehrend aktiv mit Maus oder Stift gezeichnet wird, soll ein Wheel-Event (z.B. ein
+      // versehentlich beruehrtes Trackpad) weder pannen/zoomen noch den laufenden Strich
+      // beeinflussen - preventDefault trotzdem, damit kein natives Scrollen/Browser-Zoom
+      // dazwischenfunkt.
+      e.preventDefault()
+      if (mouseDown || activeTouchIdRef.current !== null) return
+
+      const factor = e.deltaMode === 1 ? WHEEL_LINE_HEIGHT_PX : 1
+      const dx = e.deltaX * factor
+      const dy = e.deltaY * factor
+      const view = viewRef.current
+
+      if (e.ctrlKey || e.metaKey) {
+        const rect = overlay!.getBoundingClientRect()
+        const newScale = view.scale * Math.exp(-dy * WHEEL_ZOOM_SPEED)
+        const localX = e.clientX - rect.left
+        const localY = e.clientY - rect.top
+        // Gleiches Pinch-to-Point-Verhalten wie updatePinch oben: der Punkt unter dem Cursor
+        // bleibt beim Zoomen unter dem Cursor.
+        const contentX = (localX - view.x) / view.scale
+        const contentY = (localY - view.y) / view.scale
+        applyView(newScale, localX - contentX * newScale, localY - contentY * newScale)
+        setZoomPercent(Math.round(viewRef.current.scale * 100))
+        return
+      }
+
+      applyView(view.scale, view.x - dx, view.y - dy)
+    }
+    overlay.addEventListener('wheel', onWheel, { passive: false })
+
     return () => {
       resizeObserver.disconnect()
       if (settleTimer) clearTimeout(settleTimer)
@@ -1325,6 +1368,7 @@ export default function DrawingCanvas({
       overlay.removeEventListener('mousedown', onMouseDown)
       window.removeEventListener('mousemove', onMouseMove)
       window.removeEventListener('mouseup', onMouseUp)
+      overlay.removeEventListener('wheel', onWheel)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
