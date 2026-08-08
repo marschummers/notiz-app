@@ -873,7 +873,7 @@ function TextBlockItem({
 
   return (
     <div
-      className={`text-block${dragPos ? ' dragging' : ''}`}
+      className={`text-block${dragPos ? ' dragging' : ''}${editing ? ' active' : ''}`}
       style={{ left: pos.x, top: pos.y }}
       onClick={(e) => e.stopPropagation()}
       onTouchStart={handleTouchStart}
@@ -881,19 +881,21 @@ function TextBlockItem({
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
     >
-      <div
-        className="text-block-drag-handle"
-        onTouchStart={handleHandleTouchStart}
-        onMouseDown={handleHandleMouseDown}
-        aria-hidden="true"
-      >
-        <span />
-        <span />
-        <span />
-        <span />
-        <span />
-        <span />
-      </div>
+      {editing && (
+        <div
+          className="text-block-drag-handle"
+          onTouchStart={handleHandleTouchStart}
+          onMouseDown={handleHandleMouseDown}
+          aria-hidden="true"
+        >
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+        </div>
+      )}
       {editing ? (
         <div className="text-block-edit-wrap">
           <textarea
@@ -958,9 +960,11 @@ function TextBlockItem({
           )}
         </div>
       )}
-      <button className="task-delete" onClick={onDelete} aria-label="Textfeld löschen" title="Textfeld löschen">
-        ✕
-      </button>
+      {editing && (
+        <button className="task-delete" onClick={onDelete} aria-label="Textfeld löschen" title="Textfeld löschen">
+          ✕
+        </button>
+      )}
     </div>
   )
 }
@@ -1003,6 +1007,12 @@ interface Props {
   // da sie nur die ohnehin schon geladenen Striche betrifft und ueber dieselbe onChange-Pipeline
   // wie jede andere Tinten-Aenderung gespeichert wird.
   lassoMode?: boolean
+  // Wird aufgerufen, wenn innerhalb von DrawingCanvas ein anderes Zeichen-Werkzeug gewaehlt wird
+  // (Farbe, Radiergummi) - der Lasso-Modus selbst wird von aussen (PageEditor.tsx) gesteuert,
+  // DrawingCanvas kann ihn also nicht selbst abschalten, nur anfragen. Verhindert, dass Lasso und
+  // Radiergummi/Farbe gleichzeitig "aktiv" bleiben (der Lasso-Modus faengt Stift/Finger-Eingaben
+  // ohnehin vollstaendig ab, das war rein optisch/gedanklich verwirrend).
+  onRequestExitLasso?: () => void
   toolbarExtra?: ReactNode
 }
 
@@ -1031,6 +1041,7 @@ export default function DrawingCanvas({
   onAttachPdf,
   onRemovePdf,
   lassoMode = false,
+  onRequestExitLasso,
   toolbarExtra,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -1819,6 +1830,7 @@ export default function DrawingCanvas({
             onClick={() => {
               setColor(c)
               setEraser(false)
+              onRequestExitLasso?.()
             }}
             aria-label={`Farbe ${c}`}
           />
@@ -1830,7 +1842,15 @@ export default function DrawingCanvas({
           value={baseWidth}
           onChange={(e) => setBaseWidth(Number(e.target.value))}
         />
-        <button className={`icon-button${eraser ? ' active' : ''}`} onClick={() => setEraser((v) => !v)} aria-label="Radierer" title="Radierer">
+        <button
+          className={`icon-button${eraser ? ' active' : ''}`}
+          onClick={() => {
+            setEraser((v) => !v)
+            onRequestExitLasso?.()
+          }}
+          aria-label="Radierer"
+          title="Radierer"
+        >
           <EraserIcon />
         </button>
         <button className="icon-button" onClick={undo} disabled={strokeCount === 0} aria-label="Rückgängig" title="Rückgängig">

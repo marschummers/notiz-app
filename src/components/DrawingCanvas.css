@@ -373,7 +373,11 @@
 }
 
 /* Textfeld - gleiche Platzierungslogik wie .task-block, aber leicht kupferfarben statt
-   cremeweiss abgesetzt, damit Text- und Aufgaben-Bloecke auf der Seite unterscheidbar bleiben. */
+   cremeweiss abgesetzt, damit Text- und Aufgaben-Bloecke auf der Seite unterscheidbar bleiben.
+   Im Ruhezustand (nicht angeklickt) bewusst OHNE sichtbaren Rahmen/Hintergrund - der Text soll
+   wie normale Schrift auf dem Papier wirken, nicht wie ein Formularfeld. Rahmen, Greif-Punkte
+   und Loeschen-Button erscheinen erst, sobald das Textfeld angeklickt/in Bearbeitung ist (siehe
+   .text-block.active weiter unten und die bedingt gerenderten Elemente in TextBlockItem). */
 .text-block {
   position: absolute;
   display: flex;
@@ -383,15 +387,20 @@
   max-width: 320px;
   padding: 6px 8px;
   border-radius: 8px;
-  border: 1px solid #d9c3a0;
-  background: rgba(253, 246, 234, 0.92);
+  border: 1px solid transparent;
+  background: transparent;
   color: #2a2418;
   font-family: system-ui, sans-serif;
   font-size: 14px;
   line-height: 1.4;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
   pointer-events: auto;
   touch-action: none;
+}
+
+.text-block.active {
+  border-color: #d9c3a0;
+  background: rgba(253, 246, 234, 0.92);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 
 .text-block.dragging {

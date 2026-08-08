@@ -180,6 +180,7 @@ export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBac
             if (pdfPrintout) removePdfFromPage(pdfPrintout.id)
           }}
           lassoMode={lassoMode}
+          onRequestExitLasso={() => setLassoMode(false)}
           toolbarExtra={
             <>
               <button
