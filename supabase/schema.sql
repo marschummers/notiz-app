@@ -56,15 +56,33 @@ create table if not exists notiz_page_tags (
   deleted_at timestamptz
 );
 
+-- To-do auf einer Seite, an einer frei gewaehlten Position (x/y) platziert. Echter
+-- strukturierter Datensatz statt aus dem Zeichentext geparst, siehe src/db/types.ts Task.
+create table if not exists notiz_tasks (
+  id uuid primary key,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  page_id uuid not null references notiz_pages (id) on delete cascade,
+  text text not null default '',
+  completed boolean not null default false,
+  x double precision not null default 0,
+  y double precision not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz
+);
+
 create index if not exists notiz_folders_user_id_idx on notiz_folders (user_id);
 create index if not exists notiz_pages_user_id_idx on notiz_pages (user_id);
 create index if not exists notiz_tags_user_id_idx on notiz_tags (user_id);
 create index if not exists notiz_page_tags_user_id_idx on notiz_page_tags (user_id);
+create index if not exists notiz_tasks_user_id_idx on notiz_tasks (user_id);
+create index if not exists notiz_tasks_page_id_idx on notiz_tasks (page_id);
 
 alter table notiz_folders enable row level security;
 alter table notiz_pages enable row level security;
 alter table notiz_tags enable row level security;
 alter table notiz_page_tags enable row level security;
+alter table notiz_tasks enable row level security;
 
 create policy "notiz_folders_owner_only" on notiz_folders
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
@@ -76,4 +94,7 @@ create policy "notiz_tags_owner_only" on notiz_tags
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 create policy "notiz_page_tags_owner_only" on notiz_page_tags
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy "notiz_tasks_owner_only" on notiz_tasks
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);

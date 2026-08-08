@@ -3,11 +3,15 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
 import {
   addTagToPage,
+  createTask,
+  deleteTask,
   findOrCreateTag,
   removeTagFromPage,
   renamePage,
+  toggleTask,
   updatePageBackground,
   updatePageStrokes,
+  updateTaskText,
 } from '../lib/actions'
 import type { PageBackground } from '../db/types'
 import DrawingCanvas from './DrawingCanvas'
@@ -29,9 +33,11 @@ interface Props {
 
 export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBack }: Props) {
   const [newTag, setNewTag] = useState('')
+  const [taskMode, setTaskMode] = useState(false)
   const page = useLiveQuery(() => db.pages.get(pageId), [pageId])
   const tagLinks = useLiveQuery(() => db.pageTags.filter((pt) => !pt.deletedAt && pt.pageId === pageId).toArray(), [pageId])
   const allTags = useLiveQuery(() => db.tags.filter((t) => !t.deletedAt).toArray(), [])
+  const tasks = useLiveQuery(() => db.tasks.filter((t) => !t.deletedAt && t.pageId === pageId).toArray(), [pageId])
 
   if (!page) return null
 
@@ -105,6 +111,17 @@ export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBac
           title={page.title}
           updatedAt={page.updatedAt}
           onChange={(strokes) => updatePageStrokes(pageId, strokes)}
+          tasks={tasks ?? []}
+          taskMode={taskMode}
+          onCreateTask={(x, y) => createTask(pageId, x, y)}
+          onToggleTask={(id, completed) => toggleTask(id, completed)}
+          onEditTaskText={(id, text) => updateTaskText(id, text)}
+          onDeleteTask={(id) => deleteTask(id)}
+          toolbarExtra={
+            <button className={taskMode ? 'active' : ''} onClick={() => setTaskMode((v) => !v)}>
+              {taskMode ? '☑' : '☐'} Aufgabe
+            </button>
+          }
         />
       </div>
     </div>

@@ -192,3 +192,87 @@
   -webkit-user-drag: none;
   -webkit-touch-callout: none;
 }
+
+/* To-do-Ebene: liegt ueber .drawing-overlay, faengt aber nur im Aufgaben-Modus Klicks auf
+   leerer Flaeche ab (zum Platzieren). Einzelne .task-block-Elemente sind IMMER bedienbar,
+   unabhaengig vom Modus - siehe pointer-events-Override dort. */
+.task-layer {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+.task-layer.task-mode {
+  pointer-events: auto;
+  cursor: crosshair;
+}
+
+.task-block {
+  position: absolute;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 260px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1px solid #d8d0ba;
+  background: rgba(255, 255, 255, 0.88);
+  color: #2a2418;
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.35;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+.task-block.completed .task-text {
+  text-decoration: line-through;
+  opacity: 0.55;
+}
+
+.task-checkbox {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.task-text {
+  flex: 1;
+  min-width: 40px;
+  word-break: break-word;
+  cursor: text;
+}
+
+.task-text-input {
+  flex: 1;
+  min-width: 80px;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  outline: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 0 2px;
+}
+
+.task-delete {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  opacity: 0.4;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px;
+  border-radius: 4px;
+}
+
+.task-delete:hover {
+  opacity: 1;
+  color: var(--bad);
+}

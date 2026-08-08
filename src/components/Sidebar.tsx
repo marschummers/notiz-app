@@ -10,7 +10,9 @@ import './Sidebar.css'
 interface Props {
   open: boolean
   selection: Selection
+  activeView: 'notes' | 'tasks'
   onSelect: (s: Selection) => void
+  onSelectTasks: () => void
   onSync: () => void
   syncing: boolean
   syncError: string | null
@@ -18,10 +20,22 @@ interface Props {
   onSignOut: () => void
 }
 
-export default function Sidebar({ open, selection, onSelect, onSync, syncing, syncError, userEmail, onSignOut }: Props) {
+export default function Sidebar({
+  open,
+  selection,
+  activeView,
+  onSelect,
+  onSelectTasks,
+  onSync,
+  syncing,
+  syncError,
+  userEmail,
+  onSignOut,
+}: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [updating, setUpdating] = useState(false)
   const tags = useLiveQuery(() => db.tags.filter((t) => !t.deletedAt).sortBy('name'), [])
+  const openTaskCount = useLiveQuery(() => db.tasks.filter((t) => !t.deletedAt && !t.completed).count(), [])
 
   async function handleForceUpdate() {
     setUpdating(true)
@@ -37,8 +51,21 @@ export default function Sidebar({ open, selection, onSelect, onSync, syncing, sy
     })
   }
 
+  // Solange die Aufgaben-Ansicht aktiv ist, soll in Ordnern/Tags nichts als "ausgewaehlt"
+  // markiert sein, auch wenn `selection` (fuer den Rueckweg zu Notizen) noch den letzten
+  // Ordner/Tag im Speicher haelt. Ein Platzhalter, der nie zu einem echten Ordner passt, statt
+  // FolderTree selbst anzufassen.
+  const visibleSelection: Selection = activeView === 'tasks' ? { type: 'folder', id: '__none__' } : selection
+
   return (
     <div className={`sidebar${open ? '' : ' collapsed'}`}>
+      <div className="sidebar-section">
+        <div className={`tree-row${activeView === 'tasks' ? ' selected' : ''}`} onClick={onSelectTasks}>
+          <span className="tree-label">☑ Aufgaben</span>
+          {!!openTaskCount && <span className="task-badge">{openTaskCount}</span>}
+        </div>
+      </div>
+
       <div className="sidebar-section">
         <div className="sidebar-heading">
           <span>Ordner</span>
@@ -47,7 +74,7 @@ export default function Sidebar({ open, selection, onSelect, onSync, syncing, sy
           </button>
         </div>
         <div
-          className={`tree-row root-row${selection.type === 'folder' && selection.id === undefined ? ' selected' : ''}`}
+          className={`tree-row root-row${visibleSelection.type === 'folder' && visibleSelection.id === undefined ? ' selected' : ''}`}
           onClick={() => onSelect({ type: 'folder', id: undefined })}
         >
           <span className="tree-label">Nicht abgelegt</span>
@@ -55,7 +82,7 @@ export default function Sidebar({ open, selection, onSelect, onSync, syncing, sy
         <FolderTree
           parentId={undefined}
           depth={0}
-          selection={selection}
+          selection={visibleSelection}
           onSelect={onSelect}
           expanded={expanded}
           onToggleExpand={toggleExpand}
@@ -70,7 +97,7 @@ export default function Sidebar({ open, selection, onSelect, onSync, syncing, sy
         {(tags ?? []).map((tag) => (
           <div
             key={tag.id}
-            className={`tree-row${selection.type === 'tag' && selection.id === tag.id ? ' selected' : ''}`}
+            className={`tree-row${visibleSelection.type === 'tag' && visibleSelection.id === tag.id ? ' selected' : ''}`}
             onClick={() => onSelect({ type: 'tag', id: tag.id })}
           >
             <span className="tree-label">#{tag.name}</span>

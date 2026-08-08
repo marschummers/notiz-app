@@ -57,6 +57,10 @@ export async function deletePage(id: string): Promise<void> {
   for (const link of links) {
     await db.pageTags.update(link.id, { deletedAt: now, updatedAt: now })
   }
+  const pageTasks = await db.tasks.where('pageId').equals(id).toArray()
+  for (const task of pageTasks) {
+    await db.tasks.update(task.id, { deletedAt: now, updatedAt: now })
+  }
   await db.pages.update(id, { deletedAt: now, updatedAt: now })
 }
 
@@ -97,4 +101,27 @@ export async function removeTagFromPage(pageId: string, tagId: string): Promise<
   for (const link of links) {
     await db.pageTags.update(link.id, { deletedAt: now, updatedAt: now })
   }
+}
+
+// Legt ein To-do an gewaehlter Position auf einer Seite an (x/y im selben unskalierten
+// Koordinatenraum wie Stroke-Punkte, siehe components/DrawingCanvas.tsx) und liefert die neue
+// id zurueck, damit der Aufrufer direkt in den Bearbeitungsmodus fuer den Text wechseln kann.
+export async function createTask(pageId: string, x: number, y: number, text = ''): Promise<string> {
+  const id = newId()
+  const now = Date.now()
+  await db.tasks.add({ id, pageId, text, completed: false, x, y, createdAt: now, updatedAt: now })
+  return id
+}
+
+export async function updateTaskText(id: string, text: string): Promise<void> {
+  await db.tasks.update(id, { text, updatedAt: Date.now() })
+}
+
+export async function toggleTask(id: string, completed: boolean): Promise<void> {
+  await db.tasks.update(id, { completed, updatedAt: Date.now() })
+}
+
+export async function deleteTask(id: string): Promise<void> {
+  const now = Date.now()
+  await db.tasks.update(id, { deletedAt: now, updatedAt: now })
 }

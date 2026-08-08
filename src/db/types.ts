@@ -61,3 +61,19 @@ export interface PageTag {
   updatedAt: number
   deletedAt?: number
 }
+
+// Ein To-do, eindeutig einer Seite zugeordnet (pageId) und dort an einer frei gewaehlten
+// Position (x/y, unskalierter Canvas-Koordinatenraum wie bei Stroke-Punkten) platziert.
+// Bewusst ein eigener strukturierter Datensatz statt aus dem Zeichentext geparst - siehe
+// lib/actions.ts createTask/toggleTask/updateTaskText/deleteTask.
+export interface Task {
+  id: string
+  pageId: string
+  text: string
+  completed: boolean
+  x: number
+  y: number
+  createdAt: number
+  updatedAt: number
+  deletedAt?: number
+}

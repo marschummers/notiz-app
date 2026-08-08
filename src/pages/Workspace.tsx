@@ -5,11 +5,13 @@ import type { Selection } from '../lib/selection'
 import Sidebar from '../components/Sidebar'
 import PageList from '../components/PageList'
 import PageEditor from '../components/PageEditor'
+import TasksView from '../components/TasksView'
 import './Workspace.css'
 
 export default function Workspace() {
   const { session, signOut } = useAuth()
   const [selection, setSelection] = useState<Selection>({ type: 'folder', id: undefined })
+  const [activeView, setActiveView] = useState<'notes' | 'tasks'>('notes')
   const [openPageId, setOpenPageId] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [syncing, setSyncing] = useState(false)
@@ -34,13 +36,26 @@ export default function Workspace() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  function openPage(id: string) {
+    setOpenPageId(id)
+    // Beim Schreiben soll wirklich der komplette Bildschirm zur Verfuegung stehen - die
+    // Sidebar faehrt automatisch ein, laesst sich aber jederzeit wieder ausklappen.
+    setSidebarOpen(false)
+  }
+
   return (
     <div className="workspace">
       <Sidebar
         open={sidebarOpen}
         selection={selection}
+        activeView={activeView}
         onSelect={(s) => {
           setSelection(s)
+          setActiveView('notes')
+          setOpenPageId(null)
+        }}
+        onSelectTasks={() => {
+          setActiveView('tasks')
           setOpenPageId(null)
         }}
         onSync={handleSync}
@@ -60,18 +75,10 @@ export default function Workspace() {
             handleSync()
           }}
         />
+      ) : activeView === 'tasks' ? (
+        <TasksView onOpenPage={openPage} />
       ) : (
-        <PageList
-          selection={selection}
-          sidebarOpen={sidebarOpen}
-          onToggleSidebar={() => setSidebarOpen((v) => !v)}
-          onOpenPage={(id) => {
-            setOpenPageId(id)
-            // Beim Schreiben soll wirklich der komplette Bildschirm zur Verfuegung stehen -
-            // die Sidebar faehrt automatisch ein, laesst sich aber jederzeit wieder ausklappen.
-            setSidebarOpen(false)
-          }}
-        />
+        <PageList selection={selection} sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((v) => !v)} onOpenPage={openPage} />
       )}
     </div>
   )

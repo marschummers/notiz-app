@@ -1,6 +1,6 @@
 import type { EntityTable } from 'dexie'
 import { db } from '../db/db'
-import type { Folder, Page, Tag, PageTag, Stroke } from '../db/types'
+import type { Folder, Page, Tag, PageTag, Task, Stroke } from '../db/types'
 import { supabase } from './supabaseClient'
 
 // Faengt fehlende/kaputte Zeitstempel ab, statt dass new Date(...).toISOString() mit
@@ -105,9 +105,22 @@ interface RemotePageTag {
   deleted_at: string | null
 }
 
-// Zieht Ordner, Seiten, Tags und deren Verknuepfungen mit Supabase zusammen. Ordner zuerst:
-// pages/page_tags referenzieren folder_id/tag_id als Fremdschluessel, die Zeile muss also dort
-// existieren, bevor die anderen pushen.
+interface RemoteTask {
+  id: string
+  user_id: string
+  page_id: string
+  text: string
+  completed: boolean
+  x: number
+  y: number
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+}
+
+// Zieht Ordner, Seiten, Tasks, Tags und deren Verknuepfungen mit Supabase zusammen. Ordner
+// zuerst: pages/tasks/page_tags referenzieren folder_id/page_id/tag_id als Fremdschluessel,
+// die Zeile muss also dort existieren, bevor die anderen pushen.
 export async function syncAll(): Promise<void> {
   if (!supabase) throw new Error('Supabase ist nicht konfiguriert.')
   const client = supabase
@@ -158,6 +171,36 @@ export async function syncAll(): Promise<void> {
       strokes: r.strokes,
       background: (r.background as Page['background']) ?? 'lined',
       order: r.order,
+      updatedAt: ms(r.updated_at),
+      deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined,
+    }),
+  )
+
+  // Tasks referenzieren page_id als Fremdschluessel, deshalb nach Pages und vor
+  // Tags/PageTags (unabhaengig davon).
+  await mergeTable<Task, RemoteTask>(
+    db.tasks,
+    'notiz_tasks',
+    (t) => ({
+      id: t.id,
+      user_id: userId,
+      page_id: t.pageId,
+      text: t.text,
+      completed: t.completed,
+      x: t.x,
+      y: t.y,
+      created_at: iso(t.createdAt),
+      updated_at: iso(t.updatedAt),
+      deleted_at: t.deletedAt ? iso(t.deletedAt) : null,
+    }),
+    (r) => ({
+      id: r.id,
+      pageId: r.page_id,
+      text: r.text,
+      completed: r.completed,
+      x: r.x,
+      y: r.y,
+      createdAt: ms(r.created_at),
       updatedAt: ms(r.updated_at),
       deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined,
     }),

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { PageBackground, Point, Stroke } from '../db/types'
 import { formatRelativeTime } from '../lib/format'
 import './DrawingCanvas.css'
@@ -63,15 +63,105 @@ interface PinchState {
   startPanY: number
 }
 
+// Ein To-do, wie es auf der Seite platziert dargestellt wird - siehe db/types.ts Task, hier
+// bewusst ohne pageId/createdAt/deletedAt (die kennt DrawingCanvas nicht, das ist reine
+// Darstellung + Interaktion, die eigentlichen Dexie-Operationen laufen ueber die Callback-Props).
+interface DrawingTask {
+  id: string
+  text: string
+  completed: boolean
+  x: number
+  y: number
+}
+
+// Ein einzelner To-do-Block auf dem Papier: Checkbox, Text (oder Eingabefeld beim Bearbeiten),
+// Loeschen-Button. Sitzt oberhalb des Zeichen-Overlays (siehe .task-layer weiter unten) und hat
+// eigenes pointer-events:auto, damit Antippen hier nie als Zeichen-/Zoom-Geste interpretiert wird.
+function TaskBlock({
+  task,
+  editing,
+  onStartEdit,
+  onToggle,
+  onSaveText,
+  onDelete,
+}: {
+  task: DrawingTask
+  editing: boolean
+  onStartEdit: () => void
+  onToggle: () => void
+  onSaveText: (text: string) => void
+  onDelete: () => void
+}) {
+  const [draft, setDraft] = useState(task.text)
+  useEffect(() => {
+    if (editing) setDraft(task.text)
+  }, [editing, task.text])
+
+  return (
+    <div
+      className={`task-block${task.completed ? ' completed' : ''}`}
+      style={{ left: task.x, top: task.y }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <input type="checkbox" className="task-checkbox" checked={task.completed} onChange={onToggle} />
+      {editing ? (
+        <input
+          className="task-text-input"
+          value={draft}
+          autoFocus
+          placeholder="Aufgabe eingeben …"
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => onSaveText(draft)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              onSaveText(draft)
+            }
+          }}
+        />
+      ) : (
+        <span className="task-text" onClick={onStartEdit}>
+          {task.text || 'Aufgabe eingeben …'}
+        </span>
+      )}
+      <button className="task-delete" onClick={onDelete} aria-label="Aufgabe löschen" title="Aufgabe löschen">
+        ✕
+      </button>
+    </div>
+  )
+}
+
 interface Props {
   initialStrokes: Stroke[]
   onChange: (strokes: Stroke[]) => void
   background: PageBackground
   title: string
   updatedAt: number
+  // To-do-Funktion - alles optional/mit Default, damit DrawingCanvas auch ohne Task-Anbindung
+  // (z.B. falls anderweitig verwendet) unveraendert funktioniert.
+  tasks?: DrawingTask[]
+  taskMode?: boolean
+  onCreateTask?: (x: number, y: number) => Promise<string> | void
+  onToggleTask?: (id: string, completed: boolean) => void
+  onEditTaskText?: (id: string, text: string) => void
+  onDeleteTask?: (id: string) => void
+  toolbarExtra?: ReactNode
 }
 
-export default function DrawingCanvas({ initialStrokes, onChange, background, title, updatedAt }: Props) {
+export default function DrawingCanvas({
+  initialStrokes,
+  onChange,
+  background,
+  title,
+  updatedAt,
+  tasks = [],
+  taskMode = false,
+  onCreateTask,
+  onToggleTask,
+  onEditTaskText,
+  onDeleteTask,
+  toolbarExtra,
+}: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
   // Safari behandelt <canvas> mit gezeichnetem Inhalt wie ein Bild (Hover-Vorschau,
@@ -80,6 +170,7 @@ export default function DrawingCanvas({ initialStrokes, onChange, background, ti
   // Canvas darunter ist rein zur Darstellung da (pointer-events: none).
   const overlayRef = useRef<HTMLDivElement>(null)
   const backgroundRef = useRef<HTMLDivElement>(null)
+  const taskLayerRef = useRef<HTMLDivElement>(null)
   const statusRef = useRef<HTMLDivElement>(null)
 
   const strokesRef = useRef<Stroke[]>(initialStrokes)
@@ -99,6 +190,7 @@ export default function DrawingCanvas({ initialStrokes, onChange, background, ti
   const [eraser, setEraser] = useState(false)
   const [strokeCount, setStrokeCount] = useState(initialStrokes.length)
   const [zoomPercent, setZoomPercent] = useState(100)
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
 
   const colorRef = useRef(color)
   const baseWidthRef = useRef(baseWidth)
@@ -168,6 +260,7 @@ export default function DrawingCanvas({ initialStrokes, onChange, background, ti
       const transform = `translate(${x}px, ${y}px) scale(${clamped})`
       canvas!.style.transform = transform
       background!.style.transform = transform
+      if (taskLayerRef.current) taskLayerRef.current.style.transform = transform
     }
 
     function resetZoom() {
@@ -367,6 +460,22 @@ export default function DrawingCanvas({ initialStrokes, onChange, background, ti
     onChangeRef.current(strokesRef.current)
   }
 
+  // Platziert ein neues To-do an der Tap-Position, nur im Aufgaben-Modus und nur bei Klick auf
+  // leere Flaeche (nicht auf einen bestehenden Task-Block, siehe .task-layer-Guard unten). Nutzt
+  // dieselbe Koordinatenumrechnung wie die Striche (ueber overlayRef/viewRef), damit ein Task
+  // an der angetippten Stelle bleibt, auch wenn spaeter gezoomt/verschoben wird.
+  async function handleTaskLayerClick(e: React.MouseEvent<HTMLDivElement>) {
+    if (!taskMode || e.target !== e.currentTarget || !onCreateTask) return
+    const overlay = overlayRef.current
+    if (!overlay) return
+    const rect = overlay.getBoundingClientRect()
+    const view = viewRef.current
+    const x = (e.clientX - rect.left - view.x) / view.scale
+    const y = (e.clientY - rect.top - view.y) / view.scale
+    const id = await onCreateTask(x, y)
+    if (id) setEditingTaskId(id)
+  }
+
   return (
     <div className="drawing">
       <div className="drawing-toolbar">
@@ -401,6 +510,7 @@ export default function DrawingCanvas({ initialStrokes, onChange, background, ti
         {zoomPercent !== 100 && (
           <button onClick={() => resetZoomRef.current()}>Zoom {zoomPercent}% zurücksetzen</button>
         )}
+        {toolbarExtra}
         <div className="drawing-status" ref={statusRef}>
           Noch keine Eingabe
         </div>
@@ -438,6 +548,32 @@ export default function DrawingCanvas({ initialStrokes, onChange, background, ti
         <div className="page-updated-at">Bearbeitet {formatRelativeTime(updatedAt)}</div>
         <canvas ref={canvasRef} className="drawing-canvas" draggable={false} onDragStart={(e) => e.preventDefault()} />
         <div ref={overlayRef} className="drawing-overlay" />
+        {/* Liegt ueber .drawing-overlay (spaeter im DOM = oben in der Stapelreihenfolge) - ein
+            Tap auf einen Task-Block trifft dadurch immer den Block selbst, nie das Zeichen-
+            Overlay darunter, das DrawingCanvas' eigene Touch-/Zoom-Logik bleibt unberuehrt.
+            Der Layer selbst ist nur im Aufgaben-Modus antippbar (pointer-events), einzelne
+            Task-Bloecke bleiben aber immer bedienbar. */}
+        <div
+          ref={taskLayerRef}
+          className={`task-layer${taskMode ? ' task-mode' : ''}`}
+          style={{ transform: `translate(${viewRef.current.x}px, ${viewRef.current.y}px) scale(${viewRef.current.scale})` }}
+          onClick={handleTaskLayerClick}
+        >
+          {tasks.map((t) => (
+            <TaskBlock
+              key={t.id}
+              task={t}
+              editing={editingTaskId === t.id}
+              onStartEdit={() => setEditingTaskId(t.id)}
+              onToggle={() => onToggleTask?.(t.id, !t.completed)}
+              onSaveText={(text) => {
+                onEditTaskText?.(t.id, text)
+                setEditingTaskId(null)
+              }}
+              onDelete={() => onDeleteTask?.(t.id)}
+            />
+          ))}
+        </div>
       </div>
     </div>
   )
