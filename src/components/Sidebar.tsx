@@ -10,10 +10,11 @@ import './Sidebar.css'
 interface Props {
   open: boolean
   selection: Selection
-  activeView: 'notes' | 'tasks' | 'search'
+  activeView: 'notes' | 'tasks' | 'search' | 'all-notes'
   onSelect: (s: Selection) => void
   onSelectTasks: () => void
   onSelectSearch: () => void
+  onSelectAllNotes: () => void
   onSelectFavorite: (pageId: string) => void
   onSync: () => void
   syncing: boolean
@@ -29,6 +30,7 @@ export default function Sidebar({
   onSelect,
   onSelectTasks,
   onSelectSearch,
+  onSelectAllNotes,
   onSelectFavorite,
   onSync,
   syncing,
@@ -62,11 +64,12 @@ export default function Sidebar({
     })
   }
 
-  // Solange die Aufgaben- oder Such-Ansicht aktiv ist, soll in Ordnern/Tags nichts als
-  // "ausgewaehlt" markiert sein, auch wenn `selection` (fuer den Rueckweg zu Notizen) noch den
-  // letzten Ordner/Tag im Speicher haelt. Ein Platzhalter, der nie zu einem echten Ordner passt,
-  // statt FolderTree selbst anzufassen.
-  const visibleSelection: Selection = activeView === 'tasks' || activeView === 'search' ? { type: 'folder', id: '__none__' } : selection
+  // Solange eine der uebergreifenden Ansichten (Aufgaben/Suche/Alle Notizen) aktiv ist, soll in
+  // Ordnern/Tags nichts als "ausgewaehlt" markiert sein, auch wenn `selection` (fuer den
+  // Rueckweg zu Notizen) noch den letzten Ordner/Tag im Speicher haelt. Ein Platzhalter, der nie
+  // zu einem echten Ordner passt, statt FolderTree selbst anzufassen.
+  const visibleSelection: Selection =
+    activeView === 'tasks' || activeView === 'search' || activeView === 'all-notes' ? { type: 'folder', id: '__none__' } : selection
 
   return (
     <div className={`sidebar${open ? '' : ' collapsed'}`}>
@@ -77,6 +80,9 @@ export default function Sidebar({
         </div>
         <div className={`tree-row${activeView === 'search' ? ' selected' : ''}`} onClick={onSelectSearch}>
           <span className="tree-label">🔍 Suche</span>
+        </div>
+        <div className={`tree-row${activeView === 'all-notes' ? ' selected' : ''}`} onClick={onSelectAllNotes}>
+          <span className="tree-label">🗂️ Alle Notizen</span>
         </div>
       </div>
 

@@ -7,12 +7,13 @@ import PageList from '../components/PageList'
 import PageEditor from '../components/PageEditor'
 import TasksView from '../components/TasksView'
 import SearchView from '../components/SearchView'
+import AllNotesView from '../components/AllNotesView'
 import './Workspace.css'
 
 export default function Workspace() {
   const { session, signOut } = useAuth()
   const [selection, setSelection] = useState<Selection>({ type: 'folder', id: undefined })
-  const [activeView, setActiveView] = useState<'notes' | 'tasks' | 'search'>('notes')
+  const [activeView, setActiveView] = useState<'notes' | 'tasks' | 'search' | 'all-notes'>('notes')
   const [openPageId, setOpenPageId] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [syncing, setSyncing] = useState(false)
@@ -81,6 +82,10 @@ export default function Workspace() {
           setActiveView('search')
           setOpenPageId(null)
         }}
+        onSelectAllNotes={() => {
+          setActiveView('all-notes')
+          setOpenPageId(null)
+        }}
         onSelectFavorite={openPage}
         onSync={handleSync}
         syncing={syncing}
@@ -108,6 +113,8 @@ export default function Workspace() {
           onSelectFolder={(id) => selectFolderOrTag({ type: 'folder', id })}
           onSelectTag={(id) => selectFolderOrTag({ type: 'tag', id })}
         />
+      ) : activeView === 'all-notes' ? (
+        <AllNotesView onOpenPage={openPage} />
       ) : (
         <PageList selection={selection} sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((v) => !v)} onOpenPage={openPage} />
       )}

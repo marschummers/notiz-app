@@ -1,0 +1,132 @@
+.all-notes-view {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 20px 24px;
+  padding-top: max(20px, env(safe-area-inset-top));
+  font-family: system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.all-notes-view h1 {
+  font-size: 20px;
+  margin: 0 0 16px;
+}
+
+.all-notes-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.filter-field label {
+  color: var(--text-faint);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.filter-field select {
+  padding: 6px 8px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 13px;
+  min-width: 120px;
+}
+
+.all-notes-reset {
+  padding: 7px 12px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.all-notes-reset:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.all-notes-hint {
+  color: var(--text-faint);
+  font-size: 13px;
+  margin: 0;
+}
+
+.all-notes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.all-notes-row {
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-soft);
+  cursor: pointer;
+}
+
+.all-notes-row:hover {
+  border-color: var(--accent);
+}
+
+.all-notes-row-main {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.all-notes-row-title {
+  color: var(--text);
+  overflow-wrap: break-word;
+  flex: 1;
+  min-width: 0;
+}
+
+.all-notes-row-type {
+  flex-shrink: 0;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 11px;
+}
+
+.all-notes-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.all-notes-row-date {
+  white-space: nowrap;
+}
+
+.all-notes-row-tag {
+  white-space: nowrap;
+}
+
+.all-notes-row-folder {
+  white-space: nowrap;
+}
