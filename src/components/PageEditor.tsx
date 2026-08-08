@@ -19,6 +19,7 @@ import {
   updateTextBlockText,
 } from '../lib/actions'
 import type { PageBackground } from '../db/types'
+import Backlinks from './Backlinks'
 import DrawingCanvas from './DrawingCanvas'
 import { TaskIcon, TextFieldIcon } from './icons'
 import './PageEditor.css'
@@ -179,6 +180,7 @@ export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBac
           }
         />
       </div>
+      <Backlinks pageId={pageId} onOpenPage={onOpenPage} />
     </div>
   )
 }

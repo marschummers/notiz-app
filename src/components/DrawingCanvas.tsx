@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { PageBackground, Point, Stroke } from '../db/types'
 import { formatRelativeTime } from '../lib/format'
+import { parseLinkedText } from '../lib/pageLinks'
 import { BroomIcon, EraserIcon, UndoIcon } from './icons'
 import './DrawingCanvas.css'
 
@@ -67,29 +68,6 @@ function redrawAll(ctx: CanvasRenderingContext2D, width: number, height: number,
 // x-Format um - siehe toAbsoluteX/toStoredX oben. y bleibt in beiden Richtungen unveraendert.
 function withStrokesX(strokes: Stroke[], convert: (x: number, width: number) => number, width: number): Stroke[] {
   return strokes.map((s) => ({ ...s, points: s.points.map((p) => ({ ...p, x: convert(p.x, width) })) }))
-}
-
-// Seitenlinks im Text eines Textfelds werden als "[[pageId:Titel]]" im Plaintext codiert (siehe
-// db/types.ts TextBlock) - kein eigenes Feld/Schema noetig, Sync bewegt einfach den String wie
-// bisher. Der Titel wird mitgespeichert (nicht live nachgeschlagen), damit ein Link auch dann
-// noch lesbar bleibt, wenn die Zielseite geloescht wurde; beim Anlegen ist er aber immer aktuell,
-// und ein Umbenennen der Zielseite bricht den Link nicht (navigiert wird ueber die pageId).
-const LINK_PATTERN = /\[\[([^\]:]+):([^\]]+)\]\]/g
-
-type TextSegment = { type: 'text'; value: string } | { type: 'link'; pageId: string; title: string }
-
-function parseLinkedText(text: string): TextSegment[] {
-  const segments: TextSegment[] = []
-  let lastIndex = 0
-  LINK_PATTERN.lastIndex = 0
-  let match: RegExpExecArray | null
-  while ((match = LINK_PATTERN.exec(text))) {
-    if (match.index > lastIndex) segments.push({ type: 'text', value: text.slice(lastIndex, match.index) })
-    segments.push({ type: 'link', pageId: match[1], title: match[2] })
-    lastIndex = match.index + match[0].length
-  }
-  if (lastIndex < text.length) segments.push({ type: 'text', value: text.slice(lastIndex) })
-  return segments
 }
 
 // Sucht rueckwaerts vom Cursor aus nach einem offenen "[[" (ohne dazwischenliegendes "]]" oder
