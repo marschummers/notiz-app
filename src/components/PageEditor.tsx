@@ -4,15 +4,19 @@ import { db } from '../db/db'
 import {
   addTagToPage,
   createTask,
+  createTextBlock,
   deleteTask,
+  deleteTextBlock,
   findOrCreateTag,
   moveTask,
+  moveTextBlock,
   removeTagFromPage,
   renamePage,
   toggleTask,
   updatePageBackground,
   updatePageStrokes,
   updateTaskText,
+  updateTextBlockText,
 } from '../lib/actions'
 import type { PageBackground } from '../db/types'
 import DrawingCanvas from './DrawingCanvas'
@@ -30,15 +34,24 @@ interface Props {
   sidebarOpen: boolean
   onToggleSidebar: () => void
   onBack: () => void
+  onOpenPage: (pageId: string) => void
 }
 
-export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBack }: Props) {
+export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBack, onOpenPage }: Props) {
   const [newTag, setNewTag] = useState('')
   const [taskMode, setTaskMode] = useState(false)
+  const [textBlockMode, setTextBlockMode] = useState(false)
   const page = useLiveQuery(() => db.pages.get(pageId), [pageId])
   const tagLinks = useLiveQuery(() => db.pageTags.filter((pt) => !pt.deletedAt && pt.pageId === pageId).toArray(), [pageId])
   const allTags = useLiveQuery(() => db.tags.filter((t) => !t.deletedAt).toArray(), [])
   const tasks = useLiveQuery(() => db.tasks.filter((t) => !t.deletedAt && t.pageId === pageId).toArray(), [pageId])
+  const textBlocks = useLiveQuery(() => db.textBlocks.filter((t) => !t.deletedAt && t.pageId === pageId).toArray(), [pageId])
+  // Fuer die [[-Seitenlink-Autocomplete in Textfeldern - dieselben Daten, die auch die globale
+  // Suche (SearchView.tsx) schon verwendet, hier nur auf id+title reduziert.
+  const pageLinkCandidates = useLiveQuery(
+    () => db.pages.filter((p) => !p.deletedAt).toArray(),
+    [],
+  )?.map((p) => ({ id: p.id, title: p.title || 'Ohne Titel' }))
 
   if (!page) return null
 
@@ -125,10 +138,39 @@ export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBac
           onEditTaskText={(id, text) => updateTaskText(id, text)}
           onDeleteTask={(id) => deleteTask(id)}
           onMoveTask={(id, x, y) => moveTask(id, x, y)}
+          textBlocks={textBlocks ?? []}
+          textBlockMode={textBlockMode}
+          pageLinkCandidates={pageLinkCandidates ?? []}
+          onCreateTextBlock={async (x, y) => {
+            const id = await createTextBlock(pageId, x, y)
+            setTextBlockMode(false)
+            return id
+          }}
+          onEditTextBlockText={(id, text) => updateTextBlockText(id, text)}
+          onDeleteTextBlock={(id) => deleteTextBlock(id)}
+          onMoveTextBlock={(id, x, y) => moveTextBlock(id, x, y)}
+          onOpenPageLink={(targetPageId) => onOpenPage(targetPageId)}
           toolbarExtra={
-            <button className={taskMode ? 'active' : ''} onClick={() => setTaskMode((v) => !v)}>
-              {taskMode ? '☑' : '☐'} Aufgabe
-            </button>
+            <>
+              <button
+                className={taskMode ? 'active' : ''}
+                onClick={() => {
+                  setTaskMode((v) => !v)
+                  setTextBlockMode(false)
+                }}
+              >
+                {taskMode ? '☑' : '☐'} Aufgabe
+              </button>
+              <button
+                className={textBlockMode ? 'active' : ''}
+                onClick={() => {
+                  setTextBlockMode((v) => !v)
+                  setTaskMode(false)
+                }}
+              >
+                📝 Textfeld
+              </button>
+            </>
           }
         />
       </div>

@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie'
-import type { Folder, Page, Tag, PageTag, Task } from './types'
+import type { Folder, Page, Tag, PageTag, Task, TextBlock } from './types'
 
 export const db = new Dexie('notiz-app') as Dexie & {
   folders: EntityTable<Folder, 'id'>
@@ -7,6 +7,7 @@ export const db = new Dexie('notiz-app') as Dexie & {
   tags: EntityTable<Tag, 'id'>
   pageTags: EntityTable<PageTag, 'id'>
   tasks: EntityTable<Task, 'id'>
+  textBlocks: EntityTable<TextBlock, 'id'>
 }
 
 db.version(1).stores({
@@ -21,6 +22,11 @@ db.version(1).stores({
 // gleiches Muster in der Pferdeapp/db.ts).
 db.version(2).stores({
   tasks: 'id, pageId, completed',
+})
+
+// Neue Tabelle fuer frei platzierte, per Tastatur beschriebene Textfelder (siehe TextBlock).
+db.version(3).stores({
+  textBlocks: 'id, pageId',
 })
 
 export function newId(): string {

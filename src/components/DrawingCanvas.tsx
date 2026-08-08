@@ -68,6 +68,41 @@ function withStrokesX(strokes: Stroke[], convert: (x: number, width: number) => 
   return strokes.map((s) => ({ ...s, points: s.points.map((p) => ({ ...p, x: convert(p.x, width) })) }))
 }
 
+// Seitenlinks im Text eines Textfelds werden als "[[pageId:Titel]]" im Plaintext codiert (siehe
+// db/types.ts TextBlock) - kein eigenes Feld/Schema noetig, Sync bewegt einfach den String wie
+// bisher. Der Titel wird mitgespeichert (nicht live nachgeschlagen), damit ein Link auch dann
+// noch lesbar bleibt, wenn die Zielseite geloescht wurde; beim Anlegen ist er aber immer aktuell,
+// und ein Umbenennen der Zielseite bricht den Link nicht (navigiert wird ueber die pageId).
+const LINK_PATTERN = /\[\[([^\]:]+):([^\]]+)\]\]/g
+
+type TextSegment = { type: 'text'; value: string } | { type: 'link'; pageId: string; title: string }
+
+function parseLinkedText(text: string): TextSegment[] {
+  const segments: TextSegment[] = []
+  let lastIndex = 0
+  LINK_PATTERN.lastIndex = 0
+  let match: RegExpExecArray | null
+  while ((match = LINK_PATTERN.exec(text))) {
+    if (match.index > lastIndex) segments.push({ type: 'text', value: text.slice(lastIndex, match.index) })
+    segments.push({ type: 'link', pageId: match[1], title: match[2] })
+    lastIndex = match.index + match[0].length
+  }
+  if (lastIndex < text.length) segments.push({ type: 'text', value: text.slice(lastIndex) })
+  return segments
+}
+
+// Sucht rueckwaerts vom Cursor aus nach einem offenen "[[" (ohne dazwischenliegendes "]]" oder
+// Zeilenumbruch) - liefert dessen Startposition + die bereits eingegebene Filter-Query, oder
+// null, wenn gerade kein Verlinkungs-Trigger aktiv ist.
+function findActiveLinkTrigger(text: string, cursor: number): { start: number; query: string } | null {
+  const upToCursor = text.slice(0, cursor)
+  const openIdx = upToCursor.lastIndexOf('[[')
+  if (openIdx === -1) return null
+  const between = upToCursor.slice(openIdx + 2)
+  if (between.includes(']]') || between.includes('\n')) return null
+  return { start: openIdx, query: between }
+}
+
 function describeTouch(t: Touch): { touchType: string; force: number } {
   // touchType ist eine nicht-standardisierte WebKit-Erweiterung des Touch-Interface,
   // die im DOM-Lib-Typing von TypeScript fehlt ('stylus' fuer Apple Pencil, 'direct' fuer Finger).
@@ -330,6 +365,317 @@ function TaskBlock({
   )
 }
 
+// Ein per Tastatur beschriebenes Textfeld auf der Seite - gleiche Platzierungs-/Zieh-Logik wie
+// TaskBlock (bewusst dupliziert statt TaskBlock zu verallgemeinern, um bestehenden, bereits
+// getesteten Task-Code nicht anzufassen), aber ohne Checkbox und mit [[-Seitenverlinkung: "[["
+// im Text oeffnet eine kleine Trefferliste bestehender Seiten, Klick/Enter fuegt "[[pageId:
+// Titel]]" ein. In der schreibgeschuetzten Ansicht wird das als klickbarer Link gerendert.
+interface DrawingTextBlock {
+  id: string
+  text: string
+  x: number
+  y: number
+}
+
+function TextBlockItem({
+  block,
+  editing,
+  clientToContent,
+  pageLinkCandidates,
+  onStartEdit,
+  onSaveText,
+  onDelete,
+  onMove,
+  onOpenPageLink,
+}: {
+  block: DrawingTextBlock
+  editing: boolean
+  clientToContent: (clientX: number, clientY: number) => { x: number; y: number }
+  pageLinkCandidates: { id: string; title: string }[]
+  onStartEdit: () => void
+  onSaveText: (text: string) => void
+  onDelete: () => void
+  onMove: (x: number, y: number) => void
+  onOpenPageLink: (pageId: string) => void
+}) {
+  const [draft, setDraft] = useState(block.text)
+  const [linkTrigger, setLinkTrigger] = useState<{ start: number; query: string } | null>(null)
+  const [linkActiveIndex, setLinkActiveIndex] = useState(0)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null)
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const longPressArmedRef = useRef(false)
+  const draggingRef = useRef(false)
+  const startClientRef = useRef<{ x: number; y: number } | null>(null)
+  const justDraggedRef = useRef(false)
+  const mouseMoveHandlerRef = useRef<((e: MouseEvent) => void) | null>(null)
+  const mouseUpHandlerRef = useRef<(() => void) | null>(null)
+
+  useEffect(() => {
+    if (editing) {
+      setDraft(block.text)
+      setLinkTrigger(null)
+    }
+  }, [editing, block.text])
+
+  useEffect(() => {
+    return () => {
+      if (mouseMoveHandlerRef.current) window.removeEventListener('mousemove', mouseMoveHandlerRef.current)
+      if (mouseUpHandlerRef.current) window.removeEventListener('mouseup', mouseUpHandlerRef.current)
+    }
+  }, [])
+
+  function clearLongPressTimer() {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+  }
+
+  function startDrag(clientX: number, clientY: number) {
+    draggingRef.current = true
+    setDragPos(clientToContent(clientX, clientY))
+  }
+
+  function updateDrag(clientX: number, clientY: number) {
+    setDragPos(clientToContent(clientX, clientY))
+  }
+
+  function finishDrag() {
+    draggingRef.current = false
+    justDraggedRef.current = true
+    setTimeout(() => {
+      justDraggedRef.current = false
+    }, 300)
+    setDragPos((pos) => {
+      if (pos) onMove(pos.x, pos.y)
+      return null
+    })
+  }
+
+  function handleTouchStart(e: React.TouchEvent<HTMLDivElement>) {
+    const t = e.touches[0]
+    if (!t) return
+    const touchType = (t as unknown as { touchType?: string }).touchType ?? 'direct'
+    if (touchType !== 'direct') return
+    startClientRef.current = { x: t.clientX, y: t.clientY }
+    longPressArmedRef.current = true
+    clearLongPressTimer()
+    longPressTimerRef.current = setTimeout(() => {
+      if (!longPressArmedRef.current) return
+      startDrag(t.clientX, t.clientY)
+    }, LONG_PRESS_MS)
+  }
+
+  function handleTouchMove(e: React.TouchEvent<HTMLDivElement>) {
+    const t = e.touches[0]
+    const start = startClientRef.current
+    if (!t || !start) return
+    if (!draggingRef.current) {
+      const moved = Math.hypot(t.clientX - start.x, t.clientY - start.y)
+      if (moved > LONG_PRESS_CANCEL_DISTANCE) {
+        longPressArmedRef.current = false
+        clearLongPressTimer()
+      }
+      return
+    }
+    e.stopPropagation()
+    updateDrag(t.clientX, t.clientY)
+  }
+
+  function handleTouchEnd() {
+    clearLongPressTimer()
+    longPressArmedRef.current = false
+    startClientRef.current = null
+    if (draggingRef.current) finishDrag()
+  }
+
+  function handleHandleTouchStart(e: React.TouchEvent<HTMLDivElement>) {
+    e.stopPropagation()
+    const t = e.touches[0]
+    if (!t) return
+    const touchType = (t as unknown as { touchType?: string }).touchType ?? 'direct'
+    if (touchType !== 'direct') return
+    clearLongPressTimer()
+    longPressArmedRef.current = false
+    startDrag(t.clientX, t.clientY)
+  }
+
+  function handleHandleMouseDown(e: React.MouseEvent<HTMLDivElement>) {
+    e.stopPropagation()
+    e.preventDefault()
+    startDrag(e.clientX, e.clientY)
+    const onMoveHandler = (ev: MouseEvent) => updateDrag(ev.clientX, ev.clientY)
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMoveHandler)
+      window.removeEventListener('mouseup', onUp)
+      mouseMoveHandlerRef.current = null
+      mouseUpHandlerRef.current = null
+      finishDrag()
+    }
+    mouseMoveHandlerRef.current = onMoveHandler
+    mouseUpHandlerRef.current = onUp
+    window.addEventListener('mousemove', onMoveHandler)
+    window.addEventListener('mouseup', onUp)
+  }
+
+  const matchedPages = linkTrigger
+    ? pageLinkCandidates.filter((p) => p.title.toLowerCase().includes(linkTrigger.query.toLowerCase())).slice(0, 6)
+    : []
+
+  function handleDraftChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const value = e.target.value
+    setDraft(value)
+    const cursor = e.target.selectionStart ?? value.length
+    setLinkTrigger(findActiveLinkTrigger(value, cursor))
+    setLinkActiveIndex(0)
+  }
+
+  function insertLink(page: { id: string; title: string }) {
+    if (!linkTrigger) return
+    const cursor = textareaRef.current?.selectionStart ?? draft.length
+    const before = draft.slice(0, linkTrigger.start)
+    const after = draft.slice(cursor)
+    const inserted = `[[${page.id}:${page.title}]]`
+    const next = before + inserted + after
+    setDraft(next)
+    setLinkTrigger(null)
+    requestAnimationFrame(() => {
+      const pos = before.length + inserted.length
+      textareaRef.current?.setSelectionRange(pos, pos)
+      textareaRef.current?.focus()
+    })
+  }
+
+  function handleDraftKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (linkTrigger && matchedPages.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setLinkActiveIndex((i) => Math.min(i + 1, matchedPages.length - 1))
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setLinkActiveIndex((i) => Math.max(i - 1, 0))
+        return
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        insertLink(matchedPages[linkActiveIndex])
+        return
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setLinkTrigger(null)
+        return
+      }
+    }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      // Enter (ohne Shift) speichert - Shift+Enter erlaubt einen Zeilenumbruch, das Textfeld
+      // darf im Gegensatz zum einzeiligen Task-Text mehrzeilig sein.
+      e.preventDefault()
+      onSaveText(draft)
+    }
+  }
+
+  const pos = dragPos ?? { x: block.x, y: block.y }
+  const segments = block.text ? parseLinkedText(block.text) : []
+
+  return (
+    <div
+      className={`text-block${dragPos ? ' dragging' : ''}`}
+      style={{ left: pos.x, top: pos.y }}
+      onClick={(e) => e.stopPropagation()}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
+    >
+      <div
+        className="text-block-drag-handle"
+        onTouchStart={handleHandleTouchStart}
+        onMouseDown={handleHandleMouseDown}
+        aria-hidden="true"
+      >
+        <span />
+        <span />
+        <span />
+        <span />
+        <span />
+        <span />
+      </div>
+      {editing ? (
+        <div className="text-block-edit-wrap">
+          <textarea
+            ref={textareaRef}
+            className="text-block-input"
+            value={draft}
+            autoFocus
+            rows={3}
+            placeholder="Text eingeben, [[ für Seitenlink …"
+            onChange={handleDraftChange}
+            onKeyDown={handleDraftKeyDown}
+            onBlur={() => onSaveText(draft)}
+          />
+          {linkTrigger && matchedPages.length > 0 && (
+            <div className="link-autocomplete">
+              {matchedPages.map((p, i) => (
+                <div
+                  key={p.id}
+                  className={`link-autocomplete-row${i === linkActiveIndex ? ' active' : ''}`}
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    insertLink(p)
+                  }}
+                >
+                  📄 {p.title}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div
+          className="text-block-content"
+          onClick={() => {
+            if (justDraggedRef.current) return
+            onStartEdit()
+          }}
+        >
+          {segments.length > 0 ? (
+            segments.map((seg, i) =>
+              seg.type === 'link' ? (
+                <span
+                  key={i}
+                  className="page-link"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onOpenPageLink(seg.pageId)
+                  }}
+                >
+                  {/* Aktuellen Titel live nachschlagen statt den beim Einfuegen gespeicherten zu
+                      zeigen, damit ein Link nach Umbenennen der Zielseite nicht nur weiter
+                      funktioniert, sondern auch den neuen Titel anzeigt. Faellt auf den
+                      gespeicherten Titel zurueck, falls die Seite zwischenzeitlich geloescht wurde. */}
+                  📄 {pageLinkCandidates.find((p) => p.id === seg.pageId)?.title ?? seg.title}
+                </span>
+              ) : (
+                <span key={i}>{seg.value}</span>
+              ),
+            )
+          ) : (
+            <span className="text-block-placeholder">Text eingeben …</span>
+          )}
+        </div>
+      )}
+      <button className="task-delete" onClick={onDelete} aria-label="Textfeld löschen" title="Textfeld löschen">
+        ✕
+      </button>
+    </div>
+  )
+}
+
 interface Props {
   initialStrokes: Stroke[]
   onChange: (strokes: Stroke[]) => void
@@ -345,6 +691,15 @@ interface Props {
   onEditTaskText?: (id: string, text: string) => void
   onDeleteTask?: (id: string) => void
   onMoveTask?: (id: string, x: number, y: number) => void
+  // Textfeld-Funktion - gleiches optionales Muster wie die To-do-Funktion oben.
+  textBlocks?: DrawingTextBlock[]
+  textBlockMode?: boolean
+  pageLinkCandidates?: { id: string; title: string }[]
+  onCreateTextBlock?: (x: number, y: number) => Promise<string> | void
+  onEditTextBlockText?: (id: string, text: string) => void
+  onDeleteTextBlock?: (id: string) => void
+  onMoveTextBlock?: (id: string, x: number, y: number) => void
+  onOpenPageLink?: (pageId: string) => void
   toolbarExtra?: ReactNode
 }
 
@@ -361,6 +716,14 @@ export default function DrawingCanvas({
   onEditTaskText,
   onDeleteTask,
   onMoveTask,
+  textBlocks = [],
+  textBlockMode = false,
+  pageLinkCandidates = [],
+  onCreateTextBlock,
+  onEditTextBlockText,
+  onDeleteTextBlock,
+  onMoveTextBlock,
+  onOpenPageLink,
   toolbarExtra,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -392,6 +755,7 @@ export default function DrawingCanvas({
   const [strokeCount, setStrokeCount] = useState(initialStrokes.length)
   const [zoomPercent, setZoomPercent] = useState(100)
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
+  const [editingTextBlockId, setEditingTextBlockId] = useState<string | null>(null)
   // Aktuelle Breite der Zeichenflaeche in CSS-Pixeln - Nenner fuer die relative x-Umrechnung
   // (siehe toAbsoluteX/toStoredX). canvasWidthRef fuer den Touch-Event-Mount-Effekt (dort sind
   // nur Refs sicher aktuell, siehe colorRef/baseWidthRef-Muster), canvasWidth-State fuer die
@@ -702,15 +1066,24 @@ export default function DrawingCanvas({
     onChangeRef.current(withStrokesX(strokesRef.current, toStoredX, canvasWidthRef.current))
   }
 
-  // Platziert ein neues To-do an der Tap-Position, nur im Aufgaben-Modus und nur bei Klick auf
-  // leere Flaeche (nicht auf einen bestehenden Task-Block, siehe .task-layer-Guard unten). Nutzt
-  // dieselbe Koordinatenumrechnung wie die Striche (ueber overlayRef/viewRef), damit ein Task
-  // an der angetippten Stelle bleibt, auch wenn spaeter gezoomt/verschoben wird.
+  // Platziert ein neues To-do ODER Textfeld an der Tap-Position (je nach aktivem Modus - beide
+  // schliessen sich in PageEditor.tsx gegenseitig aus), nur bei Klick auf leere Flaeche (nicht
+  // auf einen bestehenden Block, siehe .task-layer-Guard unten). Nutzt dieselbe
+  // Koordinatenumrechnung wie die Striche (ueber overlayRef/viewRef), damit ein Block an der
+  // angetippten Stelle bleibt, auch wenn spaeter gezoomt/verschoben wird.
   async function handleTaskLayerClick(e: React.MouseEvent<HTMLDivElement>) {
-    if (!taskMode || e.target !== e.currentTarget || !onCreateTask) return
-    const { x, y } = clientToContent(e.clientX, e.clientY)
-    const id = await onCreateTask(toStoredX(x, canvasWidth), y)
-    if (id) setEditingTaskId(id)
+    if (e.target !== e.currentTarget) return
+    if (taskMode && onCreateTask) {
+      const { x, y } = clientToContent(e.clientX, e.clientY)
+      const id = await onCreateTask(toStoredX(x, canvasWidth), y)
+      if (id) setEditingTaskId(id)
+      return
+    }
+    if (textBlockMode && onCreateTextBlock) {
+      const { x, y } = clientToContent(e.clientX, e.clientY)
+      const id = await onCreateTextBlock(toStoredX(x, canvasWidth), y)
+      if (id) setEditingTextBlockId(id)
+    }
   }
 
   // Rechnet Bildschirmkoordinaten in den unskalierten Inhaltsraum um (gleiche Umrechnung wie
@@ -806,7 +1179,7 @@ export default function DrawingCanvas({
             Task-Bloecke bleiben aber immer bedienbar. */}
         <div
           ref={taskLayerRef}
-          className={`task-layer${taskMode ? ' task-mode' : ''}`}
+          className={`task-layer${taskMode ? ' task-mode' : ''}${textBlockMode ? ' text-mode' : ''}`}
           style={{ transform: `translate(${viewRef.current.x}px, ${viewRef.current.y}px) scale(${viewRef.current.scale})` }}
           onClick={handleTaskLayerClick}
         >
@@ -824,6 +1197,23 @@ export default function DrawingCanvas({
               }}
               onDelete={() => onDeleteTask?.(t.id)}
               onMove={(x, y) => onMoveTask?.(t.id, toStoredX(x, canvasWidth), y)}
+            />
+          ))}
+          {textBlocks.map((b) => (
+            <TextBlockItem
+              key={b.id}
+              block={{ ...b, x: toAbsoluteX(b.x, canvasWidth) }}
+              editing={editingTextBlockId === b.id}
+              clientToContent={clientToContent}
+              pageLinkCandidates={pageLinkCandidates}
+              onStartEdit={() => setEditingTextBlockId(b.id)}
+              onSaveText={(text) => {
+                onEditTextBlockText?.(b.id, text)
+                setEditingTextBlockId(null)
+              }}
+              onDelete={() => onDeleteTextBlock?.(b.id)}
+              onMove={(x, y) => onMoveTextBlock?.(b.id, toStoredX(x, canvasWidth), y)}
+              onOpenPageLink={(pageId) => onOpenPageLink?.(pageId)}
             />
           ))}
         </div>

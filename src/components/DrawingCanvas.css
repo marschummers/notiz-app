@@ -203,7 +203,8 @@
   pointer-events: none;
 }
 
-.task-layer.task-mode {
+.task-layer.task-mode,
+.task-layer.text-mode {
   pointer-events: auto;
   cursor: crosshair;
 }
@@ -318,4 +319,140 @@
 .task-delete:hover {
   opacity: 1;
   color: var(--bad);
+}
+
+/* Textfeld - gleiche Platzierungslogik wie .task-block, aber leicht kupferfarben statt
+   cremeweiss abgesetzt, damit Text- und Aufgaben-Bloecke auf der Seite unterscheidbar bleiben. */
+.text-block {
+  position: absolute;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 140px;
+  max-width: 320px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid #d9c3a0;
+  background: rgba(253, 246, 234, 0.92);
+  color: #2a2418;
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.text-block.dragging {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+  outline: 2px solid var(--accent-strong);
+  opacity: 0.95;
+  z-index: 5;
+}
+
+.text-block-drag-handle {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 2px;
+  width: 10px;
+  height: 15px;
+  margin-top: 4px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.text-block-drag-handle span {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.35;
+}
+
+.text-block:hover .text-block-drag-handle span,
+.text-block.dragging .text-block-drag-handle span {
+  opacity: 0.65;
+}
+
+.text-block.dragging .text-block-drag-handle {
+  cursor: grabbing;
+}
+
+.text-block-content {
+  flex: 1;
+  min-width: 60px;
+  word-break: break-word;
+  white-space: pre-wrap;
+  cursor: text;
+}
+
+.text-block-placeholder {
+  color: #8a7f6a;
+}
+
+.text-block-edit-wrap {
+  flex: 1;
+  min-width: 160px;
+  position: relative;
+}
+
+.text-block-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  outline: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 2px 4px;
+  resize: vertical;
+}
+
+/* Seitenlink innerhalb eines Textfelds - deutlich als anklickbares internes Ziel abgesetzt
+   (Kupferton + Unterstreichung), sowohl in der schreibgeschuetzten Ansicht als auch in der
+   Autocomplete-Trefferliste beim Eintippen von "[[". */
+.page-link {
+  color: var(--accent-strong, #b97c45);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.page-link:hover {
+  filter: brightness(0.85);
+}
+
+.link-autocomplete {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 10;
+  margin-top: 4px;
+  min-width: 180px;
+  max-width: 280px;
+  max-height: 180px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #d8d0ba;
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+  font-size: 13px;
+}
+
+.link-autocomplete-row {
+  padding: 7px 10px;
+  cursor: pointer;
+  color: #2a2418;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.link-autocomplete-row.active,
+.link-autocomplete-row:hover {
+  background: var(--accent-soft, rgba(185, 124, 69, 0.16));
 }

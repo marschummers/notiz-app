@@ -97,6 +97,7 @@ export default function Workspace() {
             setSidebarOpen(true)
             handleSync()
           }}
+          onOpenPage={openPage}
         />
       ) : activeView === 'tasks' ? (
         <TasksView onOpenPage={openPage} />

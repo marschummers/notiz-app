@@ -80,6 +80,10 @@ export async function deletePage(id: string): Promise<void> {
   for (const task of pageTasks) {
     await db.tasks.update(task.id, { deletedAt: now, updatedAt: now })
   }
+  const pageTextBlocks = await db.textBlocks.where('pageId').equals(id).toArray()
+  for (const block of pageTextBlocks) {
+    await db.textBlocks.update(block.id, { deletedAt: now, updatedAt: now })
+  }
   await db.pages.update(id, { deletedAt: now, updatedAt: now })
 }
 
@@ -147,4 +151,26 @@ export async function moveTask(id: string, x: number, y: number): Promise<void> 
 export async function deleteTask(id: string): Promise<void> {
   const now = Date.now()
   await db.tasks.update(id, { deletedAt: now, updatedAt: now })
+}
+
+// Legt ein frei platziertes Textfeld an - gleiche Koordinatenlogik wie createTask (x/y im
+// unskalierten Content-Koordinatenraum, siehe components/DrawingCanvas.tsx).
+export async function createTextBlock(pageId: string, x: number, y: number, text = ''): Promise<string> {
+  const id = newId()
+  const now = Date.now()
+  await db.textBlocks.add({ id, pageId, text, x, y, createdAt: now, updatedAt: now })
+  return id
+}
+
+export async function updateTextBlockText(id: string, text: string): Promise<void> {
+  await db.textBlocks.update(id, { text, updatedAt: Date.now() })
+}
+
+export async function moveTextBlock(id: string, x: number, y: number): Promise<void> {
+  await db.textBlocks.update(id, { x, y, updatedAt: Date.now() })
+}
+
+export async function deleteTextBlock(id: string): Promise<void> {
+  const now = Date.now()
+  await db.textBlocks.update(id, { deletedAt: now, updatedAt: now })
 }

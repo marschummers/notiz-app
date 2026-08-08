@@ -77,3 +77,19 @@ export interface Task {
   updatedAt: number
   deletedAt?: number
 }
+
+// Ein frei platziertes Textfeld auf einer Seite (per Tastatur beschrieben, kein Handschrift-
+// Strich) - gleiche Platzierungs-/Koordinatenlogik wie Task (x/y, siehe lib/actions.ts), aber
+// ohne Checkbox-Semantik. `text` kann Seitenverlinkungen im Format "[[pageId:Titel]]" enthalten
+// (siehe components/DrawingCanvas.tsx parseLinkedText) - bewusst als Teil des Plaintexts codiert
+// statt als eigenes Feld, damit Sync/Speicherung unveraendert bleiben (einfacher String).
+export interface TextBlock {
+  id: string
+  pageId: string
+  text: string
+  x: number
+  y: number
+  createdAt: number
+  updatedAt: number
+  deletedAt?: number
+}
