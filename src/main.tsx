@@ -1,12 +1,21 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { HashRouter, Route, Routes } from 'react-router-dom'
+import { registerSW } from 'virtual:pwa-register'
 import './index.css'
 import App from './App.tsx'
 import { AuthProvider } from './lib/auth.tsx'
 import TestsIndex from './pages/TestsIndex.tsx'
 import { PointerTestPage } from './pages/PointerTestPage.tsx'
 import { TouchTestPage } from './pages/TouchTestPage.tsx'
+
+// vite-plugin-pwa erzeugt den Service Worker (injectRegister: false in vite.config.ts), meldet
+// ihn aber nicht selbst an - das muss hier explizit passieren, sonst bleibt die generierte
+// sw.js im Browser komplett wirkungslos (kein Offline-Start, kein Caching). registerType:
+// 'prompt' (siehe vite.config.ts) heisst: eine neue Version wird im Hintergrund geladen, aber
+// erst beim naechsten Neustart/Neuladen aktiv - der bestehende "App aktualisieren"-Button
+// (lib/forceUpdate.ts) bleibt der zuverlaessige Weg, eine neue Version sofort zu erzwingen.
+registerSW({ immediate: true })
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
