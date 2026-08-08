@@ -1,5 +1,5 @@
 import { db, newId } from '../db/db'
-import type { PageBackground, Stroke } from '../db/types'
+import type { PageBackground, PageType, Stroke } from '../db/types'
 
 export async function createFolder(parentId: string | undefined, name = 'Neuer Ordner'): Promise<string> {
   const id = newId()
@@ -73,6 +73,14 @@ export async function movePage(id: string, folderId: string | undefined): Promis
 export async function toggleFavorite(id: string, favorite: boolean): Promise<void> {
   const now = Date.now()
   await db.pages.update(id, { favoritedAt: favorite ? now : undefined, updatedAt: now })
+}
+
+export async function updatePageType(id: string, pageType: PageType): Promise<void> {
+  await db.pages.update(id, { pageType, updatedAt: Date.now() })
+}
+
+export async function updatePageCustomDate(id: string, customDate: number | undefined): Promise<void> {
+  await db.pages.update(id, { customDate, updatedAt: Date.now() })
 }
 
 export async function deletePage(id: string): Promise<void> {

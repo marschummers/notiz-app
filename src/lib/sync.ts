@@ -1,6 +1,6 @@
 import type { EntityTable } from 'dexie'
 import { db } from '../db/db'
-import type { Folder, Page, Tag, PageTag, Task, TextBlock, Stroke } from '../db/types'
+import type { Folder, Page, PageType, Tag, PageTag, Task, TextBlock, Stroke } from '../db/types'
 import { supabase } from './supabaseClient'
 
 // Faengt fehlende/kaputte Zeitstempel ab, statt dass new Date(...).toISOString() mit
@@ -87,6 +87,8 @@ interface RemotePage {
   updated_at: string
   deleted_at: string | null
   favorited_at: string | null
+  page_type: string | null
+  custom_date: string | null
 }
 
 interface RemoteTag {
@@ -177,6 +179,8 @@ export async function syncAll(): Promise<void> {
       updated_at: iso(p.updatedAt),
       deleted_at: p.deletedAt ? iso(p.deletedAt) : null,
       favorited_at: p.favoritedAt ? iso(p.favoritedAt) : null,
+      page_type: p.pageType ?? null,
+      custom_date: p.customDate ? iso(p.customDate) : null,
     }),
     (r) => ({
       id: r.id,
@@ -188,6 +192,8 @@ export async function syncAll(): Promise<void> {
       updatedAt: ms(r.updated_at),
       deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined,
       favoritedAt: r.favorited_at ? ms(r.favorited_at) : undefined,
+      pageType: (r.page_type as PageType) || undefined,
+      customDate: r.custom_date ? ms(r.custom_date) : undefined,
     }),
   )
 

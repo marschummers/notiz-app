@@ -23,6 +23,7 @@ import type { PageBackground } from '../db/types'
 import Backlinks from './Backlinks'
 import DrawingCanvas from './DrawingCanvas'
 import { TaskIcon, TextFieldIcon } from './icons'
+import PageProperties from './PageProperties'
 import './PageEditor.css'
 
 const BACKGROUND_LABELS: Record<PageBackground, string> = {
@@ -92,6 +93,7 @@ export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBac
         >
           {page.favoritedAt ? '★' : '☆'}
         </button>
+        <PageProperties pageId={pageId} pageType={page.pageType} customDate={page.customDate} />
       </div>
       <div className="page-tags-row">
         {pageTags.map((tag) => (

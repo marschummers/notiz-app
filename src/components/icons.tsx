@@ -71,3 +71,14 @@ export function BroomIcon(props: SVGProps<SVGSVGElement>) {
     </IconBase>
   )
 }
+
+// Info-Symbol fuer den "Eigenschaften"-Button (Seiten-Properties).
+export function InfoIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <IconBase {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5.5" />
+      <path d="M12 7.8v.1" />
+    </IconBase>
+  )
+}

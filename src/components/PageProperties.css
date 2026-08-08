@@ -1,0 +1,98 @@
+.page-properties {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.properties-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.properties-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.properties-toggle.active {
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
+  color: var(--accent-text);
+  border-color: transparent;
+}
+
+/* Kompaktes Popover statt dauerhaftem Bereich - haengt rechtsbuendig unter dem Button, damit es
+   auf schmalen (iPad-)Breiten nicht ueber den rechten Rand hinausragt. */
+.properties-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  width: 220px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  font-family: system-ui, sans-serif;
+}
+
+.properties-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.properties-label {
+  color: var(--text-faint);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.properties-field select,
+.properties-date-row input[type='date'] {
+  padding: 6px 8px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.properties-date-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.properties-date-row input[type='date'] {
+  flex: 1;
+  min-width: 0;
+}
+
+.properties-date-clear {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.properties-date-clear:hover {
+  color: var(--bad);
+}

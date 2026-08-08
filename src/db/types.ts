@@ -31,12 +31,19 @@ export interface Folder {
 // schmalen Stichwort-Spalte links und einer Zusammenfassungs-Zeile unten.
 export type PageBackground = 'lined' | 'dotted' | 'cornell' | 'blank'
 
+// Einfache, feste Property-Typen fuer den ersten Schritt (bewusst kein frei definierbares
+// Property-System) - undefined/fehlend bedeutet "Allgemein", bestehende Seiten ohne das Feld
+// brauchen dadurch keine Migration.
+export type PageType = 'Allgemein' | 'Meeting' | 'Gesprächsnotiz' | 'Idee' | 'Konzept' | 'Protokoll' | 'Recherche'
+
 // Eine Notizseite. `folderId` optional (undefined = unabgelegt, direkt in der Wurzel sichtbar).
 // Die Striche liegen direkt auf der Seite (nicht in einer eigenen Tabelle) - fuer eine
 // Handschrift-App mit Last-Write-Wins-Sync ist eine Seite als Ganzes die sinnvolle Einheit.
 // `favoritedAt` folgt demselben Muster wie `deletedAt`: undefined = kein Favorit, Zeitstempel =
 // wann favorisiert wurde. Liefert Status UND Sortierung ("zuletzt favorisiert zuerst") in einem
 // Feld, ohne separates Boolean-Feld - kein Dexie-Schema-Update noetig, da kein Index darauf liegt.
+// `customDate` ist ein frei waehlbares Datum (Properties-Panel), unabhaengig von `updatedAt` -
+// undefined = nicht gesetzt.
 export interface Page {
   id: string
   folderId?: string
@@ -47,6 +54,8 @@ export interface Page {
   updatedAt: number
   deletedAt?: number
   favoritedAt?: number
+  pageType?: PageType
+  customDate?: number
 }
 
 export interface Tag {

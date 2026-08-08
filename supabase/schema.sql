@@ -39,7 +39,11 @@ create table if not exists notiz_pages (
   deleted_at timestamptz,
   -- Favoriten-Status: nullable Zeitstempel statt Boolean, gleiches Muster wie deleted_at -
   -- liefert Status UND "zuletzt favorisiert"-Sortierung in einer Spalte.
-  favorited_at timestamptz
+  favorited_at timestamptz,
+  -- Einfache Seiten-Properties (siehe src/db/types.ts PageType) - feste Typenliste statt
+  -- generischem Property-System, custom_date ist ein frei waehlbares, optionales Datum.
+  page_type text,
+  custom_date timestamptz
 );
 
 create table if not exists notiz_tags (
