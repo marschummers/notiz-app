@@ -1,0 +1,23 @@
+.drag-handle {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 2px;
+  width: 10px;
+  height: 15px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.drag-handle span {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.35;
+}
+
+.drag-handle:hover span {
+  opacity: 0.7;
+}

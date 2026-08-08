@@ -7,6 +7,17 @@ export async function createFolder(parentId: string | undefined, name = 'Neuer O
   return id
 }
 
+// Setzt `order` fuer eine Geschwister-Gruppe (gleicher parentId) neu anhand der uebergebenen
+// Reihenfolge - kleine fortlaufende Zahlen, immer kleiner als ein per Date.now() vergebenes
+// `order` eines neu angelegten Ordners, der dadurch automatisch ans Ende der Liste faellt statt
+// die manuell sortierte Reihenfolge zu durcheinanderzubringen.
+export async function reorderFolders(orderedIds: string[]): Promise<void> {
+  const now = Date.now()
+  for (let i = 0; i < orderedIds.length; i++) {
+    await db.folders.update(orderedIds[i], { order: i, updatedAt: now })
+  }
+}
+
 export async function renameFolder(id: string, name: string): Promise<void> {
   await db.folders.update(id, { name, updatedAt: Date.now() })
 }
@@ -33,6 +44,14 @@ export async function createPage(folderId: string | undefined, title = 'Neue Sei
   const now = Date.now()
   await db.pages.add({ id, folderId, title, strokes: [], background: 'lined', order: now, updatedAt: now })
   return id
+}
+
+// Siehe reorderFolders - gleiches Prinzip fuer Seiten innerhalb eines Ordners.
+export async function reorderPages(orderedIds: string[]): Promise<void> {
+  const now = Date.now()
+  for (let i = 0; i < orderedIds.length; i++) {
+    await db.pages.update(orderedIds[i], { order: i, updatedAt: now })
+  }
 }
 
 export async function renamePage(id: string, title: string): Promise<void> {

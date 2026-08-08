@@ -74,6 +74,11 @@
   font-style: italic;
 }
 
+.tree-row.dragging {
+  opacity: 0.55;
+  outline: 1px solid var(--accent-strong);
+}
+
 .tree-label {
   flex: 1;
   overflow: hidden;

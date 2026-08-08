@@ -1,8 +1,10 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
-import { createPage, deletePage } from '../lib/actions'
+import { createPage, deletePage, reorderPages } from '../lib/actions'
 import { formatRelativeTime } from '../lib/format'
 import type { Selection } from '../lib/selection'
+import { useDragReorder } from '../lib/useDragReorder'
+import DragHandle from './DragHandle'
 import './PageList.css'
 
 interface Props {
@@ -37,6 +39,17 @@ export default function PageList({ selection, sidebarOpen, onToggleSidebar, onOp
 
   const heading = selection.type === 'folder' ? (selection.id ? folder?.name ?? '…' : 'Nicht abgelegt') : `#${tag?.name ?? '…'}`
 
+  // Umsortieren per Drag ergibt nur innerhalb eines Ordners Sinn - eine Tag-Ansicht mischt
+  // Seiten aus verschiedenen Ordnern, deren `order`-Feld aber weiterhin ihre Position INNERHALB
+  // ihres jeweiligen Ordners bestimmt (siehe reorderPages), das wuerde sich sonst ueberschneiden.
+  const canReorder = selection.type === 'folder'
+  const { containerRef, dragId, liveIds, onHandleTouchStart, onHandleTouchMove, onHandleTouchEnd, onHandleMouseDown } =
+    useDragReorder(reorderPages)
+  const naturalIds = (pages ?? []).map((p) => p.id)
+  const pagesById = new Map((pages ?? []).map((p) => [p.id, p]))
+  const displayIds = canReorder ? (liveIds ?? naturalIds) : naturalIds
+  const displayPages = displayIds.map((id) => pagesById.get(id)).filter((p): p is NonNullable<typeof p> => !!p)
+
   return (
     <div className="page-list">
       <div className="page-list-header">
@@ -49,9 +62,23 @@ export default function PageList({ selection, sidebarOpen, onToggleSidebar, onOp
         )}
       </div>
       {(pages ?? []).length === 0 && <p className="page-list-hint">Noch keine Seiten hier.</p>}
-      <div className="page-grid">
-        {(pages ?? []).map((page) => (
-          <div key={page.id} className="page-tile" onClick={() => onOpenPage(page.id)}>
+      <div className="page-grid" ref={containerRef}>
+        {displayPages.map((page) => (
+          <div
+            key={page.id}
+            data-drag-id={page.id}
+            className={`page-tile${dragId === page.id ? ' dragging' : ''}`}
+            onClick={() => onOpenPage(page.id)}
+          >
+            {canReorder && (
+              <DragHandle
+                className="page-tile-handle"
+                onTouchStart={(e) => onHandleTouchStart(page.id, naturalIds, e)}
+                onTouchMove={onHandleTouchMove}
+                onTouchEnd={onHandleTouchEnd}
+                onMouseDown={(e) => onHandleMouseDown(page.id, naturalIds, e)}
+              />
+            )}
             <div className="page-tile-preview">Bearbeitet {formatRelativeTime(page.updatedAt)}</div>
             <div className="page-tile-title">{page.title || 'Ohne Titel'}</div>
             <button
