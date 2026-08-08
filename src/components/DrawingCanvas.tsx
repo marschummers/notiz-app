@@ -1154,6 +1154,28 @@ export default function DrawingCanvas({
     return () => ro.disconnect()
   }, [])
 
+  // TEMPORAER - Diagnose fuer den "Papiermuster verschwindet teilweise"-Bug (siehe Chat): zeigt
+  // die tatsaechlichen DOM-Werte an, um zu pruefen, ob background/canvas/task-layer wirklich die
+  // volle contentHeight besitzen (Layout-Ebene) und der Fehler rein beim Malen/Rastern von
+  // WebKit liegt, oder ob schon die Hoehe selbst falsch gesetzt ist. Nach der Diagnose wieder
+  // entfernen.
+  const [heightDebug, setHeightDebug] = useState('')
+  function updateHeightDebug() {
+    const wrap = wrapRef.current
+    const bg = backgroundRef.current
+    const canvas = canvasRef.current
+    const taskLayer = taskLayerRef.current
+    if (!wrap || !bg || !canvas) return
+    const bgRect = bg.getBoundingClientRect().height
+    const canvasRect = canvas.getBoundingClientRect().height
+    const taskRect = taskLayer?.getBoundingClientRect().height
+    setHeightDebug(
+      `wrap.clientHeight=${wrap.clientHeight} | bg.style.height=${bg.style.height || '(100%)'} bg.rect=${bgRect.toFixed(1)} | ` +
+        `canvas.style.height=${canvas.style.height || '(100%)'} canvas.rect=${canvasRect.toFixed(1)} | ` +
+        `task.style.height=${taskLayer?.style.height || '(100%)'} task.rect=${(taskRect ?? 0).toFixed(1)}`,
+    )
+  }
+
   // Gesamthoehe der Zeichenflaeche: mindestens die sichtbare Wrap-Hoehe, oder - falls ein PDF
   // geladen ist und mehr Platz braucht - die Hoehe bis zum Ende der letzten PDF-Seite (siehe
   // computePdfPageLayout). Hintergrund/Canvas/Task-Ebene/PDF-Ebene bekommen unten alle dieselbe
@@ -1353,6 +1375,7 @@ export default function DrawingCanvas({
       const box = computeSelectionBox(strokesRef.current, selectedIndicesRef.current, width, pages, activeId, offset?.dx ?? 0, offset?.dy ?? 0)
       if (box) drawSelectionBox(ctx, box)
     }
+    updateHeightDebug() // TEMPORAER - siehe Kommentar oben bei heightDebug
   }
 
   // Sobald sich das geladene PDF aendert (fertig geladen, entfernt, oder durch ein anderes
@@ -1981,6 +2004,8 @@ export default function DrawingCanvas({
           </div>
         )}
         <div className="page-updated-at">Bearbeitet {formatRelativeTime(updatedAt)}</div>
+        {/* TEMPORAER - Diagnose, siehe heightDebug oben. Danach wieder entfernen. */}
+        {heightDebug && <div className="height-debug">{heightDebug}</div>}
         <canvas
           ref={canvasRef}
           className="drawing-canvas"

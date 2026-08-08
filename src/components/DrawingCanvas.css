@@ -108,13 +108,6 @@
   width: 100%;
   height: 100%;
   transform-origin: 0 0;
-  /* Haelt dieses Element dauerhaft auf einer eigenen Compositor-Ebene (statt nur waehrend eines
-     aktiven Zooms/Pannens) - ohne das rendert WebKit/Safari das liniert/gepunktet-Muster auf
-     einer hohen Zeichenflaeche gelegentlich nur teilweise (Streifen ohne Muster), die erst durch
-     einen erzwungenen Neuaufbau (z.B. Zoomen) wieder verschwinden. Gleiche Ursache wie der
-     bereits bekannte Compositor-Bug beim Hintergrund-Klassenwechsel, siehe Kommentar am
-     .drawing-background-Element in der JSX (DrawingCanvas.tsx). */
-  will-change: transform;
   /* Cremeweiss/leicht graeulich statt reinem Weiss - blendet weniger beim Schreiben mit
      schwarzem Stift. Bleibt bewusst gleich, egal ob System-Dark-Mode aktiv ist - eine
      Papierseite soll wie Papier aussehen, nicht wie dunkles UI-Chrome. */
@@ -128,7 +121,6 @@
   width: 100%;
   height: 100%;
   transform-origin: 0 0;
-  will-change: transform;
   background: transparent;
   pointer-events: none;
 }
@@ -226,6 +218,27 @@
   pointer-events: none;
 }
 
+/* TEMPORAER - Diagnose-Anzeige fuer den Hintergrund-Hoehen-Bug, siehe DrawingCanvas.tsx
+   heightDebug. Danach wieder entfernen. Bleibt (wie .page-updated-at) fest an der
+   Bildschirmposition, wird NICHT mitgezoomt/-gepannt, damit sie immer lesbar ist. */
+.height-debug {
+  position: absolute;
+  top: 26px;
+  left: 10px;
+  right: 10px;
+  z-index: 20;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 10px;
+  line-height: 1.4;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.72);
+  padding: 4px 6px;
+  border-radius: 4px;
+  pointer-events: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* PDF-Seiten (siehe lib/pdfRender.ts) - liegt zwischen Papierhintergrund und Tinten-Canvas,
    bekommt denselben Zoom/Pan-Transform wie die anderen Ebenen (siehe applyView in
    DrawingCanvas.tsx). pointer-events:none: rein visuell, nicht verschiebbar/interaktiv, jede
@@ -236,7 +249,6 @@
   left: 0;
   width: 100%;
   transform-origin: 0 0;
-  will-change: transform;
   pointer-events: none;
 }
 
@@ -260,7 +272,6 @@
   position: absolute;
   inset: 0;
   transform-origin: 0 0;
-  will-change: transform;
   pointer-events: none;
 }
 
