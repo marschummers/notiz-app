@@ -245,6 +245,13 @@ export async function moveTextBlock(id: string, x: number, y: number): Promise<v
   await db.textBlocks.update(id, { x, y, updatedAt: Date.now() })
 }
 
+// Speichert die vom Nutzer per Ziehen gewaehlte Breite eines Textfelds (siehe db/types.ts
+// TextBlock.width) - wird beim Verlassen des Bearbeitungsmodus aufgerufen, siehe
+// components/DrawingCanvas.tsx TextBlockItem.
+export async function updateTextBlockWidth(id: string, width: number): Promise<void> {
+  await db.textBlocks.update(id, { width, updatedAt: Date.now() })
+}
+
 export async function deleteTextBlock(id: string): Promise<void> {
   const now = Date.now()
   await db.textBlocks.update(id, { deletedAt: now, updatedAt: now })

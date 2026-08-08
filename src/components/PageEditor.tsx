@@ -20,6 +20,7 @@ import {
   updatePageStrokes,
   updateTaskText,
   updateTextBlockText,
+  updateTextBlockWidth,
 } from '../lib/actions'
 import type { PageBackground } from '../db/types'
 import Backlinks from './Backlinks'
@@ -191,6 +192,7 @@ export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBac
           onEditTextBlockText={(id, text) => updateTextBlockText(id, text)}
           onDeleteTextBlock={(id) => deleteTextBlock(id)}
           onMoveTextBlock={(id, x, y) => moveTextBlock(id, x, y)}
+          onResizeTextBlockWidth={(id, width) => updateTextBlockWidth(id, width)}
           onOpenPageLink={(targetPageId) => onOpenPage(targetPageId)}
           pdfPrintout={pdfPrintout ?? null}
           onAttachPdf={async (file) => {

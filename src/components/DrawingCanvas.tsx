@@ -664,6 +664,7 @@ interface DrawingTextBlock {
   text: string
   x: number
   y: number
+  width?: number
 }
 
 function TextBlockItem({
@@ -675,6 +676,7 @@ function TextBlockItem({
   onSaveText,
   onDelete,
   onMove,
+  onResizeWidth,
   onOpenPageLink,
 }: {
   block: DrawingTextBlock
@@ -685,12 +687,23 @@ function TextBlockItem({
   onSaveText: (text: string) => void
   onDelete: () => void
   onMove: (x: number, y: number) => void
+  onResizeWidth: (width: number) => void
   onOpenPageLink: (pageId: string) => void
 }) {
   const [draft, setDraft] = useState(block.text)
   const [linkTrigger, setLinkTrigger] = useState<{ start: number; query: string } | null>(null)
   const [linkActiveIndex, setLinkActiveIndex] = useState(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Waehrend der Bearbeitung waechst die Hoehe automatisch mit dem Inhalt mit (siehe
+  // Anforderung "gesamten Text lesen koennen") - reine CSS-Loesung reicht dafuer nicht,
+  // <textarea> passt seine Hoehe nie von selbst an den Inhalt an.
+  useLayoutEffect(() => {
+    const el = textareaRef.current
+    if (!editing || !el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [editing, draft])
 
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null)
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -874,7 +887,7 @@ function TextBlockItem({
   return (
     <div
       className={`text-block${dragPos ? ' dragging' : ''}${editing ? ' active' : ''}`}
-      style={{ left: pos.x, top: pos.y }}
+      style={{ left: pos.x, top: pos.y, width: block.width ? `${block.width}px` : undefined }}
       onClick={(e) => e.stopPropagation()}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
@@ -907,7 +920,18 @@ function TextBlockItem({
             placeholder="Text eingeben, [[ für Seitenlink …"
             onChange={handleDraftChange}
             onKeyDown={handleDraftKeyDown}
-            onBlur={() => onSaveText(draft)}
+            onBlur={() => {
+              onSaveText(draft)
+              // Per Ziehen am Rand gewaehlte Breite (CSS "resize: horizontal", siehe
+              // DrawingCanvas.css) erst beim Verlassen der Bearbeitung uebernehmen - offsetWidth
+              // ist die unskalierte Layout-Breite des Elements, unabhaengig vom aktuellen
+              // Zoom (CSS-Transform auf der Task-Ebene beeinflusst sie nicht), also genau der
+              // Wert, der auch in der schreibgeschuetzten Ansicht wieder als Breite gilt.
+              const el = textareaRef.current
+              if (el && el.offsetWidth > 0 && el.offsetWidth !== block.width) {
+                onResizeWidth(el.offsetWidth)
+              }
+            }}
           />
           {linkTrigger && matchedPages.length > 0 && (
             <div className="link-autocomplete">
@@ -1006,6 +1030,7 @@ interface Props {
   onEditTextBlockText?: (id: string, text: string) => void
   onDeleteTextBlock?: (id: string) => void
   onMoveTextBlock?: (id: string, x: number, y: number) => void
+  onResizeTextBlockWidth?: (id: string, width: number) => void
   onOpenPageLink?: (pageId: string) => void
   // PDF-Dateiausdruck (siehe db/types.ts PdfPrintout, lib/pdfStorage.ts) - gleiches optionales
   // Muster wie Task/Textfeld: pdfPrintout ist nur die (persistierte) Metadaten-Zeile, das
@@ -1050,6 +1075,7 @@ export default function DrawingCanvas({
   onEditTextBlockText,
   onDeleteTextBlock,
   onMoveTextBlock,
+  onResizeTextBlockWidth,
   onOpenPageLink,
   pdfPrintout = null,
   onAttachPdf,
@@ -2007,6 +2033,7 @@ export default function DrawingCanvas({
               }}
               onDelete={() => onDeleteTextBlock?.(b.id)}
               onMove={(x, y) => onMoveTextBlock?.(b.id, toStoredX(x, canvasWidth), y)}
+              onResizeWidth={(width) => onResizeTextBlockWidth?.(b.id, width)}
               onOpenPageLink={(pageId) => onOpenPageLink?.(pageId)}
             />
           ))}

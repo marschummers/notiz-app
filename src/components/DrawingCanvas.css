@@ -384,7 +384,11 @@
   align-items: flex-start;
   gap: 6px;
   min-width: 140px;
-  max-width: 320px;
+  /* Deutlich grosszuegiger als frueher (320px) - siehe .text-block-input resize:horizontal,
+     laesst sich beim Bearbeiten breiter ziehen, damit lange Texte eher breit als hoch werden
+     koennen. Eine per Ziehen gewaehlte Breite (siehe block.width, inline style weiter unten)
+     gilt bis zu dieser Obergrenze. */
+  max-width: 680px;
   padding: 6px 8px;
   border-radius: 8px;
   border: 1px solid transparent;
@@ -468,7 +472,12 @@
   outline: 1px solid var(--accent);
   border-radius: 4px;
   padding: 2px 4px;
-  resize: vertical;
+  /* Hoehe passt sich beim Tippen automatisch an den Inhalt an (siehe useLayoutEffect in
+     TextBlockItem) - nur die Breite bleibt manuell ziehbar, damit lange Texte bei Bedarf breit
+     statt hoch werden koennen (siehe DrawingCanvas.tsx onResizeWidth). Kein eigenes overflow
+     noetig, der Browser-Standard fuer <textarea> (auto) reicht fuer den Ziehgriff.
+  */
+  resize: horizontal;
 }
 
 /* Seitenlink innerhalb eines Textfelds - deutlich als anklickbares internes Ziel abgesetzt

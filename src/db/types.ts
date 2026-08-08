@@ -110,12 +110,18 @@ export interface Task {
 // ohne Checkbox-Semantik. `text` kann Seitenverlinkungen im Format "[[pageId:Titel]]" enthalten
 // (siehe components/DrawingCanvas.tsx parseLinkedText) - bewusst als Teil des Plaintexts codiert
 // statt als eigenes Feld, damit Sync/Speicherung unveraendert bleiben (einfacher String).
+// `width` ist die vom Nutzer per Ziehen am Textfeld-Rand gewaehlte Breite in Pixeln (siehe
+// components/DrawingCanvas.tsx TextBlockItem) - undefined/fehlend bedeutet "noch nie manuell
+// verbreitert", das Feld nutzt dann die normale, an den Inhalt angepasste Breite. Absolute
+// Pixel statt relativ zur Notizbreite, weil sich auch die bisherige min/max-Breite eines
+// Textfelds nicht mit der Notizbreite skaliert.
 export interface TextBlock {
   id: string
   pageId: string
   text: string
   x: number
   y: number
+  width?: number
   createdAt: number
   updatedAt: number
   deletedAt?: number

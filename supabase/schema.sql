@@ -91,6 +91,10 @@ create table if not exists notiz_text_blocks (
   text text not null default '',
   x double precision not null default 0,
   y double precision not null default 0,
+  -- Vom Nutzer per Ziehen gewaehlte Breite in Pixeln (siehe src/db/types.ts TextBlock.width) -
+  -- fehlend/null bedeutet "noch nie manuell verbreitert", nutzt dann die an den Inhalt
+  -- angepasste Standardbreite.
+  width integer,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   deleted_at timestamptz

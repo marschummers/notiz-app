@@ -129,6 +129,7 @@ interface RemoteTextBlock {
   text: string
   x: number
   y: number
+  width: number | null
   created_at: string
   updated_at: string
   deleted_at: string | null
@@ -294,6 +295,7 @@ export async function syncAll(): Promise<void> {
       text: t.text,
       x: t.x,
       y: t.y,
+      width: t.width ?? null,
       created_at: iso(t.createdAt),
       updated_at: iso(t.updatedAt),
       deleted_at: t.deletedAt ? iso(t.deletedAt) : null,
@@ -304,6 +306,7 @@ export async function syncAll(): Promise<void> {
       text: r.text,
       x: r.x,
       y: r.y,
+      width: r.width ?? undefined,
       createdAt: ms(r.created_at),
       updatedAt: ms(r.updated_at),
       deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined,
