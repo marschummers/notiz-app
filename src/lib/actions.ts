@@ -42,7 +42,10 @@ export async function deleteFolder(id: string): Promise<void> {
 export async function createPage(folderId: string | undefined, title = 'Neue Seite'): Promise<string> {
   const id = newId()
   const now = Date.now()
-  await db.pages.add({ id, folderId, title, strokes: [], background: 'lined', order: now, updatedAt: now })
+  // customDate startet auf das Erstelldatum (nicht updatedAt, das aendert sich bei jeder
+  // Bearbeitung) - bleibt aber ein normales, im Eigenschaften-Panel frei aenderbares/loeschbares
+  // Feld, kein separates "erstellt am" mit eigener Bedeutung.
+  await db.pages.add({ id, folderId, title, strokes: [], background: 'lined', order: now, updatedAt: now, customDate: now })
   return id
 }
 
