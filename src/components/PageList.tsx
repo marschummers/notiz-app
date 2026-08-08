@@ -1,6 +1,7 @@
+import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
-import { createPage, deletePage, movePage, reorderPages } from '../lib/actions'
+import { createPage, createPageFromTemplate, deletePage, deleteTemplate, movePage, reorderPages } from '../lib/actions'
 import { formatRelativeTime } from '../lib/format'
 import type { Selection } from '../lib/selection'
 import { useDragReorder } from '../lib/useDragReorder'
@@ -12,6 +13,69 @@ interface Props {
   sidebarOpen: boolean
   onToggleSidebar: () => void
   onOpenPage: (id: string) => void
+}
+
+// Kompaktes Popover am "+ Neue Seite"-Button statt eines Modals: "Leere Seite" plus alle
+// gespeicherten Vorlagen (mit Loeschen-Button je Eintrag) - deckt "Vorlage speichern/auswaehlen/
+// loeschen" komplett ueber diese eine Flaeche ab, keine separate Vorlagenverwaltung noetig.
+function NewPageMenu({ folderId, onOpenPage }: { folderId: string | undefined; onOpenPage: (id: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const templates = useLiveQuery(() => db.templates.filter((t) => !t.deletedAt).toArray(), [])
+
+  useEffect(() => {
+    if (!open) return
+    function onDocPointerDown(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDocPointerDown)
+    return () => document.removeEventListener('mousedown', onDocPointerDown)
+  }, [open])
+
+  return (
+    <div className="new-page-menu" ref={containerRef}>
+      <button onClick={() => setOpen((v) => !v)}>+ Neue Seite</button>
+      {open && (
+        <div className="new-page-popover">
+          <div
+            className="new-page-option"
+            onClick={async () => {
+              const id = await createPage(folderId)
+              setOpen(false)
+              onOpenPage(id)
+            }}
+          >
+            <span>Leere Seite</span>
+          </div>
+          {!!templates?.length && <div className="new-page-divider" />}
+          {(templates ?? []).map((t) => (
+            <div
+              key={t.id}
+              className="new-page-option"
+              onClick={async () => {
+                const id = await createPageFromTemplate(folderId, t.id)
+                setOpen(false)
+                onOpenPage(id)
+              }}
+            >
+              <span>{t.name}</span>
+              <button
+                className="new-page-option-delete"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (window.confirm(`Vorlage "${t.name}" löschen?`)) deleteTemplate(t.id)
+                }}
+                aria-label={`Vorlage ${t.name} löschen`}
+                title="Vorlage löschen"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function PageList({ selection, sidebarOpen, onToggleSidebar, onOpenPage }: Props) {
@@ -71,9 +135,7 @@ export default function PageList({ selection, sidebarOpen, onToggleSidebar, onOp
           ☰
         </button>
         <h1>{heading}</h1>
-        {selection.type === 'folder' && (
-          <button onClick={() => createPage(selection.id).then((id) => onOpenPage(id))}>+ Neue Seite</button>
-        )}
+        {selection.type === 'folder' && <NewPageMenu folderId={selection.id} onOpenPage={onOpenPage} />}
       </div>
       {(pages ?? []).length === 0 && <p className="page-list-hint">Noch keine Seiten hier.</p>}
       <div className="page-grid" ref={containerRef}>

@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie'
-import type { Folder, Page, Tag, PageTag, Task, TextBlock } from './types'
+import type { Folder, Page, Tag, PageTag, Task, TextBlock, Template } from './types'
 
 export const db = new Dexie('notiz-app') as Dexie & {
   folders: EntityTable<Folder, 'id'>
@@ -8,6 +8,7 @@ export const db = new Dexie('notiz-app') as Dexie & {
   pageTags: EntityTable<PageTag, 'id'>
   tasks: EntityTable<Task, 'id'>
   textBlocks: EntityTable<TextBlock, 'id'>
+  templates: EntityTable<Template, 'id'>
 }
 
 db.version(1).stores({
@@ -27,6 +28,12 @@ db.version(2).stores({
 // Neue Tabelle fuer frei platzierte, per Tastatur beschriebene Textfelder (siehe TextBlock).
 db.version(3).stores({
   textBlocks: 'id, pageId',
+})
+
+// Neue Tabelle fuer Seiten-Vorlagen (siehe Template) - keine Fremdschluessel-Indizes noetig,
+// Vorlagen referenzieren keine Seite mehr, sobald sie gespeichert sind.
+db.version(4).stores({
+  templates: 'id',
 })
 
 export function newId(): string {

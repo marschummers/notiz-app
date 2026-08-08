@@ -96,3 +96,25 @@
 .properties-date-clear:hover {
   color: var(--bad);
 }
+
+.properties-divider {
+  height: 1px;
+  background: var(--border-soft);
+  margin: 2px 0;
+}
+
+.properties-save-template {
+  padding: 7px 10px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+}
+
+.properties-save-template:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}

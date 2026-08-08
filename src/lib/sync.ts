@@ -1,6 +1,6 @@
 import type { EntityTable } from 'dexie'
 import { db } from '../db/db'
-import type { Folder, Page, PageType, Tag, PageTag, Task, TextBlock, Stroke } from '../db/types'
+import type { Folder, Page, PageBackground, PageType, Tag, PageTag, Task, TextBlock, Template, TemplateTextBlock, TemplateTask, Stroke } from '../db/types'
 import { supabase } from './supabaseClient'
 
 // Faengt fehlende/kaputte Zeitstempel ab, statt dass new Date(...).toISOString() mit
@@ -133,6 +133,19 @@ interface RemoteTextBlock {
   deleted_at: string | null
 }
 
+interface RemoteTemplate {
+  id: string
+  user_id: string
+  name: string
+  background: string
+  page_type: string | null
+  tag_names: string[]
+  text_blocks: TemplateTextBlock[]
+  tasks: TemplateTask[]
+  updated_at: string
+  deleted_at: string | null
+}
+
 // Zieht Ordner, Seiten, Tasks, Tags und deren Verknuepfungen mit Supabase zusammen. Ordner
 // zuerst: pages/tasks/page_tags referenzieren folder_id/page_id/tag_id als Fremdschluessel,
 // die Zeile muss also dort existieren, bevor die anderen pushen.
@@ -249,6 +262,36 @@ export async function syncAll(): Promise<void> {
       x: r.x,
       y: r.y,
       createdAt: ms(r.created_at),
+      updatedAt: ms(r.updated_at),
+      deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined,
+    }),
+  )
+
+  // Vorlagen referenzieren keine Seite mehr (Schnappschuss, siehe db/types.ts Template) -
+  // Reihenfolge relativ zu den anderen Tabellen daher unkritisch.
+  await mergeTable<Template, RemoteTemplate>(
+    db.templates,
+    'notiz_templates',
+    (t) => ({
+      id: t.id,
+      user_id: userId,
+      name: t.name,
+      background: t.background,
+      page_type: t.pageType ?? null,
+      tag_names: t.tagNames,
+      text_blocks: t.textBlocks,
+      tasks: t.tasks,
+      updated_at: iso(t.updatedAt),
+      deleted_at: t.deletedAt ? iso(t.deletedAt) : null,
+    }),
+    (r) => ({
+      id: r.id,
+      name: r.name,
+      background: (r.background as PageBackground) ?? 'lined',
+      pageType: (r.page_type as PageType) || undefined,
+      tagNames: r.tag_names ?? [],
+      textBlocks: r.text_blocks ?? [],
+      tasks: r.tasks ?? [],
       updatedAt: ms(r.updated_at),
       deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined,
     }),

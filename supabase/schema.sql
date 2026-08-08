@@ -93,6 +93,22 @@ create table if not exists notiz_text_blocks (
   deleted_at timestamptz
 );
 
+-- Seiten-Vorlage: Schnappschuss ohne Fremdschluessel auf notiz_pages (siehe
+-- src/db/types.ts Template) - eine spaeter geloeschte/geaenderte Seite wirkt sich nie auf
+-- bereits gespeicherte Vorlagen aus.
+create table if not exists notiz_templates (
+  id uuid primary key,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  name text not null,
+  background text not null default 'lined',
+  page_type text,
+  tag_names jsonb not null default '[]'::jsonb,
+  text_blocks jsonb not null default '[]'::jsonb,
+  tasks jsonb not null default '[]'::jsonb,
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz
+);
+
 create index if not exists notiz_folders_user_id_idx on notiz_folders (user_id);
 create index if not exists notiz_pages_user_id_idx on notiz_pages (user_id);
 create index if not exists notiz_tags_user_id_idx on notiz_tags (user_id);
@@ -101,6 +117,7 @@ create index if not exists notiz_tasks_user_id_idx on notiz_tasks (user_id);
 create index if not exists notiz_tasks_page_id_idx on notiz_tasks (page_id);
 create index if not exists notiz_text_blocks_user_id_idx on notiz_text_blocks (user_id);
 create index if not exists notiz_text_blocks_page_id_idx on notiz_text_blocks (page_id);
+create index if not exists notiz_templates_user_id_idx on notiz_templates (user_id);
 
 alter table notiz_folders enable row level security;
 alter table notiz_pages enable row level security;
@@ -108,6 +125,7 @@ alter table notiz_tags enable row level security;
 alter table notiz_page_tags enable row level security;
 alter table notiz_tasks enable row level security;
 alter table notiz_text_blocks enable row level security;
+alter table notiz_templates enable row level security;
 
 create policy "notiz_folders_owner_only" on notiz_folders
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
@@ -125,4 +143,7 @@ create policy "notiz_tasks_owner_only" on notiz_tasks
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 create policy "notiz_text_blocks_owner_only" on notiz_text_blocks
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy "notiz_templates_owner_only" on notiz_templates
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);

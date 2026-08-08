@@ -190,3 +190,72 @@ export async function deleteTextBlock(id: string): Promise<void> {
   const now = Date.now()
   await db.textBlocks.update(id, { deletedAt: now, updatedAt: now })
 }
+
+// Speichert einen Schnappschuss der aktuell sichtbaren Inhalte einer Seite als Vorlage (siehe
+// db/types.ts Template) - liest die Seite frisch aus Dexie, keine Referenz auf die Quellseite
+// wird gespeichert, spaetere Aenderungen an der Seite wirken sich also nie auf die Vorlage aus.
+export async function saveAsTemplate(pageId: string, name: string): Promise<string> {
+  const page = await db.pages.get(pageId)
+  if (!page) throw new Error('Seite nicht gefunden')
+
+  const tagLinks = await db.pageTags.filter((pt) => !pt.deletedAt && pt.pageId === pageId).toArray()
+  const tagRows = await db.tags.bulkGet(tagLinks.map((l) => l.tagId))
+  const tagNames = tagRows.filter((t): t is NonNullable<typeof t> => !!t && !t.deletedAt).map((t) => t.name)
+
+  const textBlocks = await db.textBlocks.filter((t) => !t.deletedAt && t.pageId === pageId).toArray()
+  const tasks = await db.tasks.filter((t) => !t.deletedAt && t.pageId === pageId).toArray()
+
+  const id = newId()
+  await db.templates.add({
+    id,
+    name,
+    background: page.background ?? 'lined',
+    pageType: page.pageType,
+    tagNames,
+    textBlocks: textBlocks.map((t) => ({ text: t.text, x: t.x, y: t.y })),
+    tasks: tasks.map((t) => ({ text: t.text, completed: t.completed, x: t.x, y: t.y })),
+    updatedAt: Date.now(),
+  })
+  return id
+}
+
+export async function deleteTemplate(id: string): Promise<void> {
+  const now = Date.now()
+  await db.templates.update(id, { deletedAt: now, updatedAt: now })
+}
+
+// Legt aus einer Vorlage eine komplett neue, unabhaengige Seite an - alles bekommt frische IDs
+// (Seite, Textfelder, Tasks), es entsteht keine dauerhafte Verknuepfung zur Vorlage. x-Werte in
+// der Vorlage sind bereits im gespeicherten (relativen) Format und werden unveraendert
+// uebernommen - das nutzt automatisch die bestehende responsive Koordinatenlogik weiter.
+export async function createPageFromTemplate(folderId: string | undefined, templateId: string): Promise<string> {
+  const template = await db.templates.get(templateId)
+  if (!template) throw new Error('Vorlage nicht gefunden')
+
+  const now = Date.now()
+  const pageId = newId()
+  await db.pages.add({
+    id: pageId,
+    folderId,
+    title: template.name,
+    strokes: [],
+    background: template.background,
+    order: now,
+    updatedAt: now,
+    customDate: now,
+    pageType: template.pageType,
+  })
+
+  for (const name of template.tagNames) {
+    const tagId = await findOrCreateTag(name)
+    await addTagToPage(pageId, tagId)
+  }
+  for (const block of template.textBlocks) {
+    await db.textBlocks.add({ id: newId(), pageId, text: block.text, x: block.x, y: block.y, createdAt: now, updatedAt: now })
+  }
+  for (const task of template.tasks) {
+    await db.tasks.add({ id: newId(), pageId, text: task.text, completed: task.completed, x: task.x, y: task.y, createdAt: now, updatedAt: now })
+  }
+
+  return pageId
+}

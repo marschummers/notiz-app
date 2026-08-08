@@ -106,3 +106,38 @@ export interface TextBlock {
   updatedAt: number
   deletedAt?: number
 }
+
+// Schnappschuss eines Textfelds/Tasks innerhalb einer Vorlage - bewusst nur Inhalt + Position,
+// keine id/pageId/Zeitstempel: die werden beim Instanziieren (createPageFromTemplate) frisch
+// vergeben, damit eine neu erstellte Seite nie mit der Vorlage verknuepft bleibt. x ist bereits
+// im gespeicherten (relativen) Format, siehe DrawingCanvas.tsx toAbsoluteX/toStoredX - beim
+// Kopieren unveraendert uebernommen, das nutzt automatisch die bestehende responsive
+// Koordinatenlogik weiter, ohne eigene Umrechnung.
+export interface TemplateTextBlock {
+  text: string
+  x: number
+  y: number
+}
+
+export interface TemplateTask {
+  text: string
+  completed: boolean
+  x: number
+  y: number
+}
+
+// Vorlage fuer neue Seiten - Schnappschuss zum Speicherzeitpunkt, komplett unabhaengig von der
+// Quellseite (kein pageId-Bezug). Tags werden als Namen statt IDs gespeichert, damit eine spaeter
+// geloeschte Tag-Zeile eine Vorlage nicht kaputt macht - beim Instanziieren laeuft das ueber
+// findOrCreateTag, genau wie beim manuellen Eintippen eines Tags.
+export interface Template {
+  id: string
+  name: string
+  background: PageBackground
+  pageType?: PageType
+  tagNames: string[]
+  textBlocks: TemplateTextBlock[]
+  tasks: TemplateTask[]
+  updatedAt: number
+  deletedAt?: number
+}

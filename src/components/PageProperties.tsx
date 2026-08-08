@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PageType } from '../db/types'
-import { updatePageCustomDate, updatePageType } from '../lib/actions'
+import { saveAsTemplate, updatePageCustomDate, updatePageType } from '../lib/actions'
 import { InfoIcon } from './icons'
 import './PageProperties.css'
 
@@ -87,6 +87,18 @@ export default function PageProperties({ pageId, pageType, customDate }: Props) 
               )}
             </div>
           </label>
+          <div className="properties-divider" />
+          <button
+            className="properties-save-template"
+            onClick={async () => {
+              const name = window.prompt('Name der Vorlage:')
+              if (!name || !name.trim()) return
+              await saveAsTemplate(pageId, name.trim())
+              setOpen(false)
+            }}
+          >
+            Als Vorlage speichern
+          </button>
         </div>
       )}
     </div>
