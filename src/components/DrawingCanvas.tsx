@@ -1,9 +1,34 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { PageBackground, Point, Stroke } from '../db/types'
 import { formatRelativeTime } from '../lib/format'
 import './DrawingCanvas.css'
 
 const COLORS = ['#08060d', '#d1263f', '#1d5fd6']
+
+// x-Koordinaten (Striche + Tasks) werden relativ zur Dokumentbreite gespeichert (Bruchteil,
+// z.B. 0.5 = Seitenmitte) statt als absolute Pixel - so bleibt ein Element auf einem breiten
+// PC-Bildschirm und einem schmalen iPad an derselben relativen Stelle, obwohl die Zeichenflaeche
+// bewusst responsiv bleibt (siehe .drawing-canvas-wrap in DrawingCanvas.css). y bleibt bewusst
+// unveraendert absolut (Dokument-/Scroll-Koordinate, nicht durch unterschiedliche Bildschirm-
+// hoehen verfaelscht).
+//
+// Vor diesem Update gespeicherte Seiten/Tasks haben x noch als absoluten Content-Pixel-Wert
+// (typischerweise zwei- bis vierstellig). LEGACY_ABS_X_THRESHOLD trennt beide Faelle robust,
+// ohne dass eine explizite Datenmigration noetig waere: alte Werte werden unveraendert wie
+// bisher als Pixel interpretiert und erst beim naechsten Speichern (Strich zeichnen/Task
+// verschieben) automatisch ins neue relative Format ueberfuehrt - komplett non-destruktiv und
+// unabhaengig davon, welches Geraet zuerst aktualisiert wird.
+const LEGACY_ABS_X_THRESHOLD = 8
+
+function toAbsoluteX(storedX: number, canvasWidth: number): number {
+  if (canvasWidth <= 0 || Math.abs(storedX) > LEGACY_ABS_X_THRESHOLD) return storedX
+  return storedX * canvasWidth
+}
+
+function toStoredX(absoluteX: number, canvasWidth: number): number {
+  if (canvasWidth <= 0) return absoluteX
+  return absoluteX / canvasWidth
+}
 
 function midPoint(a: Point, b: Point): Point {
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, pressure: (a.pressure + b.pressure) / 2 }
@@ -35,6 +60,12 @@ function redrawAll(ctx: CanvasRenderingContext2D, width: number, height: number,
       drawSegment(ctx, from, pts[i], to, stroke)
     }
   }
+}
+
+// Wandelt Striche zwischen internem (absolutem, Canvas-Pixel-) und gespeichertem (relativem)
+// x-Format um - siehe toAbsoluteX/toStoredX oben. y bleibt in beiden Richtungen unveraendert.
+function withStrokesX(strokes: Stroke[], convert: (x: number, width: number) => number, width: number): Stroke[] {
+  return strokes.map((s) => ({ ...s, points: s.points.map((p) => ({ ...p, x: convert(p.x, width) })) }))
 }
 
 function describeTouch(t: Touch): { touchType: string; force: number } {
@@ -361,6 +392,20 @@ export default function DrawingCanvas({
   const [strokeCount, setStrokeCount] = useState(initialStrokes.length)
   const [zoomPercent, setZoomPercent] = useState(100)
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
+  // Aktuelle Breite der Zeichenflaeche in CSS-Pixeln - Nenner fuer die relative x-Umrechnung
+  // (siehe toAbsoluteX/toStoredX). canvasWidthRef fuer den Touch-Event-Mount-Effekt (dort sind
+  // nur Refs sicher aktuell, siehe colorRef/baseWidthRef-Muster), canvasWidth-State fuer die
+  // JSX-Task-Positionen, die bei jeder Groessenaenderung neu berechnet werden sollen.
+  const canvasWidthRef = useRef(0)
+  const [canvasWidth, setCanvasWidth] = useState(0)
+
+  // useLayoutEffect statt useEffect: misst die Breite synchron vor dem ersten Bildaufbau, damit
+  // vorhandene Tasks nicht kurz an der falschen (unkonvertierten) Position aufblitzen.
+  useLayoutEffect(() => {
+    const w = canvasRef.current?.clientWidth ?? 0
+    canvasWidthRef.current = w
+    setCanvasWidth(w)
+  }, [])
 
   const colorRef = useRef(color)
   const baseWidthRef = useRef(baseWidth)
@@ -390,7 +435,7 @@ export default function DrawingCanvas({
     if (stroke) {
       strokesRef.current.push(stroke)
       setStrokeCount(strokesRef.current.length)
-      onChangeRef.current(strokesRef.current)
+      onChangeRef.current(withStrokesX(strokesRef.current, toStoredX, canvasWidthRef.current))
     }
     currentStrokeRef.current = null
     activeTouchIdRef.current = null
@@ -402,16 +447,42 @@ export default function DrawingCanvas({
     const background = backgroundRef.current
     if (!canvas || !overlay || !background) return
 
+    // Beim Oeffnen einer Seite faehrt die Sidebar per CSS-Transition ein (siehe Workspace.tsx,
+    // setSidebarOpen(false) nach openPage) - die Zeichenflaeche waechst dabei ueber mehrere
+    // ResizeObserver-Ticks hinweg schrittweise auf ihre Endbreite (schon die urspruengliche
+    // Ursache des "Tinte 3cm daneben"-Bugs, siehe Kommentar unten). Die einmalige Laden-
+    // Umrechnung von gespeichertem (relativem) ins interne absolute Koordinatensystem darf
+    // deshalb NICHT die allererste (noch mitten in der Animation gemessene, zu schmale) Breite
+    // verwenden, sonst landet die Tinte an der falschen Stelle. Stattdessen wird abgewartet, bis
+    // sich die Breite eine Weile nicht mehr aendert (SETTLE_MS ohne neuen ResizeObserver-Tick) -
+    // bis dahin bleibt die Flaeche leer statt Tinte kurz an falscher Position aufblitzen zu lassen.
+    const SETTLE_MS = 120
+    let initialConversionDone = false
+    let settleTimer: ReturnType<typeof setTimeout> | null = null
+
     function resize() {
       const dpr = window.devicePixelRatio || 1
       const { clientWidth, clientHeight } = canvas!
+      canvasWidthRef.current = clientWidth
+      setCanvasWidth(clientWidth)
       canvas!.width = clientWidth * dpr
       canvas!.height = clientHeight * dpr
       const ctx = canvas!.getContext('2d')
       if (!ctx) return
       ctx.scale(dpr, dpr)
       ctxRef.current = ctx
-      redrawAll(ctx, clientWidth, clientHeight, strokesRef.current)
+      if (initialConversionDone) redrawAll(ctx, clientWidth, clientHeight, strokesRef.current)
+
+      if (!initialConversionDone) {
+        if (settleTimer) clearTimeout(settleTimer)
+        settleTimer = setTimeout(() => {
+          if (initialConversionDone) return
+          initialConversionDone = true
+          strokesRef.current = withStrokesX(strokesRef.current, toAbsoluteX, canvasWidthRef.current)
+          const freshCtx = ctxRef.current
+          if (freshCtx) redrawAll(freshCtx, canvas!.clientWidth, canvas!.clientHeight, strokesRef.current)
+        }, SETTLE_MS)
+      }
     }
     resize()
     // ResizeObserver statt nur window-'resize': die Zeichenflaeche aendert ihre Groesse auch,
@@ -600,6 +671,7 @@ export default function DrawingCanvas({
 
     return () => {
       resizeObserver.disconnect()
+      if (settleTimer) clearTimeout(settleTimer)
       overlay.removeEventListener('touchstart', onTouchStart)
       overlay.removeEventListener('touchmove', onTouchMove)
       overlay.removeEventListener('touchend', onTouchEnd)
@@ -617,7 +689,7 @@ export default function DrawingCanvas({
     const canvas = canvasRef.current
     const ctx = ctxRef.current
     if (canvas && ctx) redrawAll(ctx, canvas.clientWidth, canvas.clientHeight, strokesRef.current)
-    onChangeRef.current(strokesRef.current)
+    onChangeRef.current(withStrokesX(strokesRef.current, toStoredX, canvasWidthRef.current))
   }
 
   function clearAll() {
@@ -627,7 +699,7 @@ export default function DrawingCanvas({
     const canvas = canvasRef.current
     const ctx = ctxRef.current
     if (canvas && ctx) redrawAll(ctx, canvas.clientWidth, canvas.clientHeight, strokesRef.current)
-    onChangeRef.current(strokesRef.current)
+    onChangeRef.current(withStrokesX(strokesRef.current, toStoredX, canvasWidthRef.current))
   }
 
   // Platziert ein neues To-do an der Tap-Position, nur im Aufgaben-Modus und nur bei Klick auf
@@ -637,7 +709,7 @@ export default function DrawingCanvas({
   async function handleTaskLayerClick(e: React.MouseEvent<HTMLDivElement>) {
     if (!taskMode || e.target !== e.currentTarget || !onCreateTask) return
     const { x, y } = clientToContent(e.clientX, e.clientY)
-    const id = await onCreateTask(x, y)
+    const id = await onCreateTask(toStoredX(x, canvasWidth), y)
     if (id) setEditingTaskId(id)
   }
 
@@ -741,7 +813,7 @@ export default function DrawingCanvas({
           {tasks.map((t) => (
             <TaskBlock
               key={t.id}
-              task={t}
+              task={{ ...t, x: toAbsoluteX(t.x, canvasWidth) }}
               editing={editingTaskId === t.id}
               clientToContent={clientToContent}
               onStartEdit={() => setEditingTaskId(t.id)}
@@ -751,7 +823,7 @@ export default function DrawingCanvas({
                 setEditingTaskId(null)
               }}
               onDelete={() => onDeleteTask?.(t.id)}
-              onMove={(x, y) => onMoveTask?.(t.id, x, y)}
+              onMove={(x, y) => onMoveTask?.(t.id, toStoredX(x, canvasWidth), y)}
             />
           ))}
         </div>
