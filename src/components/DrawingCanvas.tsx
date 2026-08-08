@@ -74,36 +74,132 @@ interface DrawingTask {
   y: number
 }
 
+// Wie lange (ms) der Finger ohne nennenswerte Bewegung ruhen muss, bevor aus einem Antippen
+// ein Verschieben wird - lang genug, dass ein normaler Tap (Checkbox/Text/Loeschen) nicht aus
+// Versehen zum Ziehen wird, kurz genug, dass es sich nicht traege anfuehlt.
+const LONG_PRESS_MS = 450
+// Bewegung in Pixern, ab der ein wartender Long-Press abgebrochen wird (z.B. ein Wisch statt
+// eines ruhigen Haltens).
+const LONG_PRESS_CANCEL_DISTANCE = 8
+
 // Ein einzelner To-do-Block auf dem Papier: Checkbox, Text (oder Eingabefeld beim Bearbeiten),
 // Loeschen-Button. Sitzt oberhalb des Zeichen-Overlays (siehe .task-layer weiter unten) und hat
 // eigenes pointer-events:auto, damit Antippen hier nie als Zeichen-/Zoom-Geste interpretiert wird.
+// Langes Gedrueckthalten mit dem FINGER (nicht dem Stift - der tippt fuer Checkbox/Text/Editieren)
+// verschiebt den Block an eine neue Position, siehe onTouchStart/-Move/-End unten.
 function TaskBlock({
   task,
   editing,
+  clientToContent,
   onStartEdit,
   onToggle,
   onSaveText,
   onDelete,
+  onMove,
 }: {
   task: DrawingTask
   editing: boolean
+  clientToContent: (clientX: number, clientY: number) => { x: number; y: number }
   onStartEdit: () => void
   onToggle: () => void
   onSaveText: (text: string) => void
   onDelete: () => void
+  onMove: (x: number, y: number) => void
 }) {
   const [draft, setDraft] = useState(task.text)
+  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null)
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const longPressArmedRef = useRef(false)
+  const draggingRef = useRef(false)
+  const startClientRef = useRef<{ x: number; y: number } | null>(null)
+  const justDraggedRef = useRef(false)
+
   useEffect(() => {
     if (editing) setDraft(task.text)
   }, [editing, task.text])
 
+  function clearLongPressTimer() {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+  }
+
+  function handleTouchStart(e: React.TouchEvent<HTMLDivElement>) {
+    const t = e.touches[0]
+    if (!t) return
+    const touchType = (t as unknown as { touchType?: string }).touchType ?? 'direct'
+    // Nur der Finger loest Verschieben aus - der Stift tippt fuer Checkbox/Text/Bearbeiten,
+    // dafuer reicht der normale onClick weiter unten.
+    if (touchType !== 'direct') return
+    startClientRef.current = { x: t.clientX, y: t.clientY }
+    longPressArmedRef.current = true
+    clearLongPressTimer()
+    longPressTimerRef.current = setTimeout(() => {
+      if (!longPressArmedRef.current) return
+      draggingRef.current = true
+      setDragPos(clientToContent(t.clientX, t.clientY))
+    }, LONG_PRESS_MS)
+  }
+
+  function handleTouchMove(e: React.TouchEvent<HTMLDivElement>) {
+    const t = e.touches[0]
+    const start = startClientRef.current
+    if (!t || !start) return
+    if (!draggingRef.current) {
+      const moved = Math.hypot(t.clientX - start.x, t.clientY - start.y)
+      if (moved > LONG_PRESS_CANCEL_DISTANCE) {
+        // Bewegung, bevor der Long-Press ausgeloest hat - kein Ziehen, einfach abbrechen.
+        longPressArmedRef.current = false
+        clearLongPressTimer()
+      }
+      return
+    }
+    // Kein e.preventDefault() hier: Reacts synthetische Touch-Handler sind passiv registriert,
+    // das wuerde nur eine Konsolenwarnung erzeugen. touch-action: none (siehe .task-block in
+    // DrawingCanvas.css) unterdrueckt Scrollen/Zoomen bereits auf CSS-Ebene.
+    e.stopPropagation()
+    setDragPos(clientToContent(t.clientX, t.clientY))
+  }
+
+  function handleTouchEnd() {
+    clearLongPressTimer()
+    longPressArmedRef.current = false
+    startClientRef.current = null
+    if (draggingRef.current) {
+      draggingRef.current = false
+      justDraggedRef.current = true
+      setTimeout(() => {
+        justDraggedRef.current = false
+      }, 300)
+      setDragPos((pos) => {
+        if (pos) onMove(pos.x, pos.y)
+        return null
+      })
+    }
+  }
+
+  const pos = dragPos ?? { x: task.x, y: task.y }
+
   return (
     <div
-      className={`task-block${task.completed ? ' completed' : ''}`}
-      style={{ left: task.x, top: task.y }}
+      className={`task-block${task.completed ? ' completed' : ''}${dragPos ? ' dragging' : ''}`}
+      style={{ left: pos.x, top: pos.y }}
       onClick={(e) => e.stopPropagation()}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
     >
-      <input type="checkbox" className="task-checkbox" checked={task.completed} onChange={onToggle} />
+      <input
+        type="checkbox"
+        className="task-checkbox"
+        checked={task.completed}
+        onChange={() => {
+          if (justDraggedRef.current) return
+          onToggle()
+        }}
+      />
       {editing ? (
         <input
           className="task-text-input"
@@ -120,7 +216,13 @@ function TaskBlock({
           }}
         />
       ) : (
-        <span className="task-text" onClick={onStartEdit}>
+        <span
+          className="task-text"
+          onClick={() => {
+            if (justDraggedRef.current) return
+            onStartEdit()
+          }}
+        >
           {task.text || 'Aufgabe eingeben …'}
         </span>
       )}
@@ -145,6 +247,7 @@ interface Props {
   onToggleTask?: (id: string, completed: boolean) => void
   onEditTaskText?: (id: string, text: string) => void
   onDeleteTask?: (id: string) => void
+  onMoveTask?: (id: string, x: number, y: number) => void
   toolbarExtra?: ReactNode
 }
 
@@ -160,6 +263,7 @@ export default function DrawingCanvas({
   onToggleTask,
   onEditTaskText,
   onDeleteTask,
+  onMoveTask,
   toolbarExtra,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -466,14 +570,23 @@ export default function DrawingCanvas({
   // an der angetippten Stelle bleibt, auch wenn spaeter gezoomt/verschoben wird.
   async function handleTaskLayerClick(e: React.MouseEvent<HTMLDivElement>) {
     if (!taskMode || e.target !== e.currentTarget || !onCreateTask) return
-    const overlay = overlayRef.current
-    if (!overlay) return
-    const rect = overlay.getBoundingClientRect()
-    const view = viewRef.current
-    const x = (e.clientX - rect.left - view.x) / view.scale
-    const y = (e.clientY - rect.top - view.y) / view.scale
+    const { x, y } = clientToContent(e.clientX, e.clientY)
     const id = await onCreateTask(x, y)
     if (id) setEditingTaskId(id)
+  }
+
+  // Rechnet Bildschirmkoordinaten in den unskalierten Inhaltsraum um (gleiche Umrechnung wie
+  // beim Strichzeichnen, siehe pointFrom oben) - wird sowohl fuers Task-Anlegen als auch fuers
+  // Verschieben per Long-Press gebraucht, damit ein Task immer unter Finger/Stift bleibt.
+  function clientToContent(clientX: number, clientY: number): { x: number; y: number } {
+    const overlay = overlayRef.current
+    const view = viewRef.current
+    if (!overlay) return { x: clientX, y: clientY }
+    const rect = overlay.getBoundingClientRect()
+    return {
+      x: (clientX - rect.left - view.x) / view.scale,
+      y: (clientY - rect.top - view.y) / view.scale,
+    }
   }
 
   return (
@@ -564,6 +677,7 @@ export default function DrawingCanvas({
               key={t.id}
               task={t}
               editing={editingTaskId === t.id}
+              clientToContent={clientToContent}
               onStartEdit={() => setEditingTaskId(t.id)}
               onToggle={() => onToggleTask?.(t.id, !t.completed)}
               onSaveText={(text) => {
@@ -571,6 +685,7 @@ export default function DrawingCanvas({
                 setEditingTaskId(null)
               }}
               onDelete={() => onDeleteTask?.(t.id)}
+              onMove={(x, y) => onMoveTask?.(t.id, x, y)}
             />
           ))}
         </div>

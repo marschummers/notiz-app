@@ -224,12 +224,22 @@
   line-height: 1.35;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
   pointer-events: auto;
-  touch-action: manipulation;
+  /* "none" statt "manipulation": ein mit dem Finger gehaltener Touch soll hier nie zum
+     Scrollen/Zoomen der Seite fuehren, sondern ausschliesslich vom Long-Press-Handler in
+     TaskBlock (DrawingCanvas.tsx) verarbeitet werden. */
+  touch-action: none;
 }
 
 .task-block.completed .task-text {
   text-decoration: line-through;
   opacity: 0.55;
+}
+
+.task-block.dragging {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+  outline: 2px solid var(--accent-strong);
+  opacity: 0.95;
+  z-index: 5;
 }
 
 .task-checkbox {

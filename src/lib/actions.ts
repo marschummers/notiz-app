@@ -121,6 +121,10 @@ export async function toggleTask(id: string, completed: boolean): Promise<void> 
   await db.tasks.update(id, { completed, updatedAt: Date.now() })
 }
 
+export async function moveTask(id: string, x: number, y: number): Promise<void> {
+  await db.tasks.update(id, { x, y, updatedAt: Date.now() })
+}
+
 export async function deleteTask(id: string): Promise<void> {
   const now = Date.now()
   await db.tasks.update(id, { deletedAt: now, updatedAt: now })

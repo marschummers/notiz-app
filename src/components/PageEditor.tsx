@@ -6,6 +6,7 @@ import {
   createTask,
   deleteTask,
   findOrCreateTag,
+  moveTask,
   removeTagFromPage,
   renamePage,
   toggleTask,
@@ -113,10 +114,17 @@ export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBac
           onChange={(strokes) => updatePageStrokes(pageId, strokes)}
           tasks={tasks ?? []}
           taskMode={taskMode}
-          onCreateTask={(x, y) => createTask(pageId, x, y)}
+          onCreateTask={async (x, y) => {
+            const id = await createTask(pageId, x, y)
+            // Nur EIN Todo pro Aktivierung anlegen - der Modus schaltet sich danach von
+            // selbst wieder aus, damit der naechste Tap nicht versehentlich ein zweites anlegt.
+            setTaskMode(false)
+            return id
+          }}
           onToggleTask={(id, completed) => toggleTask(id, completed)}
           onEditTaskText={(id, text) => updateTaskText(id, text)}
           onDeleteTask={(id) => deleteTask(id)}
+          onMoveTask={(id, x, y) => moveTask(id, x, y)}
           toolbarExtra={
             <button className={taskMode ? 'active' : ''} onClick={() => setTaskMode((v) => !v)}>
               {taskMode ? '☑' : '☐'} Aufgabe
