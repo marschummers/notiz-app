@@ -10,17 +10,20 @@ export default defineConfig({
     VitePWA({
       registerType: 'prompt',
       injectRegister: false,
-      includeAssets: ['favicon.svg'],
+      includeAssets: ['favicon-32.png', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Notiz App Prototyp',
-        short_name: 'Notiz Proto',
-        description: 'Prototyp fuer handschriftliche Notizen mit Apple Pencil',
-        theme_color: '#1c1b19',
-        background_color: '#1c1b19',
+        name: 'Notiz App',
+        short_name: 'Notiz App',
+        description: 'Handschriftliche Notizen mit Apple Pencil, Ordnerstruktur und Tags',
+        theme_color: '#17140f',
+        background_color: '#17140f',
         display: 'standalone',
         start_url: '/notiz-app/',
         scope: '/notiz-app/',
-        icons: [{ src: 'favicon.svg', sizes: 'any', type: 'image/svg+xml' }],
+        icons: [
+          { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
+        ],
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],

@@ -6,8 +6,8 @@
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
-  background: #f4f3ec;
-  border-right: 1px solid #e5e4e7;
+  background: var(--bg);
+  border-right: 1px solid var(--border);
   font-family: system-ui, sans-serif;
   font-size: 14px;
   transition:
@@ -24,7 +24,7 @@
 .sidebar-section {
   padding: 10px 0;
   padding-top: 10px;
-  border-bottom: 1px solid #e5e4e7;
+  border-bottom: 1px solid var(--border-soft);
 }
 
 .sidebar-section:first-child {
@@ -37,15 +37,15 @@
   justify-content: space-between;
   padding: 4px 12px 8px;
   font-weight: 600;
-  color: #444;
+  color: var(--text-faint);
   font-size: 12px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
 }
 
 .sidebar-hint {
   padding: 0 12px;
-  color: #888;
+  color: var(--text-faint);
   font-size: 13px;
 }
 
@@ -55,17 +55,19 @@
   gap: 4px;
   padding: 6px 10px;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   margin: 1px 6px;
+  color: var(--text-dim);
 }
 
 .tree-row:hover {
-  background: #e9e8e0;
+  background: var(--bg-elevated);
+  color: var(--text);
 }
 
 .tree-row.selected {
-  background: #1d5fd6;
-  color: #fff;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
 }
 
 .tree-row.root-row {
@@ -89,17 +91,14 @@
   font-size: 12px;
   line-height: 1;
   opacity: 0.6;
+  color: inherit;
 }
 
 .tree-toggle:hover,
 .tree-action:hover {
   opacity: 1;
-  background: rgba(0, 0, 0, 0.08);
-}
-
-.tree-row.selected .tree-toggle,
-.tree-row.selected .tree-action {
-  color: #fff;
+  background: rgba(214, 147, 79, 0.18);
+  color: var(--accent-strong);
 }
 
 .sidebar-footer {
@@ -111,15 +110,33 @@
 }
 
 .sidebar-footer button {
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid #ccc;
-  background: #fff;
+  padding: 9px 12px;
+  border-radius: var(--radius-control);
+  border: 1px solid transparent;
+  /* Kupfer-Verlauf statt einfarbig, wie gewuenscht - leichte Diagonale fuer etwas Tiefe. */
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
+  color: var(--accent-text);
+  font-weight: 600;
   cursor: pointer;
+  box-shadow: var(--shadow-card);
+}
+
+.sidebar-footer button:hover {
+  filter: brightness(1.08);
+}
+
+.sidebar-footer button:active {
+  filter: brightness(0.94);
+}
+
+.sidebar-footer button:disabled {
+  opacity: 0.5;
+  cursor: default;
+  filter: none;
 }
 
 .sidebar-error {
-  color: #d1263f;
+  color: var(--bad);
   font-size: 12px;
   margin: 0;
 }
@@ -129,7 +146,7 @@
   align-items: center;
   justify-content: space-between;
   font-size: 12px;
-  color: #666;
+  color: var(--text-faint);
   gap: 8px;
 }
 
@@ -140,36 +157,19 @@
 }
 
 .sidebar-account button {
-  padding: 4px 8px;
+  padding: 5px 10px;
   border-radius: 6px;
-  border: 1px solid #ccc;
-  background: #fff;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-dim);
   cursor: pointer;
   font-size: 12px;
+  font-weight: 400;
+  box-shadow: none;
 }
 
-@media (prefers-color-scheme: dark) {
-  .sidebar {
-    background: #1f2028;
-    border-right-color: #2e303a;
-  }
-  .sidebar-section {
-    border-bottom-color: #2e303a;
-  }
-  .sidebar-heading {
-    color: #9ca3af;
-  }
-  .tree-row:hover {
-    background: #292a33;
-  }
-  .tree-toggle:hover,
-  .tree-action:hover {
-    background: rgba(255, 255, 255, 0.1);
-  }
-  .sidebar-footer button,
-  .sidebar-account button {
-    background: #16171d;
-    color: #f3f4f6;
-    border-color: #2e303a;
-  }
+.sidebar-account button:hover {
+  filter: none;
+  border-color: var(--accent);
+  color: var(--accent-strong);
 }

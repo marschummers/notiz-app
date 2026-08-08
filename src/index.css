@@ -1,6 +1,41 @@
 :root {
-  color-scheme: light dark;
+  /* Kupfer/Anthrazit-Designsystem, uebernommen aus den anderen Apps (Winweb BWA App) fuer
+     einheitliches Erscheinungsbild. Gilt fuer das App-Chrome (Sidebar, Kopfzeilen, Buttons) -
+     die Zeichenflaeche selbst bleibt bewusst cremeweiss/papierartig, unabhaengig davon (siehe
+     DrawingCanvas.css), weil das fuers Handschreiben besser lesbar ist.
+     Grundflaechen: sehr dunkles, warmes Anthrazit statt reinem Schwarz. */
+  --bg: #17140f;
+  --bg-elevated: #211e19;
+  --bg-sunken: #100e0b;
+  --bg-accent-tint: #241d15;
+
+  /* Text: warmes Off-White statt reinem Weiss, mit zwei gedaempften Stufen fuer Sekundaertext. */
+  --text: #ece5d8;
+  --text-dim: #a89e8e;
+  --text-faint: #766c5d;
+
+  --border: #383026;
+  --border-soft: #2a251e;
+
+  /* Kupfer/Bronze als gezielter Akzent. accent/accent-strong bilden zusammen den
+     Verlauf auf Buttons (siehe z.B. Sidebar.css .primary-button). */
+  --accent: #b97c45;
+  --accent-strong: #d6934f;
+  --accent-soft: rgba(185, 124, 69, 0.16);
+  --accent-text: #201509;
+
+  --good: #7c9a6f;
+  --bad: #bf6152;
+  --warn: #c4a22e;
+
+  --radius-card: 14px;
+  --radius-control: 9px;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
+
+  color-scheme: dark;
   font: 16px/145% system-ui, 'Segoe UI', Roboto, sans-serif;
+  color: var(--text);
+  background: var(--bg);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -22,4 +57,5 @@ body,
 
 body {
   overflow: hidden;
+  background: var(--bg);
 }

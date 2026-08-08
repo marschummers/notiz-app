@@ -4,6 +4,7 @@
   height: 100%;
   width: 100%;
   min-width: 0;
+  background: var(--bg);
 }
 
 .page-editor-header {
@@ -12,24 +13,32 @@
   gap: 12px;
   padding: 10px 14px;
   padding-top: max(10px, env(safe-area-inset-top));
-  border-bottom: 1px solid #e5e4e7;
+  border-bottom: 1px solid var(--border-soft);
   font-family: system-ui, sans-serif;
 }
 
 .back-button,
 .sidebar-toggle {
-  padding: 6px 10px;
-  border-radius: 8px;
-  border: 1px solid #ccc;
-  background: #fff;
+  padding: 7px 11px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-dim);
   cursor: pointer;
   white-space: nowrap;
+}
+
+.back-button:hover,
+.sidebar-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
 }
 
 .page-title-input {
   flex: 1;
   border: none;
   background: transparent;
+  color: var(--text);
   font-size: 18px;
   font-weight: 500;
   padding: 4px 6px;
@@ -37,7 +46,7 @@
 }
 
 .page-title-input:focus {
-  outline: 1px solid #1d5fd6;
+  outline: 1px solid var(--accent);
   border-radius: 6px;
 }
 
@@ -47,7 +56,7 @@
   align-items: center;
   gap: 6px;
   padding: 8px 14px;
-  border-bottom: 1px solid #e5e4e7;
+  border-bottom: 1px solid var(--border-soft);
   font-family: system-ui, sans-serif;
   font-size: 13px;
 }
@@ -56,8 +65,8 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  background: #eef1f8;
-  color: #1d5fd6;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
   padding: 3px 8px;
   border-radius: 999px;
 }
@@ -77,53 +86,26 @@
 }
 
 .tag-input {
-  border: 1px dashed #ccc;
+  border: 1px dashed var(--border);
   border-radius: 999px;
   padding: 3px 10px;
   font-size: 13px;
   min-width: 80px;
   background: transparent;
+  color: var(--text);
 }
 
 .background-select {
   margin-left: auto;
-  padding: 4px 8px;
-  border-radius: 6px;
-  border: 1px solid #ccc;
-  background: #fff;
+  padding: 5px 8px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-dim);
   font-size: 13px;
 }
 
 .page-editor-canvas {
   flex: 1;
   min-height: 0;
-}
-
-@media (prefers-color-scheme: dark) {
-  .page-editor-header,
-  .page-tags-row {
-    border-bottom-color: #2e303a;
-  }
-  .back-button,
-  .sidebar-toggle {
-    background: #16171d;
-    color: #f3f4f6;
-    border-color: #2e303a;
-  }
-  .page-title-input {
-    color: #f3f4f6;
-  }
-  .tag-chip {
-    background: #1f2a44;
-    color: #8fb2ff;
-  }
-  .tag-input {
-    border-color: #444;
-    color: #f3f4f6;
-  }
-  .background-select {
-    background: #16171d;
-    color: #f3f4f6;
-    border-color: #2e303a;
-  }
 }

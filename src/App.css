@@ -6,7 +6,8 @@
   padding: 24px;
   text-align: center;
   font-family: system-ui, sans-serif;
-  color: #666;
+  background: var(--bg);
+  color: var(--text-dim);
 }
 
 /* Wird von den Diagnose-Testseiten unter /tests global mitgenutzt (siehe src/pages/tests.css) -
@@ -23,10 +24,4 @@
   background: #0d0e12;
   color: #7ee787;
   border-top: 1px solid #2e303a;
-}
-
-@media (prefers-color-scheme: dark) {
-  .auth-loading {
-    color: #9ca3af;
-  }
 }

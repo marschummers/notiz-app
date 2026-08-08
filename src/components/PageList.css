@@ -5,6 +5,8 @@
   padding: 20px 24px;
   padding-top: max(20px, env(safe-area-inset-top));
   font-family: system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
 }
 
 .page-list-header {
@@ -21,29 +23,42 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--text);
 }
 
 .sidebar-toggle {
   padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid #ccc;
-  background: #fff;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-dim);
   cursor: pointer;
   flex-shrink: 0;
 }
 
+.sidebar-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
 .page-list-header > button:not(.sidebar-toggle) {
-  padding: 8px 14px;
-  border-radius: 8px;
-  border: 1px solid #1d5fd6;
-  background: #1d5fd6;
-  color: #fff;
+  padding: 9px 16px;
+  border-radius: var(--radius-control);
+  border: 1px solid transparent;
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
+  color: var(--accent-text);
+  font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
+  box-shadow: var(--shadow-card);
+}
+
+.page-list-header > button:not(.sidebar-toggle):hover {
+  filter: brightness(1.08);
 }
 
 .page-list-hint {
-  color: #888;
+  color: var(--text-faint);
 }
 
 .page-grid {
@@ -54,29 +69,31 @@
 
 .page-tile {
   position: relative;
-  border: 1px solid #e5e4e7;
-  border-radius: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
   padding: 14px;
   cursor: pointer;
-  background: #fff;
+  background: var(--bg-elevated);
   min-height: 90px;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
   gap: 4px;
+  box-shadow: var(--shadow-card);
 }
 
 .page-tile:hover {
-  border-color: #1d5fd6;
+  border-color: var(--accent);
 }
 
 .page-tile-preview {
-  color: #999;
+  color: var(--text-faint);
   font-size: 12px;
 }
 
 .page-tile-title {
   font-weight: 500;
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -88,28 +105,15 @@
   right: 6px;
   border: none;
   background: transparent;
+  color: var(--text-faint);
   cursor: pointer;
-  opacity: 0.4;
+  opacity: 0.6;
   padding: 4px;
   border-radius: 4px;
 }
 
 .page-tile-delete:hover {
   opacity: 1;
-  background: rgba(0, 0, 0, 0.08);
-}
-
-@media (prefers-color-scheme: dark) {
-  .page-tile {
-    background: #16171d;
-    border-color: #2e303a;
-  }
-  .page-tile-delete:hover {
-    background: rgba(255, 255, 255, 0.1);
-  }
-  .sidebar-toggle {
-    background: #16171d;
-    color: #f3f4f6;
-    border-color: #2e303a;
-  }
+  color: var(--bad);
+  background: rgba(191, 97, 82, 0.15);
 }

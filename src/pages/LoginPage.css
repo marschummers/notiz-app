@@ -6,6 +6,15 @@
   height: 100dvh;
   font-family: system-ui, sans-serif;
   padding: 20px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.login-screen h1 {
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .login-panel {
@@ -24,61 +33,69 @@
 
 .field span {
   font-size: 13px;
-  color: #666;
+  color: var(--text-faint);
 }
 
 .field input {
   padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid #ccc;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
   font-size: 16px;
 }
 
+.field input:focus {
+  outline: 1px solid var(--accent);
+  border-color: var(--accent);
+}
+
 .hint {
-  color: #666;
+  color: var(--text-dim);
   font-size: 14px;
   line-height: 1.4;
   margin: 0;
 }
 
 .login-error {
-  color: #d1263f;
+  color: var(--bad);
   font-size: 13px;
   margin: 0;
 }
 
 .primary-button {
-  padding: 10px 14px;
-  border-radius: 8px;
-  border: 1px solid #1d5fd6;
-  background: #1d5fd6;
-  color: #fff;
+  padding: 11px 14px;
+  border-radius: var(--radius-control);
+  border: 1px solid transparent;
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
+  color: var(--accent-text);
   cursor: pointer;
   font-size: 15px;
+  font-weight: 600;
+  box-shadow: var(--shadow-card);
+}
+
+.primary-button:hover:not(:disabled) {
+  filter: brightness(1.08);
 }
 
 .primary-button:disabled {
   opacity: 0.5;
   cursor: default;
+  filter: none;
 }
 
 .secondary-button {
   padding: 8px 14px;
-  border-radius: 8px;
-  border: 1px solid #ccc;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border);
   background: transparent;
+  color: var(--text-dim);
   cursor: pointer;
   font-size: 13px;
 }
 
-@media (prefers-color-scheme: dark) {
-  .field input {
-    background: #16171d;
-    color: #f3f4f6;
-    border-color: #2e303a;
-  }
-  .secondary-button {
-    color: #f3f4f6;
-    border-color: #2e303a;
-  }
+.secondary-button:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
 }
