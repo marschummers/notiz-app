@@ -87,10 +87,77 @@ function redrawAll(ctx: CanvasRenderingContext2D, width: number, height: number,
   }
 }
 
-// Wandelt Striche zwischen internem (absolutem, Canvas-Pixel-) und gespeichertem (relativem)
-// x-Format um - siehe toAbsoluteX/toStoredX oben. y bleibt in beiden Richtungen unveraendert.
-function withStrokesX(strokes: Stroke[], convert: (x: number, width: number) => number, width: number): Stroke[] {
-  return strokes.map((s) => ({ ...s, points: s.points.map((p) => ({ ...p, x: convert(p.x, width) })) }))
+interface PdfPageBox {
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
+// Vertikale Stapel-Position + Groesse jeder PDF-Seite im internen absoluten Koordinatenraum
+// (dieselbe Breite wie die Zeichenflaeche, siehe canvasWidth) - EINZIGE Stelle, die diese
+// Rechnung macht (sowohl fuer die Gesamthoehe der Notizflaeche als auch fuer die PDF-Bindung von
+// Strichen, siehe findPdfPageAt/pdfPageBox unten), damit beide nie auseinanderlaufen koennen.
+function computePdfPageLayout(pdfPages: RenderedPdfPage[], canvasWidth: number): PdfPageBox[] {
+  let top = 0
+  return pdfPages.map((p) => {
+    const height = canvasWidth > 0 ? (canvasWidth * p.height) / p.width : 0
+    const box: PdfPageBox = { left: 0, top, width: canvasWidth, height }
+    top += height + PDF_PAGE_GAP
+    return box
+  })
+}
+
+// Liefert die 1-indexierte (wie pdf.js) Seitennummer, auf der ein Punkt mit dieser absoluten
+// Y-Koordinate liegt - oder null, wenn er auf keiner PDF-Seite liegt (kein PDF geladen, oder Y
+// liegt im Papierbereich unterhalb der letzten Seite).
+function findPdfPageAt(y: number, pdfPages: RenderedPdfPage[], canvasWidth: number): number | null {
+  const layout = computePdfPageLayout(pdfPages, canvasWidth)
+  for (let i = 0; i < layout.length; i++) {
+    if (y >= layout[i].top && y < layout[i].top + layout[i].height) return i + 1
+  }
+  return null
+}
+
+// Liefert Position/Groesse einer bestimmten (1-indexierten) PDF-Seite, oder null, wenn diese
+// Seite (noch) nicht gerendert ist (PDF laedt noch, oder eine andere/kuerzere Datei ist
+// inzwischen geladen).
+function pdfPageBox(pageNumber: number, pdfPages: RenderedPdfPage[], canvasWidth: number): PdfPageBox | null {
+  const idx = pageNumber - 1
+  const layout = computePdfPageLayout(pdfPages, canvasWidth)
+  if (idx < 0 || idx >= layout.length || canvasWidth <= 0 || layout[idx].height <= 0) return null
+  return layout[idx]
+}
+
+// Wandelt einen einzelnen Strich vom internen absoluten Koordinatenraum ins gespeicherte Format
+// um. Ohne PDF-Bindung (pdfAnchor) exakt wie bisher: nur x relativ zur Notizbreite, y
+// unveraendert absolut (siehe toStoredX). Mit PDF-Bindung werden x UND y stattdessen als
+// Bruchteil von Breite/Hoehe GENAU DIESER Seite gespeichert (siehe pdfPageBox oben) - das haelt
+// eine Markierung exakt auf derselben Stelle der Seite, unabhaengig von Bildschirmbreite/
+// Renderbreite.
+function strokeToStored(stroke: Stroke, canvasWidth: number, pdfPages: RenderedPdfPage[]): Stroke {
+  if (!stroke.pdfAnchor) {
+    return { ...stroke, points: stroke.points.map((p) => ({ ...p, x: toStoredX(p.x, canvasWidth) })) }
+  }
+  const box = pdfPageBox(stroke.pdfAnchor.pageNumber, pdfPages, canvasWidth)
+  if (!box) return stroke // PDF (noch) nicht geladen - Punkte unveraendert lassen statt falsch umzurechnen.
+  return {
+    ...stroke,
+    points: stroke.points.map((p) => ({ ...p, x: (p.x - box.left) / box.width, y: (p.y - box.top) / box.height })),
+  }
+}
+
+// Kehrt strokeToStored um: gespeichertes Format -> interner absoluter Koordinatenraum.
+function strokeToAbsolute(stroke: Stroke, canvasWidth: number, pdfPages: RenderedPdfPage[]): Stroke {
+  if (!stroke.pdfAnchor) {
+    return { ...stroke, points: stroke.points.map((p) => ({ ...p, x: toAbsoluteX(p.x, canvasWidth) })) }
+  }
+  const box = pdfPageBox(stroke.pdfAnchor.pageNumber, pdfPages, canvasWidth)
+  if (!box) return stroke // Seite noch nicht gerendert - unveraendert lassen, spaeter erneut versuchen.
+  return {
+    ...stroke,
+    points: stroke.points.map((p) => ({ ...p, x: box.left + p.x * box.width, y: box.top + p.y * box.height })),
+  }
 }
 
 // Sucht rueckwaerts vom Cursor aus nach einem offenen "[[" (ohne dazwischenliegendes "]]" oder
@@ -810,16 +877,58 @@ export default function DrawingCanvas({
   }, [])
 
   // Gesamthoehe der Zeichenflaeche: mindestens die sichtbare Wrap-Hoehe, oder - falls ein PDF
-  // geladen ist und mehr Platz braucht - die Summe aller (responsiv auf canvasWidth skalierten)
-  // PDF-Seitenhoehen. Hintergrund/Canvas/Task-Ebene/PDF-Ebene bekommen unten alle dieselbe
+  // geladen ist und mehr Platz braucht - die Hoehe bis zum Ende der letzten PDF-Seite (siehe
+  // computePdfPageLayout). Hintergrund/Canvas/Task-Ebene/PDF-Ebene bekommen unten alle dieselbe
   // Hoehe, dadurch bleibt die Handschrift exakt ueber den PDF-Seiten, auch beim Zoomen/Panning
   // (dieselbe CSS-Transform-Logik wie bisher, siehe applyView).
-  const pdfContentHeight = pdfPages.reduce(
-    (sum, p) => sum + (canvasWidth > 0 ? (canvasWidth * p.height) / p.width : 0),
-    0,
-  ) + Math.max(0, pdfPages.length - 1) * PDF_PAGE_GAP
+  const pdfLayout = computePdfPageLayout(pdfPages, canvasWidth)
+  const pdfContentHeight = pdfLayout.length > 0 ? pdfLayout[pdfLayout.length - 1].top + pdfLayout[pdfLayout.length - 1].height : 0
   const contentHeight = Math.max(wrapHeight, pdfContentHeight)
   const contentHeightStyle = contentHeight > 0 ? `${contentHeight}px` : undefined
+
+  // Refs fuer die Striche-PDF-Bindung, gebraucht im Mount-Effekt weiter unten (dort sind nur
+  // Refs sicher aktuell, siehe colorRef/baseWidthRef-Muster) und in resolveStrokes.
+  const pdfPagesRef = useRef<RenderedPdfPage[]>(pdfPages)
+  useEffect(() => {
+    pdfPagesRef.current = pdfPages
+  }, [pdfPages])
+  const pdfPrintoutRef = useRef(pdfPrintout)
+  useEffect(() => {
+    pdfPrintoutRef.current = pdfPrintout
+  }, [pdfPrintout])
+
+  // true, sobald die Breite (siehe SETTLE_MS im Mount-Effekt) sich einmal beruhigt hat und die
+  // erste Umrechnung gespeichert -> intern angelaufen ist. resolvedStrokesRef merkt sich per
+  // Objekt-Referenz, welche Striche schon umgerechnet wurden - noetig, weil PDF-gebundene
+  // Striche unter Umstaenden erst NACH dem Breiten-Settle aufloesbar sind (das PDF laedt
+  // asynchron, siehe Lade-Effekt oben) und dann in einem zweiten Anlauf (siehe Effekt weiter
+  // unten, reagiert auf pdfPages) nachgeholt werden - ohne dieses Merken wuerde ein bereits
+  // aufgeloester Strich dabei ein zweites Mal (und dann falsch) umgerechnet.
+  const widthSettledRef = useRef(false)
+  const resolvedStrokesRef = useRef<WeakSet<Stroke>>(new WeakSet())
+
+  function resolveStrokes() {
+    const width = canvasWidthRef.current
+    const pages = pdfPagesRef.current
+    strokesRef.current = strokesRef.current.map((s) => {
+      if (resolvedStrokesRef.current.has(s)) return s
+      if (s.pdfAnchor && !pdfPageBox(s.pdfAnchor.pageNumber, pages, width)) return s
+      const converted = strokeToAbsolute(s, width, pages)
+      resolvedStrokesRef.current.add(converted)
+      return converted
+    })
+    const canvas = canvasRef.current
+    const ctx = ctxRef.current
+    if (canvas && ctx) redrawAll(ctx, canvas.clientWidth, canvas.clientHeight, strokesRef.current)
+  }
+
+  // Sobald ein PDF (neu) geladen ist, koennen bislang unaufloesbare PDF-gebundene Striche
+  // (siehe resolveStrokes) jetzt eine Seite finden - erneuter Versuch. Vor dem ersten
+  // Breiten-Settle passiert hier nichts, das uebernimmt der Mount-Effekt selbst.
+  useEffect(() => {
+    if (widthSettledRef.current) resolveStrokes()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pdfPages])
 
   // Laedt + rendert den aktuellen pdfPrintout, sobald er sich aendert (neu gesetzt, entfernt,
   // oder durch einen anderen ersetzt - erkennbar an einer anderen id). loadPdfBlob (siehe
@@ -904,7 +1013,7 @@ export default function DrawingCanvas({
     if (stroke) {
       strokesRef.current.push(stroke)
       setStrokeCount(strokesRef.current.length)
-      onChangeRef.current(withStrokesX(strokesRef.current, toStoredX, canvasWidthRef.current))
+      onChangeRef.current(strokesRef.current.map((s) => strokeToStored(s, canvasWidthRef.current, pdfPagesRef.current)))
     }
     currentStrokeRef.current = null
     activeTouchIdRef.current = null
@@ -926,7 +1035,6 @@ export default function DrawingCanvas({
     // sich die Breite eine Weile nicht mehr aendert (SETTLE_MS ohne neuen ResizeObserver-Tick) -
     // bis dahin bleibt die Flaeche leer statt Tinte kurz an falscher Position aufblitzen zu lassen.
     const SETTLE_MS = 120
-    let initialConversionDone = false
     let settleTimer: ReturnType<typeof setTimeout> | null = null
 
     function resize() {
@@ -940,16 +1048,14 @@ export default function DrawingCanvas({
       if (!ctx) return
       ctx.scale(dpr, dpr)
       ctxRef.current = ctx
-      if (initialConversionDone) redrawAll(ctx, clientWidth, clientHeight, strokesRef.current)
+      if (widthSettledRef.current) redrawAll(ctx, clientWidth, clientHeight, strokesRef.current)
 
-      if (!initialConversionDone) {
+      if (!widthSettledRef.current) {
         if (settleTimer) clearTimeout(settleTimer)
         settleTimer = setTimeout(() => {
-          if (initialConversionDone) return
-          initialConversionDone = true
-          strokesRef.current = withStrokesX(strokesRef.current, toAbsoluteX, canvasWidthRef.current)
-          const freshCtx = ctxRef.current
-          if (freshCtx) redrawAll(freshCtx, canvas!.clientWidth, canvas!.clientHeight, strokesRef.current)
+          if (widthSettledRef.current) return
+          widthSettledRef.current = true
+          resolveStrokes()
         }, SETTLE_MS)
       }
     }
@@ -1020,11 +1126,18 @@ export default function DrawingCanvas({
     }
 
     function startStroke(p: Point) {
+      // Bindet den Strich an die PDF-Seite, auf der er beginnt (siehe findPdfPageAt) - fuer die
+      // gesamte Dauer des Strichs, ein einzelner Pencil-Zug ueberquert in der Praxis nie eine
+      // Seitengrenze. Ohne PDF an dieser Stelle (kein pdfPrintout oder Y liegt im Papierbereich)
+      // bleibt der Strich komplett ungebunden - normale Tinte verhaelt sich dadurch unveraendert.
+      const printoutId = pdfPrintoutRef.current?.id
+      const pageNumber = printoutId ? findPdfPageAt(p.y, pdfPagesRef.current, canvasWidthRef.current) : null
       currentStrokeRef.current = {
         points: [p],
         color: colorRef.current,
         width: baseWidthRef.current,
         eraser: eraserRef.current,
+        pdfAnchor: printoutId && pageNumber !== null ? { printoutId, pageNumber } : undefined,
       }
     }
 
@@ -1159,7 +1272,7 @@ export default function DrawingCanvas({
     const canvas = canvasRef.current
     const ctx = ctxRef.current
     if (canvas && ctx) redrawAll(ctx, canvas.clientWidth, canvas.clientHeight, strokesRef.current)
-    onChangeRef.current(withStrokesX(strokesRef.current, toStoredX, canvasWidthRef.current))
+    onChangeRef.current(strokesRef.current.map((s) => strokeToStored(s, canvasWidthRef.current, pdfPagesRef.current)))
   }
 
   function clearAll() {
@@ -1169,7 +1282,7 @@ export default function DrawingCanvas({
     const canvas = canvasRef.current
     const ctx = ctxRef.current
     if (canvas && ctx) redrawAll(ctx, canvas.clientWidth, canvas.clientHeight, strokesRef.current)
-    onChangeRef.current(withStrokesX(strokesRef.current, toStoredX, canvasWidthRef.current))
+    onChangeRef.current(strokesRef.current.map((s) => strokeToStored(s, canvasWidthRef.current, pdfPagesRef.current)))
   }
 
   // Platziert ein neues To-do ODER Textfeld an der Tap-Position (je nach aktivem Modus - beide

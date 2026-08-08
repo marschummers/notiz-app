@@ -5,11 +5,21 @@ export interface Point {
   pressure: number
 }
 
+// Bindung eines Strichs an eine bestimmte PDF-Seite (siehe components/DrawingCanvas.tsx
+// strokeToStored/strokeToAbsolute) - fehlt bei normaler, nicht an ein PDF gebundener Tinte
+// komplett (gleiches optionales Muster wie ueberall sonst). printoutId identifiziert das PDF
+// (PdfPrintout.id), pageNumber ist 1-indexiert wie in pdf.js. Ist dieses Feld gesetzt, sind
+// points[].x/y KEINE Canvas-Koordinaten mehr, sondern Bruchteile der Breite/Hoehe GENAU DIESER
+// PDF-Seite (0-1) - eine PDF-Seite skaliert (anders als normales Papier) mit der Notizbreite
+// auch in der Hoehe (festes Seitenverhaeltnis), ein rein x-relatives/y-absolutes System wie bei
+// normaler Tinte wuerde die Position innerhalb der Seite deshalb je nach Bildschirmbreite
+// verschieben.
 export interface Stroke {
   points: Point[]
   color: string
   width: number
   eraser: boolean
+  pdfAnchor?: { printoutId: string; pageNumber: number }
 }
 
 // Ein Ordner ("Abschnitt" im OneNote-Sinn), beliebig tief verschachtelbar ueber parentId.
