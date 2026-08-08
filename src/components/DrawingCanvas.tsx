@@ -961,7 +961,21 @@ function TextBlockItem({
         </div>
       )}
       {editing && (
-        <button className="task-delete" onClick={onDelete} aria-label="Textfeld löschen" title="Textfeld löschen">
+        <button
+          className="task-delete"
+          // onMouseDown statt onClick + preventDefault: ein Klick auf diesen Button loest zuerst
+          // blur auf dem fokussierten Textarea aus (siehe onBlur unten), das beendet editing und
+          // laesst diesen Button (nur bei editing gerendert, siehe oben) verschwinden, BEVOR der
+          // eigentliche Click-Event ankommt - onDelete wuerde dadurch nie ausgeloest. preventDefault
+          // auf mousedown unterdrueckt den Fokuswechsel/blur von vornherein (gleiches Muster wie
+          // link-autocomplete-row oben).
+          onMouseDown={(e) => {
+            e.preventDefault()
+            onDelete()
+          }}
+          aria-label="Textfeld löschen"
+          title="Textfeld löschen"
+        >
           ✕
         </button>
       )}
