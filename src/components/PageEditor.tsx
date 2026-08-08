@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
 import {
@@ -66,6 +66,23 @@ export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBac
     [],
   )?.map((p) => ({ id: p.id, title: p.title || 'Ohne Titel' }))
 
+  // Lokaler Entwurf statt direkt page.title als value: renamePage() speichert asynchron ueber
+  // Dexie, das Zurueckkommen des neuen Titels via useLiveQuery ist dadurch von der eigentlichen
+  // Tastatureingabe entkoppelt. Ohne lokalen Entwurf wuerde React bei jedem Tastendruck das
+  // <input> mit dem (verzoegert) zurueckkommenden page.title neu belegen - das setzt den Cursor
+  // in den meisten Browsern ans Ende, selbst wenn der Text identisch ist. Der Entwurf wird nur
+  // beim Wechsel auf eine ANDERE Seite aus page.title neu befuellt (syncedPageIdRef verhindert,
+  // dass eine durch die eigene Eingabe ausgeloeste page.title-Aktualisierung den gerade
+  // getippten Text ueberschreibt).
+  const [titleDraft, setTitleDraft] = useState('')
+  const syncedPageIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (page && syncedPageIdRef.current !== pageId) {
+      setTitleDraft(page.title)
+      syncedPageIdRef.current = pageId
+    }
+  }, [page, pageId])
+
   if (!page) return null
 
   const tagIds = new Set((tagLinks ?? []).map((l) => l.tagId))
@@ -90,8 +107,11 @@ export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBac
         </button>
         <input
           className="page-title-input"
-          value={page.title}
-          onChange={(e) => renamePage(pageId, e.target.value)}
+          value={titleDraft}
+          onChange={(e) => {
+            setTitleDraft(e.target.value)
+            renamePage(pageId, e.target.value)
+          }}
           placeholder="Ohne Titel"
         />
         <button
