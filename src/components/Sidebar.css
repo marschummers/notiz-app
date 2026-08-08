@@ -79,6 +79,14 @@
   outline: 1px solid var(--accent-strong);
 }
 
+/* Wird per DOM-Klasse (nicht React-State) gesetzt, waehrend eine Seite aus PageList darueber
+   gezogen wird - siehe lib/useDragReorder.ts externalDrop. */
+[data-folder-drop-target].drop-target-active {
+  background: var(--accent-soft);
+  outline: 2px dashed var(--accent-strong);
+  color: var(--accent-strong);
+}
+
 .tree-label {
   flex: 1;
   overflow: hidden;

@@ -74,6 +74,7 @@ export default function Sidebar({
           </button>
         </div>
         <div
+          data-folder-drop-target="__root__"
           className={`tree-row root-row${visibleSelection.type === 'folder' && visibleSelection.id === undefined ? ' selected' : ''}`}
           onClick={() => onSelect({ type: 'folder', id: undefined })}
         >

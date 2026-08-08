@@ -43,6 +43,7 @@ export default function FolderTree({ parentId, depth, selection, onSelect, expan
           <div key={folder.id}>
             <div
               data-drag-id={folder.id}
+              data-folder-drop-target={folder.id}
               className={`tree-row${isSelected ? ' selected' : ''}${dragId === folder.id ? ' dragging' : ''}`}
               style={{ paddingLeft: 10 + depth * 16 }}
               onClick={() => onSelect({ type: 'folder', id: folder.id })}

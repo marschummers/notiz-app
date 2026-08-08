@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
-import { createPage, deletePage, reorderPages } from '../lib/actions'
+import { createPage, deletePage, movePage, reorderPages } from '../lib/actions'
 import { formatRelativeTime } from '../lib/format'
 import type { Selection } from '../lib/selection'
 import { useDragReorder } from '../lib/useDragReorder'
@@ -39,15 +39,29 @@ export default function PageList({ selection, sidebarOpen, onToggleSidebar, onOp
 
   const heading = selection.type === 'folder' ? (selection.id ? folder?.name ?? '…' : 'Nicht abgelegt') : `#${tag?.name ?? '…'}`
 
-  // Umsortieren per Drag ergibt nur innerhalb eines Ordners Sinn - eine Tag-Ansicht mischt
-  // Seiten aus verschiedenen Ordnern, deren `order`-Feld aber weiterhin ihre Position INNERHALB
-  // ihres jeweiligen Ordners bestimmt (siehe reorderPages), das wuerde sich sonst ueberschneiden.
+  // Umsortieren INNERHALB der Liste ergibt nur innerhalb eines Ordners Sinn - eine Tag-Ansicht
+  // mischt Seiten aus verschiedenen Ordnern, deren `order`-Feld aber weiterhin ihre Position
+  // INNERHALB ihres jeweiligen Ordners bestimmt (siehe reorderPages), das wuerde sich sonst
+  // ueberschneiden. Der Griff selbst bleibt aber auch in der Tag-Ansicht sichtbar/nutzbar, da
+  // das Verschieben in einen ANDEREN Ordner (siehe externalDrop unten) davon unberuehrt ist.
   const canReorder = selection.type === 'folder'
-  const { containerRef, dragId, liveIds, onHandleTouchStart, onHandleTouchMove, onHandleTouchEnd, onHandleMouseDown } =
-    useDragReorder(reorderPages)
+  const { containerRef, dragId, liveIds, onHandleTouchStart, onHandleTouchMove, onHandleTouchEnd, onHandleMouseDown } = useDragReorder(
+    canReorder ? reorderPages : () => {},
+    '[data-drag-id]',
+    {
+      // Sidebar/FolderTree markieren Ordner-Zeilen mit data-folder-drop-target (Wurzel = "__root__",
+      // siehe FolderTree.tsx/Sidebar.tsx) - beim Loslassen darueber wandert die Seite in diesen
+      // Ordner, statt innerhalb der aktuellen Liste umsortiert zu werden.
+      selector: '[data-folder-drop-target]',
+      attr: 'folderDropTarget',
+      onDropOnExternal: (pageId, targetKey) => {
+        movePage(pageId, targetKey === '__root__' ? undefined : targetKey)
+      },
+    },
+  )
   const naturalIds = (pages ?? []).map((p) => p.id)
   const pagesById = new Map((pages ?? []).map((p) => [p.id, p]))
-  const displayIds = canReorder ? (liveIds ?? naturalIds) : naturalIds
+  const displayIds = liveIds ?? naturalIds
   const displayPages = displayIds.map((id) => pagesById.get(id)).filter((p): p is NonNullable<typeof p> => !!p)
 
   return (
@@ -70,15 +84,13 @@ export default function PageList({ selection, sidebarOpen, onToggleSidebar, onOp
             className={`page-tile${dragId === page.id ? ' dragging' : ''}`}
             onClick={() => onOpenPage(page.id)}
           >
-            {canReorder && (
-              <DragHandle
-                className="page-tile-handle"
-                onTouchStart={(e) => onHandleTouchStart(page.id, naturalIds, e)}
-                onTouchMove={onHandleTouchMove}
-                onTouchEnd={onHandleTouchEnd}
-                onMouseDown={(e) => onHandleMouseDown(page.id, naturalIds, e)}
-              />
-            )}
+            <DragHandle
+              className="page-tile-handle"
+              onTouchStart={(e) => onHandleTouchStart(page.id, naturalIds, e)}
+              onTouchMove={onHandleTouchMove}
+              onTouchEnd={onHandleTouchEnd}
+              onMouseDown={(e) => onHandleMouseDown(page.id, naturalIds, e)}
+            />
             <div className="page-tile-preview">Bearbeitet {formatRelativeTime(page.updatedAt)}</div>
             <div className="page-tile-title">{page.title || 'Ohne Titel'}</div>
             <button
