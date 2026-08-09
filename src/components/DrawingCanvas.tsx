@@ -1175,6 +1175,7 @@ export default function DrawingCanvas({
   // spaeter genau auf contentHeight unten waechst) - Basis fuer "wie hoch ist die Flaeche
   // mindestens, auch ohne PDF" (siehe contentHeight weiter unten).
   const [wrapHeight, setWrapHeight] = useState(0)
+  const [canvasExtensionCount, setCanvasExtensionCount] = useState(0)
   useLayoutEffect(() => {
     const wrap = wrapRef.current
     if (!wrap) return
@@ -1184,19 +1185,18 @@ export default function DrawingCanvas({
     return () => ro.disconnect()
   }, [])
 
-  // Gesamthoehe der Zeichenflaeche: Unter dem eigentlichen Inhalt bleibt immer eine weitere
-  // sichtbare Bildschirmhoehe als echter Arbeitsbereich. Ohne PDF kann die Notiz dadurch wieder
-  // gescrollt werden; bei einem mehrseitigen PDF endet die Bewegung nicht hart an der letzten
-  // Seite. Wichtig: Nicht nur Pan kuenstlich erlauben, sondern Hintergrund UND Canvas tatsaechlich
-  // verlaengern - so bleibt das Papiermuster sichtbar und der Zusatzbereich ist beschreibbar.
+  // Gesamthoehe der Zeichenflaeche: Unter dem eigentlichen Inhalt bleibt mindestens eine weitere
+  // Bildschirmhoehe als echter Arbeitsbereich. Naehert sich der Nutzer dessen Ende, erhoeht
+  // applyView canvasExtensionCount und erzeugt dadurch fortlaufend neues, beschreibbares Papier.
   const pdfLayout = computePdfPageLayout(pdfPages, canvasWidth)
   const pdfContentHeight = pdfLayout.length > 0 ? pdfLayout[pdfLayout.length - 1].top + pdfLayout[pdfLayout.length - 1].height : 0
-  const contentHeight = Math.max(wrapHeight * 2, pdfContentHeight + wrapHeight)
+  const contentHeight = Math.max(wrapHeight, pdfContentHeight) + wrapHeight * (canvasExtensionCount + 1)
   const contentHeightStyle = contentHeight > 0 ? `${contentHeight}px` : undefined
   // Fuer den Touch/Wheel-Mount-Effekt (dort sind nur Refs sicher aktuell, siehe
   // canvasWidthRef/colorRef-Muster) - applyView braucht die aktuelle Inhaltshoehe, um Pan/Zoom
   // auf den tatsaechlichen Inhalt zu begrenzen (siehe clampPan dort).
   const contentHeightRef = useRef(contentHeight)
+  const extensionRequestedAtHeightRef = useRef<number | null>(null)
   useEffect(() => {
     contentHeightRef.current = contentHeight
   }, [contentHeight])
@@ -1602,6 +1602,18 @@ export default function DrawingCanvas({
       background!.style.transform = transform
       if (taskLayerRef.current) taskLayerRef.current.style.transform = transform
       if (pdfLayerRef.current) pdfLayerRef.current.style.transform = transform
+
+      // Sobald nur noch etwa ein Drittel des sichtbaren Bereichs bis zum Papierende uebrig ist,
+      // eine weitere Bildschirmhoehe anhaengen. Pro aktueller Hoehe nur einmal anfordern, damit
+      // mehrere Wheel-/Touch-Events vor dem naechsten React-Render nicht mehrfach verlaengern.
+      const viewHeight = overlay!.getBoundingClientRect().height
+      const currentHeight = contentHeightRef.current
+      const visibleBottom = (viewHeight - clampedY) / clamped
+      const extensionThreshold = viewHeight / clamped / 3
+      if (currentHeight - visibleBottom <= extensionThreshold && extensionRequestedAtHeightRef.current !== currentHeight) {
+        extensionRequestedAtHeightRef.current = currentHeight
+        setCanvasExtensionCount((count) => count + 1)
+      }
     }
 
     function resetZoom() {
