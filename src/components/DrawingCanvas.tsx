@@ -12,6 +12,15 @@ import './DrawingCanvas.css'
 // Gesamthoehe (siehe contentHeight) exakt mit der tatsaechlichen Darstellung uebereinstimmt.
 const PDF_PAGE_GAP = 14
 
+// Hoehe eines einzelnen Papiermuster-Segments (siehe .drawing-background-chunk in
+// DrawingCanvas.css) - WebKit rastert einen CSS-Gradient-Hintergrund auf einem sehr hohen
+// Element (bei mehrseitigen PDFs kann die Zeichenflaeche mehrere Tausend Pixel hoch werden)
+// manchmal nur teilweise. Das Papiermuster wird deshalb auf mehrere gestapelte, ausreichend
+// kleine Segmente verteilt statt auf ein einziges hohes Element gerendert. 2400 ist ein
+// gemeinsames Vielfaches von 40px (liniert) und 24px (gepunktet), Segmentgrenzen fallen dadurch
+// exakt auf eine Musterperiode und die Naht zwischen zwei Segmenten bleibt unsichtbar.
+const PATTERN_CHUNK_HEIGHT = 2400
+
 // Haengt ein bereits von pdf.js gerendertes <canvas> (siehe lib/pdfRender.ts) direkt in den DOM
 // statt es erneut ueber eine DataURL zu kodieren - das Original bleibt ein einziges, nur im
 // Speicher gehaltenes Canvas-Element pro Seite.
@@ -1154,28 +1163,6 @@ export default function DrawingCanvas({
     return () => ro.disconnect()
   }, [])
 
-  // TEMPORAER - Diagnose fuer den "Papiermuster verschwindet teilweise"-Bug (siehe Chat): zeigt
-  // die tatsaechlichen DOM-Werte an, um zu pruefen, ob background/canvas/task-layer wirklich die
-  // volle contentHeight besitzen (Layout-Ebene) und der Fehler rein beim Malen/Rastern von
-  // WebKit liegt, oder ob schon die Hoehe selbst falsch gesetzt ist. Nach der Diagnose wieder
-  // entfernen.
-  const [heightDebug, setHeightDebug] = useState('')
-  function updateHeightDebug() {
-    const wrap = wrapRef.current
-    const bg = backgroundRef.current
-    const canvas = canvasRef.current
-    const taskLayer = taskLayerRef.current
-    if (!wrap || !bg || !canvas) return
-    const bgRect = bg.getBoundingClientRect().height
-    const canvasRect = canvas.getBoundingClientRect().height
-    const taskRect = taskLayer?.getBoundingClientRect().height
-    setHeightDebug(
-      `wrap.clientHeight=${wrap.clientHeight} | bg.style.height=${bg.style.height || '(100%)'} bg.rect=${bgRect.toFixed(1)} | ` +
-        `canvas.style.height=${canvas.style.height || '(100%)'} canvas.rect=${canvasRect.toFixed(1)} | ` +
-        `task.style.height=${taskLayer?.style.height || '(100%)'} task.rect=${(taskRect ?? 0).toFixed(1)}`,
-    )
-  }
-
   // Gesamthoehe der Zeichenflaeche: mindestens die sichtbare Wrap-Hoehe, oder - falls ein PDF
   // geladen ist und mehr Platz braucht - die Hoehe bis zum Ende der letzten PDF-Seite (siehe
   // computePdfPageLayout). Hintergrund/Canvas/Task-Ebene/PDF-Ebene bekommen unten alle dieselbe
@@ -1375,7 +1362,6 @@ export default function DrawingCanvas({
       const box = computeSelectionBox(strokesRef.current, selectedIndicesRef.current, width, pages, activeId, offset?.dx ?? 0, offset?.dy ?? 0)
       if (box) drawSelectionBox(ctx, box)
     }
-    updateHeightDebug() // TEMPORAER - siehe Kommentar oben bei heightDebug
   }
 
   // Sobald sich das geladene PDF aendert (fertig geladen, entfernt, oder durch ein anderes
@@ -1965,12 +1951,18 @@ export default function DrawingCanvas({
         <div
           key={background}
           ref={backgroundRef}
-          className={`drawing-background bg-${background}`}
+          className="drawing-background"
           style={{
             height: contentHeightStyle,
             transform: `translate(${viewRef.current.x}px, ${viewRef.current.y}px) scale(${viewRef.current.scale})`,
           }}
         >
+          {(background === 'lined' || background === 'dotted') &&
+            Array.from({ length: Math.max(1, Math.ceil(contentHeight / PATTERN_CHUNK_HEIGHT)) }).map((_, i) => {
+              const top = i * PATTERN_CHUNK_HEIGHT
+              const height = Math.min(PATTERN_CHUNK_HEIGHT, contentHeight - top)
+              return <div key={i} className={`drawing-background-chunk bg-${background}`} style={{ top, height }} />
+            })}
           {background === 'cornell' && (
             <div className="cornell-page">
               <div className="cornell-title">{title || 'Ohne Titel'}</div>
@@ -2004,8 +1996,6 @@ export default function DrawingCanvas({
           </div>
         )}
         <div className="page-updated-at">Bearbeitet {formatRelativeTime(updatedAt)}</div>
-        {/* TEMPORAER - Diagnose, siehe heightDebug oben. Danach wieder entfernen. */}
-        {heightDebug && <div className="height-debug">{heightDebug}</div>}
         <canvas
           ref={canvasRef}
           className="drawing-canvas"

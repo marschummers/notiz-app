@@ -125,19 +125,36 @@
   pointer-events: none;
 }
 
+/* Liegen NICHT mehr auf .drawing-background selbst, sondern auf einzelnen
+   .drawing-background-chunk-Kindern (siehe dort) - deshalb ohne .drawing-background-Praefix,
+   damit dieselbe Regel fuer beide gilt. */
 /* Liniert: grosszuegiger Zeilenabstand zum Handschreiben. */
-.drawing-background.bg-lined {
+.bg-lined {
   background-image: repeating-linear-gradient(to bottom, transparent, transparent 39px, #d8d0ba 39px, #d8d0ba 40px);
 }
 
 /* Gepunktetes Raster (Bullet-Journal-Stil). */
-.drawing-background.bg-dotted {
+.bg-dotted {
   background-image: radial-gradient(#c7bfa4 1.2px, transparent 1.2px);
   background-size: 24px 24px;
 }
 
-.drawing-background.bg-blank {
+.bg-blank {
   background-image: none;
+}
+
+/* Ein Segment des liniert/gepunktet-Musters (siehe DrawingCanvas.tsx, PATTERN_CHUNK_HEIGHT) -
+   WebKit/Safari rastert einen CSS-Gradient-Hintergrund auf einem SEHR hohen Element (mehrseitige
+   PDFs koennen die Zeichenflaeche auf mehrere Tausend Pixel Hoehe bringen) manchmal nur
+   teilweise (leere Streifen ohne Muster, siehe Chat-Diagnose - Layout-Hoehe war nachweislich
+   korrekt, das Malen selbst schlug fehl). Das Muster deshalb nie auf einem einzigen, beliebig
+   hohen Element rendern, sondern auf mehrere ausreichend kleine, gestapelte Segmente verteilen -
+   PATTERN_CHUNK_HEIGHT ist ein gemeinsames Vielfaches von 40px (liniert) und 24px (gepunktet),
+   die Segmentgrenzen fallen dadurch exakt auf eine Musterperiode, die Naht ist unsichtbar. */
+.drawing-background-chunk {
+  position: absolute;
+  left: 0;
+  width: 100%;
 }
 
 /* Cornell-Layout: Titel, Subject-Box, zweispaltiger Details/Key-Points-Bereich, Summary-Box
@@ -216,27 +233,6 @@
   font-size: 11px;
   color: #a89c7c;
   pointer-events: none;
-}
-
-/* TEMPORAER - Diagnose-Anzeige fuer den Hintergrund-Hoehen-Bug, siehe DrawingCanvas.tsx
-   heightDebug. Danach wieder entfernen. Bleibt (wie .page-updated-at) fest an der
-   Bildschirmposition, wird NICHT mitgezoomt/-gepannt, damit sie immer lesbar ist. */
-.height-debug {
-  position: absolute;
-  top: 26px;
-  left: 10px;
-  right: 10px;
-  z-index: 20;
-  font-family: ui-monospace, Consolas, monospace;
-  font-size: 10px;
-  line-height: 1.4;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.72);
-  padding: 4px 6px;
-  border-radius: 4px;
-  pointer-events: none;
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 
 /* PDF-Seiten (siehe lib/pdfRender.ts) - liegt zwischen Papierhintergrund und Tinten-Canvas,
