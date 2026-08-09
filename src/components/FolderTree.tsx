@@ -19,6 +19,10 @@ export default function FolderTree({ parentId, depth, selection, onSelect, expan
     () => db.folders.filter((f) => !f.deletedAt && f.parentId === parentId).sortBy('order'),
     [parentId],
   )
+  const parentIdsWithChildren = useLiveQuery(async () => {
+    const activeFolders = await db.folders.filter((f) => !f.deletedAt).toArray()
+    return new Set(activeFolders.flatMap((f) => (f.parentId ? [f.parentId] : [])))
+  }, [])
 
   // ':scope > div > [data-drag-id]' statt nur '[data-drag-id]': FolderTree ist rekursiv, ein
   // ausgeklappter Unterordner rendert seine eigenen Zeilen als Nachfahren INNERHALB dieses
@@ -39,6 +43,7 @@ export default function FolderTree({ parentId, depth, selection, onSelect, expan
       {displayFolders.map((folder) => {
         const isSelected = selection.type === 'folder' && selection.id === folder.id
         const isExpanded = expanded.has(folder.id)
+        const hasChildren = parentIdsWithChildren?.has(folder.id) ?? false
         return (
           <div key={folder.id}>
             <div
@@ -46,7 +51,10 @@ export default function FolderTree({ parentId, depth, selection, onSelect, expan
               data-folder-drop-target={folder.id}
               className={`tree-row${isSelected ? ' selected' : ''}${dragId === folder.id ? ' dragging' : ''}`}
               style={{ paddingLeft: 10 + depth * 16 }}
-              onClick={() => onSelect({ type: 'folder', id: folder.id })}
+              onClick={() => {
+                onSelect({ type: 'folder', id: folder.id })
+                if (hasChildren && !isExpanded) onToggleExpand(folder.id)
+              }}
             >
               <DragHandle
                 onTouchStart={(e) => onHandleTouchStart(folder.id, naturalIds, e)}
@@ -54,23 +62,27 @@ export default function FolderTree({ parentId, depth, selection, onSelect, expan
                 onTouchEnd={onHandleTouchEnd}
                 onMouseDown={(e) => onHandleMouseDown(folder.id, naturalIds, e)}
               />
-              <button
-                className="tree-toggle"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onToggleExpand(folder.id)
-                }}
-                aria-label={isExpanded ? 'Einklappen' : 'Ausklappen'}
-              >
-                {isExpanded ? '▾' : '▸'}
-              </button>
+              {hasChildren ? (
+                <button
+                  className="tree-toggle"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onToggleExpand(folder.id)
+                  }}
+                  aria-label={isExpanded ? 'Einklappen' : 'Ausklappen'}
+                >
+                  {isExpanded ? '▾' : '▸'}
+                </button>
+              ) : (
+                <span className="tree-toggle-placeholder" aria-hidden="true" />
+              )}
               <span className="tree-label">{folder.name}</span>
               <button
                 className="tree-action"
                 onClick={(e) => {
                   e.stopPropagation()
                   createFolder(folder.id).then((id) => {
-                    onToggleExpand(folder.id)
+                    if (!isExpanded) onToggleExpand(folder.id)
                     onSelect({ type: 'folder', id })
                   })
                 }}
