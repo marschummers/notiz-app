@@ -147,22 +147,22 @@
 
 .page-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
 }
 
 .page-tile {
   position: relative;
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
-  padding: 14px;
+  padding: 38px 16px 16px;
   cursor: pointer;
   background: var(--bg-elevated);
-  min-height: 90px;
+  min-height: 150px;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
-  gap: 4px;
+  justify-content: flex-start;
+  gap: 8px;
   box-shadow: var(--shadow-card);
 }
 
@@ -185,14 +185,50 @@
 .page-tile-preview {
   color: var(--text-faint);
   font-size: 12px;
+  margin-top: auto;
 }
 
 .page-tile-title {
-  font-weight: 500;
+  font-size: 16px;
+  line-height: 1.35;
+  font-weight: 600;
   color: var(--text);
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.page-tile-folder {
+  color: var(--accent-strong);
+  font-size: 12px;
+  line-height: 1.3;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.page-tile-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.page-tile-type,
+.page-tile-afn {
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.page-tile-type {
+  color: var(--text-dim);
+  background: var(--bg-accent-tint);
+  border: 1px solid var(--border-soft);
+}
+
+.page-tile-afn {
+  color: var(--accent-strong);
+  background: var(--accent-soft);
 }
 
 .page-tile-delete {
