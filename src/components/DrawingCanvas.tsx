@@ -702,7 +702,10 @@ function TextBlockItem({
   const [draft, setDraft] = useState(block.text)
   const [linkTrigger, setLinkTrigger] = useState<{ start: number; query: string } | null>(null)
   const [linkActiveIndex, setLinkActiveIndex] = useState(0)
+  const [liveWidth, setLiveWidth] = useState<number | null>(null)
+  const textBlockRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const resizeChromeWidthRef = useRef(0)
 
   // Waehrend der Bearbeitung waechst die Hoehe automatisch mit dem Inhalt mit (siehe
   // Anforderung "gesamten Text lesen koennen") - reine CSS-Loesung reicht dafuer nicht,
@@ -713,6 +716,23 @@ function TextBlockItem({
     el.style.height = 'auto'
     el.style.height = `${el.scrollHeight}px`
   }, [editing, draft])
+
+  // Das native CSS-Resize veraendert zunaechst nur die <textarea>. Ein ResizeObserver zieht die
+  // aeussere Karte sofort mit, damit Hintergrund, Rahmen und Loeschen-Button waehrend des Ziehens
+  // dieselbe Breite behalten. Die Differenz umfasst Griff, Abstand und Padding der Karte.
+  useLayoutEffect(() => {
+    const input = textareaRef.current
+    const card = textBlockRef.current
+    if (!editing || !input || !card) return
+
+    resizeChromeWidthRef.current = Math.max(0, card.offsetWidth - input.offsetWidth)
+    const observer = new ResizeObserver(() => {
+      const width = input.offsetWidth + resizeChromeWidthRef.current
+      if (width > 0) setLiveWidth(width)
+    })
+    observer.observe(input)
+    return () => observer.disconnect()
+  }, [editing])
 
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null)
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -727,6 +747,7 @@ function TextBlockItem({
     if (editing) {
       setDraft(block.text)
       setLinkTrigger(null)
+      setLiveWidth(null)
     }
   }, [editing, block.text])
 
@@ -843,6 +864,12 @@ function TextBlockItem({
     setLinkActiveIndex(0)
   }
 
+  function saveCurrentWidth() {
+    const input = textareaRef.current
+    const width = input ? input.offsetWidth + resizeChromeWidthRef.current : textBlockRef.current?.offsetWidth
+    if (width && width > 0 && width !== block.width) onResizeWidth(width)
+  }
+
   function insertLink(page: { id: string; title: string }) {
     if (!linkTrigger) return
     const cursor = textareaRef.current?.selectionStart ?? draft.length
@@ -886,6 +913,7 @@ function TextBlockItem({
       // Enter (ohne Shift) speichert - Shift+Enter erlaubt einen Zeilenumbruch, das Textfeld
       // darf im Gegensatz zum einzeiligen Task-Text mehrzeilig sein.
       e.preventDefault()
+      saveCurrentWidth()
       onSaveText(draft)
     }
   }
@@ -895,8 +923,9 @@ function TextBlockItem({
 
   return (
     <div
+      ref={textBlockRef}
       className={`text-block${dragPos ? ' dragging' : ''}${editing ? ' active' : ''}`}
-      style={{ left: pos.x, top: pos.y, width: block.width ? `${block.width}px` : undefined }}
+      style={{ left: pos.x, top: pos.y, width: (editing ? liveWidth : null) ?? block.width ?? undefined }}
       onClick={(e) => e.stopPropagation()}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
@@ -930,16 +959,8 @@ function TextBlockItem({
             onChange={handleDraftChange}
             onKeyDown={handleDraftKeyDown}
             onBlur={() => {
+              saveCurrentWidth()
               onSaveText(draft)
-              // Per Ziehen am Rand gewaehlte Breite (CSS "resize: horizontal", siehe
-              // DrawingCanvas.css) erst beim Verlassen der Bearbeitung uebernehmen - offsetWidth
-              // ist die unskalierte Layout-Breite des Elements, unabhaengig vom aktuellen
-              // Zoom (CSS-Transform auf der Task-Ebene beeinflusst sie nicht), also genau der
-              // Wert, der auch in der schreibgeschuetzten Ansicht wieder als Breite gilt.
-              const el = textareaRef.current
-              if (el && el.offsetWidth > 0 && el.offsetWidth !== block.width) {
-                onResizeWidth(el.offsetWidth)
-              }
             }}
           />
           {linkTrigger && matchedPages.length > 0 && (
