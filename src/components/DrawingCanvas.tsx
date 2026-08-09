@@ -1475,8 +1475,9 @@ export default function DrawingCanvas({
   useEffect(() => {
     const canvas = canvasRef.current
     const overlay = overlayRef.current
+    const wrap = wrapRef.current
     const background = backgroundRef.current
-    if (!canvas || !overlay || !background) return
+    if (!canvas || !overlay || !wrap || !background) return
 
     // Beim Oeffnen einer Seite faehrt die Sidebar per CSS-Transition ein (siehe Workspace.tsx,
     // setSidebarOpen(false) nach openPage) - die Zeichenflaeche waechst dabei ueber mehrere
@@ -1627,10 +1628,21 @@ export default function DrawingCanvas({
     // vorherigen Loslassen kommt (siehe /tests Diagnose-Testmatrix). Klassische Touch Events
     // hatten dieses Problem nicht.
     function onTouchStart(e: TouchEvent) {
-      e.preventDefault()
+      // Touch-Events auf der gemeinsamen Huelle beobachten, damit Zwei-Finger-Gesten auch
+      // ueber den oberhalb des Zeichen-Overlays liegenden Textfeldern ankommen. Den ersten
+      // Finger dort nicht unterdruecken: Textarea-Fokus, Cursorplatzierung und Textauswahl
+      // bleiben so natives Browser-Verhalten. Sobald ein zweiter Finger hinzukommt, gehoert
+      // die Geste wieder eindeutig dem Canvas-Pan/Zoom.
+      const overTextBlock = e.target instanceof Element && e.target.closest('.text-block') !== null
+      if (!overTextBlock || e.touches.length >= 2) e.preventDefault()
       for (const t of Array.from(e.changedTouches)) {
         const { touchType, force } = describeTouch(t)
         if (touchType === 'stylus') stylusDetectedRef.current = true
+
+        if (overTextBlock && e.touches.length < 2) {
+          if (touchType === 'direct') fingersRef.current.set(t.identifier, { x: t.clientX, y: t.clientY })
+          continue
+        }
 
         // Lasso-Modus: sowohl Finger als auch Stift zeichnen die Auswahlkontur bzw. verschieben
         // die Auswahl (anders als normale Tinte, die nur auf den Stift reagiert - eine
@@ -1671,6 +1683,15 @@ export default function DrawingCanvas({
     }
 
     function onTouchMove(e: TouchEvent) {
+      const overTextBlock = e.target instanceof Element && e.target.closest('.text-block') !== null
+      if (
+        overTextBlock &&
+        e.touches.length < 2 &&
+        activeTouchIdRef.current === null &&
+        lassoActiveTouchIdRef.current === null
+      ) {
+        return
+      }
       e.preventDefault()
       for (const t of Array.from(e.changedTouches)) {
         if (t.identifier !== lassoActiveTouchIdRef.current) continue
@@ -1717,10 +1738,10 @@ export default function DrawingCanvas({
       }
     }
 
-    overlay.addEventListener('touchstart', onTouchStart, { passive: false })
-    overlay.addEventListener('touchmove', onTouchMove, { passive: false })
-    overlay.addEventListener('touchend', onTouchEnd, { passive: false })
-    overlay.addEventListener('touchcancel', onTouchEnd, { passive: false })
+    wrap.addEventListener('touchstart', onTouchStart, { passive: false })
+    wrap.addEventListener('touchmove', onTouchMove, { passive: false })
+    wrap.addEventListener('touchend', onTouchEnd, { passive: false })
+    wrap.addEventListener('touchcancel', onTouchEnd, { passive: false })
 
     // --- Maus-Fallback nur fuers Testen am Desktop ---
     let mouseDown = false
@@ -1798,19 +1819,22 @@ export default function DrawingCanvas({
 
       applyView(view.scale, view.x - dx, view.y - dy)
     }
-    overlay.addEventListener('wheel', onWheel, { passive: false })
+    // Die Text-/Task-Ebene ist ein Geschwisterelement oberhalb des Overlays. Auf der gemeinsamen
+    // Huelle kommen Wheel-Events aus beiden Ebenen an, ohne dass die Textarea selbst Handler oder
+    // stopPropagation braucht.
+    wrap.addEventListener('wheel', onWheel, { passive: false })
 
     return () => {
       resizeObserver.disconnect()
       if (settleTimer) clearTimeout(settleTimer)
-      overlay.removeEventListener('touchstart', onTouchStart)
-      overlay.removeEventListener('touchmove', onTouchMove)
-      overlay.removeEventListener('touchend', onTouchEnd)
-      overlay.removeEventListener('touchcancel', onTouchEnd)
+      wrap.removeEventListener('touchstart', onTouchStart)
+      wrap.removeEventListener('touchmove', onTouchMove)
+      wrap.removeEventListener('touchend', onTouchEnd)
+      wrap.removeEventListener('touchcancel', onTouchEnd)
       overlay.removeEventListener('mousedown', onMouseDown)
       window.removeEventListener('mousemove', onMouseMove)
       window.removeEventListener('mouseup', onMouseUp)
-      overlay.removeEventListener('wheel', onWheel)
+      wrap.removeEventListener('wheel', onWheel)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
