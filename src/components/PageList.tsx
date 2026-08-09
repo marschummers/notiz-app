@@ -79,6 +79,7 @@ function NewPageMenu({ folderId, onOpenPage }: { folderId: string | undefined; o
 }
 
 export default function PageList({ selection, sidebarOpen, onToggleSidebar, onOpenPage }: Props) {
+  const allFolders = useLiveQuery(() => db.folders.filter((f) => !f.deletedAt).toArray(), [])
   const folder = useLiveQuery(
     () => (selection.type === 'folder' && selection.id ? db.folders.get(selection.id) : undefined),
     [selection.type, selection.type === 'folder' ? selection.id : null],
@@ -127,6 +128,22 @@ export default function PageList({ selection, sidebarOpen, onToggleSidebar, onOp
   const pagesById = new Map((pages ?? []).map((p) => [p.id, p]))
   const displayIds = liveIds ?? naturalIds
   const displayPages = displayIds.map((id) => pagesById.get(id)).filter((p): p is NonNullable<typeof p> => !!p)
+  const folderById = new Map((allFolders ?? []).map((f) => [f.id, f]))
+
+  function folderPath(folderId: string | undefined): string {
+    if (!folderId) return 'Nicht abgelegt'
+    const names: string[] = []
+    const visited = new Set<string>()
+    let currentId: string | undefined = folderId
+    while (currentId && !visited.has(currentId)) {
+      visited.add(currentId)
+      const current = folderById.get(currentId)
+      if (!current) break
+      names.push(current.name)
+      currentId = current.parentId
+    }
+    return names.length > 0 ? names.reverse().join(' › ') : 'Unbekannter Ordner'
+  }
 
   return (
     <div className="page-list">
@@ -153,8 +170,21 @@ export default function PageList({ selection, sidebarOpen, onToggleSidebar, onOp
               onTouchEnd={onHandleTouchEnd}
               onMouseDown={(e) => onHandleMouseDown(page.id, naturalIds, e)}
             />
-            <div className="page-tile-preview">Bearbeitet {formatRelativeTime(page.updatedAt)}</div>
+            {selection.type === 'tag' && (
+              <div className="page-tile-folder" title={folderPath(page.folderId)}>
+                {folderPath(page.folderId)}
+              </div>
+            )}
             <div className="page-tile-title">{page.title || 'Ohne Titel'}</div>
+            <div className="page-tile-meta">
+              <span className="page-tile-type">{page.pageType ?? 'Allgemein'}</span>
+              {(page.afns ?? []).map((afn) => (
+                <span key={afn} className="page-tile-afn">
+                  AFN {afn}
+                </span>
+              ))}
+            </div>
+            <div className="page-tile-preview">Bearbeitet {formatRelativeTime(page.updatedAt)}</div>
             <button
               className="page-tile-delete"
               onClick={(e) => {
