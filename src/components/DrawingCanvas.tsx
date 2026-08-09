@@ -1190,7 +1190,19 @@ export default function DrawingCanvas({
   // applyView canvasExtensionCount und erzeugt dadurch fortlaufend neues, beschreibbares Papier.
   const pdfLayout = computePdfPageLayout(pdfPages, canvasWidth)
   const pdfContentHeight = pdfLayout.length > 0 ? pdfLayout[pdfLayout.length - 1].top + pdfLayout[pdfLayout.length - 1].height : 0
-  const contentHeight = Math.max(wrapHeight, pdfContentHeight) + wrapHeight * (canvasExtensionCount + 1)
+  // Nach erneutem Oeffnen ist canvasExtensionCount wieder 0. Die Mindesthoehe deshalb auch aus
+  // den tatsaechlich gespeicherten Inhalten ableiten, damit weit unten liegende Elemente sofort
+  // erreichbar bleiben. PDF-gebundene Striche speichern y relativ zu ihrer PDF-Seite (0-1) und
+  // duerfen hier nicht als absolute Dokumentkoordinate zaehlen; sie sind bereits vollstaendig in
+  // pdfContentHeight enthalten.
+  const deepestStrokeY = initialStrokes.reduce(
+    (deepest, stroke) => (stroke.pdfAnchor ? deepest : stroke.points.reduce((maxY, point) => Math.max(maxY, point.y), deepest)),
+    0,
+  )
+  const deepestTaskY = tasks.reduce((deepest, task) => Math.max(deepest, task.y), 0)
+  const deepestTextBlockY = textBlocks.reduce((deepest, block) => Math.max(deepest, block.y), 0)
+  const persistedContentBottom = Math.max(deepestStrokeY, deepestTaskY, deepestTextBlockY)
+  const contentHeight = Math.max(wrapHeight, pdfContentHeight, persistedContentBottom) + wrapHeight * (canvasExtensionCount + 1)
   const contentHeightStyle = contentHeight > 0 ? `${contentHeight}px` : undefined
   // Fuer den Touch/Wheel-Mount-Effekt (dort sind nur Refs sicher aktuell, siehe
   // canvasWidthRef/colorRef-Muster) - applyView braucht die aktuelle Inhaltshoehe, um Pan/Zoom
