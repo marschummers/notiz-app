@@ -1193,6 +1193,13 @@ export default function DrawingCanvas({
   const pdfContentHeight = pdfLayout.length > 0 ? pdfLayout[pdfLayout.length - 1].top + pdfLayout[pdfLayout.length - 1].height : 0
   const contentHeight = Math.max(wrapHeight, pdfContentHeight)
   const contentHeightStyle = contentHeight > 0 ? `${contentHeight}px` : undefined
+  // Fuer den Touch/Wheel-Mount-Effekt (dort sind nur Refs sicher aktuell, siehe
+  // canvasWidthRef/colorRef-Muster) - applyView braucht die aktuelle Inhaltshoehe, um Pan/Zoom
+  // auf den tatsaechlichen Inhalt zu begrenzen (siehe clampPan dort).
+  const contentHeightRef = useRef(contentHeight)
+  useEffect(() => {
+    contentHeightRef.current = contentHeight
+  }, [contentHeight])
 
   // Refs fuer die Striche-PDF-Bindung, gebraucht im Mount-Effekt weiter unten (dort sind nur
   // Refs sicher aktuell, siehe colorRef/baseWidthRef-Muster) und in redrawCanvas.
@@ -1557,10 +1564,40 @@ export default function DrawingCanvas({
     // Zoom/Pan wird rein per CSS-Transform auf Hintergrund+Canvas dargestellt (das Overlay,
     // also die Touch-Zielflaeche, bleibt unveraendert auf voller Groesse) - die Striche selbst
     // bleiben in unskaliertem Koordinatenraum gespeichert, nur die Darstellung skaliert.
+    //
+    // Pan/Zoom war bisher komplett unbegrenzt (nur die Skalierung selbst wurde auf
+    // MIN_SCALE/MAX_SCALE geclampt) - normales Scrollen (siehe onWheel unten) konnte den
+    // Inhalt beliebig weit aus dem sichtbaren Bereich schieben. Dahinter blieb nur die
+    // einfarbige Papierfarbe von .drawing-canvas-wrap sichtbar (siehe CSS), die exakt der
+    // Hintergrundfarbe von .drawing-background entspricht - optisch nicht von "Papiermuster
+    // fehlt" zu unterscheiden. Das war die eigentliche Ursache des lange diagnostizierten
+    // Hintergrund-Bugs (reproduzierbar auch am PC/Chromium, nicht WebKit-spezifisch): "Zoomen
+    // und zurueck auf 100%" hat ihn nur scheinbar behoben, weil resetZoom() Pan UND Zoom auf
+    // (0,0)/100% zuruecksetzt und man dadurch wieder im tatsaechlichen Inhalt landet.
+    function clampPan(scale: number, x: number, y: number) {
+      const rect = overlay!.getBoundingClientRect()
+      const viewW = rect.width
+      const viewH = rect.height
+      // Waehrend des ersten Layouts (Breite/Hoehe noch 0) nicht clampen, sonst wuerde x/y auf 0
+      // gezwungen, bevor ueberhaupt eine sinnvolle Groesse bekannt ist.
+      if (viewW <= 0 || viewH <= 0) return { x, y }
+
+      const contentW = canvasWidthRef.current * scale
+      const contentH = contentHeightRef.current * scale
+
+      const minX = contentW <= viewW ? 0 : viewW - contentW
+      const maxX = contentW <= viewW ? viewW - contentW : 0
+      const minY = contentH <= viewH ? 0 : viewH - contentH
+      const maxY = contentH <= viewH ? viewH - contentH : 0
+
+      return { x: Math.min(maxX, Math.max(minX, x)), y: Math.min(maxY, Math.max(minY, y)) }
+    }
+
     function applyView(scale: number, x: number, y: number) {
       const clamped = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale))
-      viewRef.current = { scale: clamped, x, y }
-      const transform = `translate(${x}px, ${y}px) scale(${clamped})`
+      const { x: clampedX, y: clampedY } = clampPan(clamped, x, y)
+      viewRef.current = { scale: clamped, x: clampedX, y: clampedY }
+      const transform = `translate(${clampedX}px, ${clampedY}px) scale(${clamped})`
       canvas!.style.transform = transform
       background!.style.transform = transform
       if (taskLayerRef.current) taskLayerRef.current.style.transform = transform
