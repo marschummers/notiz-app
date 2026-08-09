@@ -124,6 +124,11 @@
   color: var(--accent-strong);
 }
 
+.tree-toggle-placeholder {
+  width: 20px;
+  flex-shrink: 0;
+}
+
 .sidebar-footer {
   margin-top: auto;
   padding: 12px;
