@@ -53,7 +53,7 @@ export default function FolderTree({ parentId, depth, selection, onSelect, expan
               style={{ paddingLeft: 10 + depth * 16 }}
               onClick={() => {
                 onSelect({ type: 'folder', id: folder.id })
-                if (hasChildren && !isExpanded) onToggleExpand(folder.id)
+                if (hasChildren) onToggleExpand(folder.id)
               }}
             >
               <DragHandle
