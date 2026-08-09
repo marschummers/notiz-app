@@ -1184,14 +1184,14 @@ export default function DrawingCanvas({
     return () => ro.disconnect()
   }, [])
 
-  // Gesamthoehe der Zeichenflaeche: mindestens die sichtbare Wrap-Hoehe, oder - falls ein PDF
-  // geladen ist und mehr Platz braucht - die Hoehe bis zum Ende der letzten PDF-Seite (siehe
-  // computePdfPageLayout). Hintergrund/Canvas/Task-Ebene/PDF-Ebene bekommen unten alle dieselbe
-  // Hoehe, dadurch bleibt die Handschrift exakt ueber den PDF-Seiten, auch beim Zoomen/Panning
-  // (dieselbe CSS-Transform-Logik wie bisher, siehe applyView).
+  // Gesamthoehe der Zeichenflaeche: Unter dem eigentlichen Inhalt bleibt immer eine weitere
+  // sichtbare Bildschirmhoehe als echter Arbeitsbereich. Ohne PDF kann die Notiz dadurch wieder
+  // gescrollt werden; bei einem mehrseitigen PDF endet die Bewegung nicht hart an der letzten
+  // Seite. Wichtig: Nicht nur Pan kuenstlich erlauben, sondern Hintergrund UND Canvas tatsaechlich
+  // verlaengern - so bleibt das Papiermuster sichtbar und der Zusatzbereich ist beschreibbar.
   const pdfLayout = computePdfPageLayout(pdfPages, canvasWidth)
   const pdfContentHeight = pdfLayout.length > 0 ? pdfLayout[pdfLayout.length - 1].top + pdfLayout[pdfLayout.length - 1].height : 0
-  const contentHeight = Math.max(wrapHeight, pdfContentHeight)
+  const contentHeight = Math.max(wrapHeight * 2, pdfContentHeight + wrapHeight)
   const contentHeightStyle = contentHeight > 0 ? `${contentHeight}px` : undefined
   // Fuer den Touch/Wheel-Mount-Effekt (dort sind nur Refs sicher aktuell, siehe
   // canvasWidthRef/colorRef-Muster) - applyView braucht die aktuelle Inhaltshoehe, um Pan/Zoom
