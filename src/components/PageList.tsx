@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
 import { createPage, createPageFromTemplate, deletePage, deleteTemplate, movePage, renameFolder, reorderPages } from '../lib/actions'
+import { getPageAfns, getPagePropertyValue } from '../lib/propertyDefinitions'
 import { formatRelativeTime } from '../lib/format'
 import type { Selection } from '../lib/selection'
 import { useDragReorder } from '../lib/useDragReorder'
@@ -201,8 +202,8 @@ export default function PageList({ selection, sidebarOpen, onToggleSidebar, onOp
             )}
             <div className="page-tile-title">{page.title || 'Ohne Titel'}</div>
             <div className="page-tile-meta">
-              <span className="page-tile-type">{page.pageType ?? 'Allgemein'}</span>
-              {(page.afns ?? []).map((afn) => (
+              <span className="page-tile-type">{String(getPagePropertyValue(page, 'type') ?? 'Notiz')}</span>
+              {getPageAfns(page).map((afn) => (
                 <span key={afn} className="page-tile-afn">
                   AFN {afn}
                 </span>
@@ -226,3 +227,4 @@ export default function PageList({ selection, sidebarOpen, onToggleSidebar, onOp
     </div>
   )
 }
+
