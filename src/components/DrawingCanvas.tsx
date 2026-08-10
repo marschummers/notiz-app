@@ -445,6 +445,10 @@ const LONG_PRESS_MS = 450
 // Bewegung in Pixern, ab der ein wartender Long-Press abgebrochen wird (z.B. ein Wisch statt
 // eines ruhigen Haltens).
 const LONG_PRESS_CANCEL_DISTANCE = 8
+// Maximale Entfernung in Dokument-Pixeln, in der ein Textfeld an linker Kante, Mitte oder
+// rechter Kante eines anderen Textfelds einrastet. Klein genug fuer freie Platzierung, aber
+// gross genug, dass Maus und Finger die Ausrichtung verlaesslich treffen.
+const TEXT_ALIGNMENT_SNAP_DISTANCE = 8
 
 // Ein einzelner To-do-Block auf dem Papier: Checkbox, Text (oder Eingabefeld beim Bearbeiten),
 // Loeschen-Button. Sitzt oberhalb des Zeichen-Overlays (siehe .task-layer weiter unten) und hat
@@ -676,6 +680,12 @@ interface DrawingTextBlock {
   width?: number
 }
 
+interface TextBlockAlignmentGuide {
+  x: number
+  top: number
+  height: number
+}
+
 function TextBlockItem({
   block,
   editing,
@@ -687,6 +697,7 @@ function TextBlockItem({
   onMove,
   onResizeWidth,
   onOpenPageLink,
+  onAlignmentGuideChange,
 }: {
   block: DrawingTextBlock
   editing: boolean
@@ -698,6 +709,7 @@ function TextBlockItem({
   onMove: (x: number, y: number) => void
   onResizeWidth: (width: number) => void
   onOpenPageLink: (pageId: string) => void
+  onAlignmentGuideChange: (guide: TextBlockAlignmentGuide | null) => void
 }) {
   const [draft, setDraft] = useState(block.text)
   const [linkTrigger, setLinkTrigger] = useState<{ start: number; query: string } | null>(null)
@@ -756,8 +768,9 @@ function TextBlockItem({
     return () => {
       if (mouseMoveHandlerRef.current) window.removeEventListener('mousemove', mouseMoveHandlerRef.current)
       if (mouseUpHandlerRef.current) window.removeEventListener('mouseup', mouseUpHandlerRef.current)
+      onAlignmentGuideChange(null)
     }
-  }, [])
+  }, [onAlignmentGuideChange])
 
   function clearLongPressTimer() {
     if (longPressTimerRef.current) {
@@ -766,17 +779,64 @@ function TextBlockItem({
     }
   }
 
+  function snapDragPosition(position: { x: number; y: number }): {
+    position: { x: number; y: number }
+    guide: TextBlockAlignmentGuide | null
+  } {
+    const card = textBlockRef.current
+    const layer = card?.parentElement
+    if (!card || !layer) return { position, guide: null }
+
+    const cardWidth = card.offsetWidth
+    const cardHeight = card.offsetHeight
+    let best: { distance: number; snappedX: number; guideX: number; target: HTMLElement } | null = null
+
+    for (const target of layer.querySelectorAll<HTMLElement>('[data-text-block-id]')) {
+      if (target.dataset.textBlockId === block.id) continue
+      const parsedTargetLeft = Number.parseFloat(target.style.left)
+      const targetLeft = Number.isFinite(parsedTargetLeft) ? parsedTargetLeft : target.offsetLeft
+      const targetWidth = target.offsetWidth
+      const alignments = [
+        { snappedX: targetLeft, guideX: targetLeft },
+        { snappedX: targetLeft + targetWidth / 2 - cardWidth / 2, guideX: targetLeft + targetWidth / 2 },
+        { snappedX: targetLeft + targetWidth - cardWidth, guideX: targetLeft + targetWidth },
+      ]
+
+      for (const alignment of alignments) {
+        const distance = Math.abs(position.x - alignment.snappedX)
+        if (distance <= TEXT_ALIGNMENT_SNAP_DISTANCE && (!best || distance < best.distance)) {
+          best = { distance, ...alignment, target }
+        }
+      }
+    }
+
+    if (!best) return { position, guide: null }
+    const parsedTargetTop = Number.parseFloat(best.target.style.top)
+    const targetTop = Number.isFinite(parsedTargetTop) ? parsedTargetTop : best.target.offsetTop
+    const guideTop = Math.max(0, Math.min(position.y, targetTop) - 12)
+    const guideBottom = Math.max(position.y + cardHeight, targetTop + best.target.offsetHeight) + 12
+    return {
+      position: { x: best.snappedX, y: position.y },
+      guide: { x: best.guideX, top: guideTop, height: guideBottom - guideTop },
+    }
+  }
+
   function startDrag(clientX: number, clientY: number) {
     draggingRef.current = true
-    setDragPos(clientToContent(clientX, clientY))
+    const snapped = snapDragPosition(clientToContent(clientX, clientY))
+    setDragPos(snapped.position)
+    onAlignmentGuideChange(snapped.guide)
   }
 
   function updateDrag(clientX: number, clientY: number) {
-    setDragPos(clientToContent(clientX, clientY))
+    const snapped = snapDragPosition(clientToContent(clientX, clientY))
+    setDragPos(snapped.position)
+    onAlignmentGuideChange(snapped.guide)
   }
 
   function finishDrag() {
     draggingRef.current = false
+    onAlignmentGuideChange(null)
     justDraggedRef.current = true
     setTimeout(() => {
       justDraggedRef.current = false
@@ -950,6 +1010,7 @@ function TextBlockItem({
   return (
     <div
       ref={textBlockRef}
+      data-text-block-id={block.id}
       className={`text-block${dragPos ? ' dragging' : ''}${editing ? ' active' : ''}`}
       style={{ left: pos.x, top: pos.y, width: (editing ? liveWidth : null) ?? block.width ?? undefined }}
       onClick={(e) => e.stopPropagation()}
@@ -1174,6 +1235,7 @@ export default function DrawingCanvas({
   const [zoomPercent, setZoomPercent] = useState(100)
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
   const [editingTextBlockId, setEditingTextBlockId] = useState<string | null>(null)
+  const [textBlockAlignmentGuide, setTextBlockAlignmentGuide] = useState<TextBlockAlignmentGuide | null>(null)
 
   useEffect(() => {
     mousePenEnabledRef.current = mousePenEnabled
@@ -2169,6 +2231,16 @@ export default function DrawingCanvas({
           }}
           onClick={handleTaskLayerClick}
         >
+          {textBlockAlignmentGuide && (
+            <div
+              className="text-block-alignment-guide"
+              style={{
+                left: textBlockAlignmentGuide.x,
+                top: textBlockAlignmentGuide.top,
+                height: textBlockAlignmentGuide.height,
+              }}
+            />
+          )}
           {tasks.map((t) => (
             <TaskBlock
               key={t.id}
@@ -2201,6 +2273,7 @@ export default function DrawingCanvas({
               onMove={(x, y) => onMoveTextBlock?.(b.id, toStoredX(x, canvasWidth), y)}
               onResizeWidth={(width) => onResizeTextBlockWidth?.(b.id, width)}
               onOpenPageLink={(pageId) => onOpenPageLink?.(pageId)}
+              onAlignmentGuideChange={setTextBlockAlignmentGuide}
             />
           ))}
         </div>
