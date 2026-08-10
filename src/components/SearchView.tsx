@@ -19,6 +19,9 @@ interface Props {
   onSelectTag: (tagId: string) => void
 }
 
+const ALWAYS_VISIBLE_FILTERS: readonly SearchPropertyKey[] = ['type', 'customer']
+const OPTIONAL_FILTERS: readonly SearchPropertyKey[] = ['status', 'project', 'priority']
+
 // Relevanteste Treffer zuerst (Text beginnt mit der Suche), Rest alphabetisch - rein lokal,
 // keine externe Suche/Library, arbeitet auf den ohnehin schon geladenen Dexie-Daten.
 function sortByRelevance<T>(items: T[], getText: (item: T) => string, q: string): T[] {
@@ -53,11 +56,16 @@ function pageSearchMetadata(page: Page): string[] {
 export default function SearchView({ onOpenPage, onSelectFolder, onSelectTag }: Props) {
   const [query, setQuery] = useState('')
   const [propertyFilters, setPropertyFilters] = useState<PagePropertyFilters>({})
+  const [visibleOptionalFilters, setVisibleOptionalFilters] = useState<SearchPropertyKey[]>([])
   const trimmed = query.trim()
   const q = trimmed.toLowerCase()
   const textSearchActive = q.length >= 2
   const hasPropertyFilters = SEARCH_PROPERTY_KEYS.some((key) => !!propertyFilters[key])
   const active = textSearchActive || hasPropertyFilters
+  const visibleFilterKeys = SEARCH_PROPERTY_KEYS.filter(
+    (key) => ALWAYS_VISIBLE_FILTERS.includes(key) || visibleOptionalFilters.includes(key) || !!propertyFilters[key],
+  )
+  const hiddenOptionalFilters = OPTIONAL_FILTERS.filter((key) => !visibleFilterKeys.includes(key))
 
   const pages = useLiveQuery(() => db.pages.filter((p) => !p.deletedAt).toArray(), [])
   const tasks = useLiveQuery(() => db.tasks.filter((t) => !t.deletedAt).toArray(), [])
@@ -121,6 +129,15 @@ export default function SearchView({ onOpenPage, onSelectFolder, onSelectTag }: 
     })
   }
 
+  function addOptionalFilter(key: SearchPropertyKey) {
+    setVisibleOptionalFilters((current) => current.includes(key) ? current : [...current, key])
+  }
+
+  function removeOptionalFilter(key: SearchPropertyKey) {
+    updatePropertyFilter(key, '')
+    setVisibleOptionalFilters((current) => current.filter((item) => item !== key))
+  }
+
   return (
     <div className="search-view">
       <input
@@ -133,24 +150,56 @@ export default function SearchView({ onOpenPage, onSelectFolder, onSelectTag }: 
       />
 
       <div className="search-property-filters" aria-label="Seiten nach Properties filtern">
-        {SEARCH_PROPERTY_KEYS.map((key) => {
+        {visibleFilterKeys.map((key) => {
           const definition = PAGE_PROPERTY_DEFINITIONS[key]
           const selectedValue = propertyFilters[key] ?? ''
           const definedValues = availablePropertyValues[key]
           const values = selectedValue && !definedValues.includes(selectedValue) ? [selectedValue, ...definedValues] : definedValues
+          const optional = OPTIONAL_FILTERS.includes(key)
           return (
-            <select
-              key={key}
-              className={selectedValue ? 'search-property-filter active' : 'search-property-filter'}
-              aria-label={`${definition.label} filtern`}
-              value={selectedValue}
-              onChange={(e) => updatePropertyFilter(key, e.target.value)}
-            >
-              <option value="">{definition.label}</option>
-              {values.map((value) => <option key={value} value={value}>{definition.label}: {value}</option>)}
-            </select>
+            <div className="search-property-control" key={key}>
+              <select
+                className={selectedValue ? 'search-property-filter active' : 'search-property-filter'}
+                aria-label={`${definition.label} filtern`}
+                value={selectedValue}
+                onChange={(e) => updatePropertyFilter(key, e.target.value)}
+              >
+                <option value="">{definition.label}</option>
+                {values.map((value) => <option key={value} value={value}>{definition.label}: {value}</option>)}
+              </select>
+              {optional && (
+                <button
+                  type="button"
+                  className="search-property-remove"
+                  onClick={() => removeOptionalFilter(key)}
+                  aria-label={`${definition.label}-Filter ausblenden`}
+                  title="Filter ausblenden"
+                >
+                  ×
+                </button>
+              )}
+            </div>
           )
         })}
+        {hiddenOptionalFilters.length > 0 && (
+          <details className="search-add-filter">
+            <summary>+ Filter</summary>
+            <div className="search-add-filter-menu">
+              {hiddenOptionalFilters.map((key) => (
+                <button
+                  type="button"
+                  key={key}
+                  onClick={(event) => {
+                    addOptionalFilter(key)
+                    event.currentTarget.closest('details')?.removeAttribute('open')
+                  }}
+                >
+                  {PAGE_PROPERTY_DEFINITIONS[key].label}
+                </button>
+              ))}
+            </div>
+          </details>
+        )}
         {hasPropertyFilters && (
           <button type="button" className="search-filters-reset" onClick={() => setPropertyFilters({})}>
             Alle zurücksetzen
