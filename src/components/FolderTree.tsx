@@ -39,7 +39,11 @@ export default function FolderTree({ parentId, depth, selection, onSelect, expan
   const displayFolders = displayIds.map((id) => foldersById.get(id)).filter((f): f is NonNullable<typeof f> => !!f)
 
   return (
-    <div ref={containerRef}>
+    <div
+      ref={containerRef}
+      className={`folder-tree${depth > 0 ? ' folder-tree-nested' : ''}`}
+      style={depth > 0 ? ({ '--folder-guide-left': `${21 + (depth - 1) * 22}px` } as React.CSSProperties) : undefined}
+    >
       {displayFolders.map((folder) => {
         const isSelected = selection.type === 'folder' && selection.id === folder.id
         const isExpanded = expanded.has(folder.id)
@@ -49,8 +53,9 @@ export default function FolderTree({ parentId, depth, selection, onSelect, expan
             <div
               data-drag-id={folder.id}
               data-folder-drop-target={folder.id}
-              className={`tree-row${isSelected ? ' selected' : ''}${dragId === folder.id ? ' dragging' : ''}`}
-              style={{ paddingLeft: 10 + depth * 16 }}
+              data-depth={depth}
+              className={`tree-row folder-row${isSelected ? ' selected' : ''}${dragId === folder.id ? ' dragging' : ''}`}
+              style={{ paddingLeft: 10 + depth * 22 }}
               onClick={() => {
                 onSelect({ type: 'folder', id: folder.id })
                 if (hasChildren) onToggleExpand(folder.id)
