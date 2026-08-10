@@ -737,6 +737,7 @@ function TextBlockItem({
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null)
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressArmedRef = useRef(false)
+  const handleGestureRef = useRef(false)
   const draggingRef = useRef(false)
   const startClientRef = useRef<{ x: number; y: number } | null>(null)
   const justDraggedRef = useRef(false)
@@ -804,6 +805,11 @@ function TextBlockItem({
     const t = e.touches[0]
     const start = startClientRef.current
     if (!t || !start) return
+    if (handleGestureRef.current && !draggingRef.current) {
+      const moved = Math.hypot(t.clientX - start.x, t.clientY - start.y)
+      if (moved > LONG_PRESS_CANCEL_DISTANCE) startDrag(t.clientX, t.clientY)
+      else return
+    }
     if (!draggingRef.current) {
       const moved = Math.hypot(t.clientX - start.x, t.clientY - start.y)
       if (moved > LONG_PRESS_CANCEL_DISTANCE) {
@@ -817,10 +823,14 @@ function TextBlockItem({
   }
 
   function handleTouchEnd() {
+    const wasHandleGesture = handleGestureRef.current
+    const wasDragging = draggingRef.current
     clearLongPressTimer()
     longPressArmedRef.current = false
+    handleGestureRef.current = false
     startClientRef.current = null
-    if (draggingRef.current) finishDrag()
+    if (wasDragging) finishDrag()
+    else if (wasHandleGesture) onStartEdit()
   }
 
   function handleHandleTouchStart(e: React.TouchEvent<HTMLDivElement>) {
@@ -831,21 +841,36 @@ function TextBlockItem({
     if (touchType !== 'direct') return
     clearLongPressTimer()
     longPressArmedRef.current = false
+    handleGestureRef.current = true
     startClientRef.current = { x: t.clientX, y: t.clientY }
-    startDrag(t.clientX, t.clientY)
   }
 
   function handleHandleMouseDown(e: React.MouseEvent<HTMLDivElement>) {
     e.stopPropagation()
     e.preventDefault()
-    startDrag(e.clientX, e.clientY)
-    const onMoveHandler = (ev: MouseEvent) => updateDrag(ev.clientX, ev.clientY)
+    handleGestureRef.current = true
+    startClientRef.current = { x: e.clientX, y: e.clientY }
+    const onMoveHandler = (ev: MouseEvent) => {
+      const start = startClientRef.current
+      if (!start) return
+      if (!draggingRef.current) {
+        const moved = Math.hypot(ev.clientX - start.x, ev.clientY - start.y)
+        if (moved <= LONG_PRESS_CANCEL_DISTANCE) return
+        startDrag(ev.clientX, ev.clientY)
+      } else {
+        updateDrag(ev.clientX, ev.clientY)
+      }
+    }
     const onUp = () => {
       window.removeEventListener('mousemove', onMoveHandler)
       window.removeEventListener('mouseup', onUp)
       mouseMoveHandlerRef.current = null
       mouseUpHandlerRef.current = null
-      finishDrag()
+      const wasDragging = draggingRef.current
+      handleGestureRef.current = false
+      startClientRef.current = null
+      if (wasDragging) finishDrag()
+      else onStartEdit()
     }
     mouseMoveHandlerRef.current = onMoveHandler
     mouseUpHandlerRef.current = onUp
