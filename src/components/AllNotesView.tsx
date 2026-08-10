@@ -2,9 +2,10 @@ import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
 import type { PageType } from '../db/types'
+import { getPageAfns, getPagePropertyValue, PAGE_TYPE_OPTIONS } from '../lib/propertyDefinitions'
 import './AllNotesView.css'
 
-const PAGE_TYPES: PageType[] = ['Allgemein', 'Meeting', 'Gesprächsnotiz', 'Idee', 'Konzept', 'Protokoll', 'Recherche']
+const PAGE_TYPES: readonly PageType[] = PAGE_TYPE_OPTIONS
 const DATE_FILTERS = ['Alle', 'Heute', 'Letzte 7 Tage', 'Dieser Monat'] as const
 type DateFilter = (typeof DATE_FILTERS)[number]
 
@@ -81,8 +82,8 @@ export default function AllNotesView({ onOpenPage }: Props) {
   }
 
   const filtered = (pages ?? [])
-    .filter((p) => typeFilter === 'Alle' || (p.pageType ?? 'Allgemein') === typeFilter)
-    .filter((p) => matchesDateFilter(p.customDate, dateFilter))
+    .filter((p) => typeFilter === 'Alle' || (getPagePropertyValue(p, 'type') ?? 'Notiz') === typeFilter)
+    .filter((p) => matchesDateFilter(typeof getPagePropertyValue(p, 'date') === 'number' ? getPagePropertyValue(p, 'date') as number : undefined, dateFilter))
     .filter((p) => tagFilter === 'Alle' || (tagIdsByPageId.get(p.id) ?? []).includes(tagFilter))
     .filter((p) => {
       if (folderFilter === 'Alle') return true
@@ -91,7 +92,7 @@ export default function AllNotesView({ onOpenPage }: Props) {
     })
     // Exakter Treffer statt Teilstring - eine AFN identifiziert eindeutig, "1816" soll nicht
     // ungewollt auch "181657" mitliefern.
-    .filter((p) => afnFilter.trim() === '' || (p.afns ?? []).some((afn) => String(afn) === afnFilter.trim()))
+    .filter((p) => afnFilter.trim() === '' || getPageAfns(p).some((afn) => String(afn) === afnFilter.trim()))
     // Zuletzt bearbeitet zuerst - am ehesten nuetzlich fuer eine geraeteweite Uebersichtsliste.
     .sort((a, b) => b.updatedAt - a.updatedAt)
 
@@ -165,6 +166,9 @@ export default function AllNotesView({ onOpenPage }: Props) {
 
       <div className="all-notes-list">
         {filtered.map((p) => {
+          const pageType = getPagePropertyValue(p, 'type')
+          const pageDate = getPagePropertyValue(p, 'date')
+          const pageAfns = getPageAfns(p)
           const folder = p.folderId ? folderById.get(p.folderId) : undefined
           const pageTagNames = (tagIdsByPageId.get(p.id) ?? [])
             .map((tagId) => tagById.get(tagId)?.name)
@@ -173,12 +177,12 @@ export default function AllNotesView({ onOpenPage }: Props) {
             <div key={p.id} className="all-notes-row" onClick={() => onOpenPage(p.id)}>
               <div className="all-notes-row-main">
                 <span className="all-notes-row-title">{p.title || 'Ohne Titel'}</span>
-                <span className="all-notes-row-type">{p.pageType ?? 'Allgemein'}</span>
+                <span className="all-notes-row-type">{typeof pageType === 'string' ? pageType : 'Notiz'}</span>
               </div>
-              {(p.customDate || pageTagNames.length > 0 || folder || (p.afns && p.afns.length > 0)) && (
+              {(typeof pageDate === 'number' || pageTagNames.length > 0 || folder || pageAfns.length > 0) && (
                 <div className="all-notes-row-meta">
-                  {!!p.customDate && <span className="all-notes-row-date">{formatDate(p.customDate)}</span>}
-                  {(p.afns ?? []).map((afn) => (
+                  {typeof pageDate === 'number' && <span className="all-notes-row-date">{formatDate(pageDate)}</span>}
+                  {pageAfns.map((afn) => (
                     <span key={afn} className="all-notes-row-afn">
                       AFN {afn}
                     </span>
@@ -198,3 +202,4 @@ export default function AllNotesView({ onOpenPage }: Props) {
     </div>
   )
 }
+
