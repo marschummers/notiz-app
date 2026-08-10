@@ -10,6 +10,42 @@ export async function createFolder(parentId: string | undefined, name = 'Neuer O
   return id
 }
 
+// Legt die gemeinsame Ausgangsstruktur nur fuer ein wirklich leeres Konto an. Auch weich
+// geloeschte Ordner zaehlen bei folders.count() mit: Wer die Vorgaben spaeter loescht oder
+// komplett umbaut, bekommt sie bei einer erneuten Synchronisierung deshalb nicht zurueck.
+// Geschaeftsfuehrer-spezifische Bereiche wie "Personal" oder "Strategie & Geschaeftsfuehrung"
+// gehoeren bewusst nicht zum allgemeinen Standard.
+export async function ensureDefaultFolderStructure(): Promise<boolean> {
+  return db.transaction('rw', db.folders, db.pages, async () => {
+    if ((await db.folders.count()) > 0 || (await db.pages.count()) > 0) return false
+
+    const now = Date.now()
+    const companyId = newId()
+    const customersId = newId()
+    const meetingsId = newId()
+    const projectsId = newId()
+    const knowledgeId = newId()
+    const templatesId = newId()
+    const archiveId = newId()
+
+    await db.folders.bulkAdd([
+      { id: companyId, name: '10 Unternehmen', order: 10, updatedAt: now },
+      { id: customersId, name: '20 Kunden', order: 20, updatedAt: now },
+      { id: meetingsId, name: '30 Meetings', order: 30, updatedAt: now },
+      { id: newId(), parentId: meetingsId, name: 'Intern', order: 1, updatedAt: now },
+      { id: newId(), parentId: meetingsId, name: 'Kunden', order: 2, updatedAt: now },
+      { id: newId(), parentId: meetingsId, name: 'Sonstiges', order: 3, updatedAt: now },
+      { id: projectsId, name: '40 Projekte', order: 40, updatedAt: now },
+      { id: newId(), parentId: projectsId, name: 'Intern', order: 1, updatedAt: now },
+      { id: newId(), parentId: projectsId, name: 'Extern', order: 2, updatedAt: now },
+      { id: knowledgeId, name: '50 Wissen', order: 50, updatedAt: now },
+      { id: templatesId, name: '60 Vorlagen', order: 60, updatedAt: now },
+      { id: archiveId, name: '90 Archiv', order: 90, updatedAt: now },
+    ])
+    return true
+  })
+}
+
 // Setzt `order` fuer eine Geschwister-Gruppe (gleicher parentId) neu anhand der uebergebenen
 // Reihenfolge - kleine fortlaufende Zahlen, immer kleiner als ein per Date.now() vergebenes
 // `order` eines neu angelegten Ordners, der dadurch automatisch ans Ende der Liste faellt statt
