@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../lib/auth'
+import { ensureDefaultFolderStructure } from '../lib/actions'
 import { syncAll } from '../lib/sync'
 import type { Selection } from '../lib/selection'
 import Sidebar from '../components/Sidebar'
@@ -29,6 +30,11 @@ export default function Workspace() {
     setSyncError(null)
     try {
       await syncAll()
+      // Erst NACH dem Download pruefen, ob das Konto leer ist: Auf einem neuen Geraet soll
+      // niemals eine zweite Standardstruktur neben bereits synchronisierten Ordnern entstehen.
+      // Neu angelegte Vorgaben direkt ein zweites Mal synchronisieren, damit sie auch auf den
+      // anderen Geraeten dieses Benutzers erscheinen.
+      if (await ensureDefaultFolderStructure()) await syncAll()
     } catch (e) {
       setSyncError(e instanceof Error ? e.message : String(e))
     } finally {
