@@ -54,6 +54,7 @@
 }
 
 .tree-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -71,6 +72,48 @@
 
 .tree-row.selected {
   background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.folder-tree-nested {
+  position: relative;
+}
+
+.folder-tree-nested::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  bottom: 0;
+  left: var(--folder-guide-left);
+  width: 1px;
+  background: linear-gradient(to bottom, transparent, var(--border) 10px, var(--border) calc(100% - 10px), transparent);
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+.folder-row[data-depth='0'] .tree-label {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.folder-row[data-depth]:not([data-depth='0']) .tree-label {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.folder-row.selected::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent-strong);
+}
+
+.folder-row.selected .tree-label {
   color: var(--accent-strong);
 }
 
@@ -126,6 +169,21 @@
   opacity: 1;
   background: rgba(214, 147, 79, 0.18);
   color: var(--accent-strong);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .folder-row .tree-action,
+  .folder-row .drag-handle {
+    opacity: 0.18;
+    transition: opacity 0.15s ease;
+  }
+
+  .folder-row:hover .tree-action,
+  .folder-row:hover .drag-handle,
+  .folder-row.selected .tree-action,
+  .folder-row.selected .drag-handle {
+    opacity: 0.75;
+  }
 }
 
 .tree-toggle-placeholder {
