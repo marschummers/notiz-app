@@ -31,20 +31,29 @@
 }
 
 .search-property-filters {
+  position: relative;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 7px;
   max-width: 100%;
   margin-bottom: 20px;
-  padding-bottom: 2px;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scrollbar-width: thin;
+}
+
+.search-property-control {
+  display: flex;
+  align-items: stretch;
+  flex: 0 1 220px;
+  min-width: 170px;
+  max-width: 100%;
+  gap: 4px;
 }
 
 .search-property-filter,
-.search-filters-reset {
-  flex: 0 0 auto;
+.search-property-remove,
+.search-filters-reset,
+.search-add-filter summary,
+.search-add-filter-menu button {
   min-height: 34px;
   box-sizing: border-box;
   border: 1px solid var(--border);
@@ -56,14 +65,28 @@
 }
 
 .search-property-filter {
-  max-width: min(220px, 68vw);
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
   padding: 6px 28px 6px 10px;
+  color-scheme: dark;
+}
+
+.search-property-filter option {
+  background: var(--bg-elevated);
+  color: var(--text);
 }
 
 .search-property-filter:hover,
 .search-property-filter:focus,
+.search-property-remove:hover,
+.search-property-remove:focus,
 .search-filters-reset:hover,
-.search-filters-reset:focus {
+.search-filters-reset:focus,
+.search-add-filter summary:hover,
+.search-add-filter summary:focus,
+.search-add-filter-menu button:hover,
+.search-add-filter-menu button:focus {
   outline: none;
   border-color: var(--accent);
 }
@@ -73,7 +96,61 @@
   background: var(--accent-soft);
 }
 
+.search-property-remove {
+  flex: 0 0 34px;
+  padding: 0;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.search-property-remove:hover,
+.search-property-remove:focus {
+  color: var(--bad);
+}
+
+.search-add-filter {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.search-add-filter summary {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  color: var(--accent-strong);
+  cursor: pointer;
+  list-style: none;
+  white-space: nowrap;
+}
+
+.search-add-filter summary::-webkit-details-marker {
+  display: none;
+}
+
+.search-add-filter-menu {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 150px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg-elevated);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+}
+
+.search-add-filter-menu button {
+  padding: 6px 9px;
+  border-color: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
 .search-filters-reset {
+  flex: 0 0 auto;
   padding: 6px 10px;
   color: var(--accent);
   cursor: pointer;
@@ -150,5 +227,16 @@
 
   .search-input {
     font-size: 16px;
+  }
+
+  .search-property-control {
+    flex: 1 1 calc(50% - 4px);
+  }
+}
+
+@media (max-width: 420px) {
+  .search-property-control {
+    flex-basis: 100%;
+    min-width: 100%;
   }
 }
