@@ -1,6 +1,6 @@
 import type { EntityTable } from 'dexie'
 import { db } from '../db/db'
-import type { Folder, Page, PageBackground, PageType, Tag, PageTag, Task, TextBlock, Template, TemplateTextBlock, TemplateTask, Stroke, PdfPrintout } from '../db/types'
+import type { Folder, Page, PageBackground, PageProperties, PageType, Tag, PageTag, Task, TextBlock, Template, TemplateTextBlock, TemplateTask, Stroke, PdfPrintout } from '../db/types'
 import { supabase } from './supabaseClient'
 
 // Faengt fehlende/kaputte Zeitstempel ab, statt dass new Date(...).toISOString() mit
@@ -84,12 +84,14 @@ interface RemotePage {
   strokes: Stroke[]
   background: string
   order: number
+  created_at: string
   updated_at: string
   deleted_at: string | null
   favorited_at: string | null
   page_type: string | null
   custom_date: string | null
   afns: number[]
+  properties: PageProperties
 }
 
 interface RemoteTag {
@@ -141,6 +143,7 @@ interface RemoteTemplate {
   name: string
   background: string
   page_type: string | null
+  properties: PageProperties
   tag_names: string[]
   text_blocks: TemplateTextBlock[]
   tasks: TemplateTask[]
@@ -206,12 +209,14 @@ export async function syncAll(): Promise<void> {
       strokes: p.strokes,
       background: p.background ?? 'lined',
       order: p.order,
+      created_at: iso(p.createdAt ?? p.order),
       updated_at: iso(p.updatedAt),
       deleted_at: p.deletedAt ? iso(p.deletedAt) : null,
       favorited_at: p.favoritedAt ? iso(p.favoritedAt) : null,
       page_type: p.pageType ?? null,
       custom_date: p.customDate ? iso(p.customDate) : null,
       afns: p.afns ?? [],
+      properties: p.properties ?? {},
     }),
     (r) => ({
       id: r.id,
@@ -220,12 +225,14 @@ export async function syncAll(): Promise<void> {
       strokes: r.strokes,
       background: (r.background as Page['background']) ?? 'lined',
       order: r.order,
+      createdAt: ms(r.created_at),
       updatedAt: ms(r.updated_at),
       deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined,
       favoritedAt: r.favorited_at ? ms(r.favorited_at) : undefined,
       pageType: (r.page_type as PageType) || undefined,
       customDate: r.custom_date ? ms(r.custom_date) : undefined,
       afns: r.afns && r.afns.length > 0 ? r.afns : undefined,
+      properties: r.properties ?? undefined,
     }),
   )
 
@@ -324,6 +331,7 @@ export async function syncAll(): Promise<void> {
       name: t.name,
       background: t.background,
       page_type: t.pageType ?? null,
+      properties: t.properties ?? {},
       tag_names: t.tagNames,
       text_blocks: t.textBlocks,
       tasks: t.tasks,
@@ -335,6 +343,7 @@ export async function syncAll(): Promise<void> {
       name: r.name,
       background: (r.background as PageBackground) ?? 'lined',
       pageType: (r.page_type as PageType) || undefined,
+      properties: r.properties ?? undefined,
       tagNames: r.tag_names ?? [],
       textBlocks: r.text_blocks ?? [],
       tasks: r.tasks ?? [],
@@ -381,3 +390,4 @@ export async function syncAll(): Promise<void> {
     }),
   )
 }
+
