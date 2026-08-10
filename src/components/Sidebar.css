@@ -21,6 +21,10 @@
   border-right: none;
 }
 
+.sidebar.resizing {
+  transition: none;
+}
+
 .sidebar-section {
   padding: 10px 0;
   padding-top: 10px;
