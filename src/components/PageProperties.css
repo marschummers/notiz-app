@@ -35,7 +35,9 @@
   top: calc(100% + 6px);
   right: 0;
   z-index: 20;
-  width: 220px;
+  width: min(320px, calc(100vw - 24px));
+  max-height: min(680px, calc(100vh - 90px));
+  overflow-y: auto;
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -62,13 +64,81 @@
 }
 
 .properties-field select,
-.properties-date-row input[type='date'] {
+.properties-field input[type='date'],
+.properties-field input[type='text'] {
   padding: 6px 8px;
   border-radius: var(--radius-control);
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text);
   font-size: 13px;
+}
+
+.properties-heading {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.properties-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.properties-remove {
+  padding: 0 3px;
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.properties-remove:hover {
+  color: var(--bad);
+}
+
+.properties-system-value {
+  padding: 6px 8px;
+  border-radius: var(--radius-control);
+  background: var(--bg);
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.properties-suggestions,
+.properties-more {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.properties-more summary {
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.properties-suggestion-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.properties-suggestion-list button {
+  padding: 4px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.properties-suggestion-list button:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
 }
 
 .properties-date-row {
@@ -194,3 +264,4 @@
   border-color: var(--accent);
   color: var(--accent-strong);
 }
+
