@@ -41,10 +41,40 @@ export interface Folder {
 // schmalen Stichwort-Spalte links und einer Zusammenfassungs-Zeile unten.
 export type PageBackground = 'lined' | 'dotted' | 'cornell' | 'blank'
 
-// Einfache, feste Property-Typen fuer den ersten Schritt (bewusst kein frei definierbares
-// Property-System) - undefined/fehlend bedeutet "Allgemein", bestehende Seiten ohne das Feld
-// brauchen dadurch keine Migration.
-export type PageType = 'Allgemein' | 'Meeting' | 'Gesprächsnotiz' | 'Idee' | 'Konzept' | 'Protokoll' | 'Recherche'
+// Zentral erlaubte Seitentypen sowie das generische Property-Datenformat. Die Definitionen fuer
+// Anzeige, Auswahlwerte und Typ-Empfehlungen liegen in lib/propertyDefinitions.ts. Die alten
+// Spezialfelder auf Page bleiben als kompatible Spiegelung/Fallback fuer Bestandsdaten bestehen.
+export type PageType =
+  | 'Notiz'
+  | 'Meeting'
+  | 'Vor-Ort-Termin'
+  | 'Kunde'
+  | 'Projekt'
+  | 'Wissen'
+  | 'Idee'
+  | 'Entscheidung'
+  | 'Prozess'
+  | 'Person'
+  | 'Anforderung'
+  | 'Dokumentation'
+
+export type PagePropertyKey =
+  | 'type'
+  | 'status'
+  | 'createdAt'
+  | 'updatedAt'
+  | 'date'
+  | 'customer'
+  | 'project'
+  | 'responsible'
+  | 'participants'
+  | 'area'
+  | 'priority'
+  | 'source'
+  | 'afn'
+
+export type PagePropertyValue = string | number | string[] | number[]
+export type PageProperties = Partial<Record<PagePropertyKey, PagePropertyValue>>
 
 // Eine Notizseite. `folderId` optional (undefined = unabgelegt, direkt in der Wurzel sichtbar).
 // Die Striche liegen direkt auf der Seite (nicht in einer eigenen Tabelle) - fuer eine
@@ -64,12 +94,14 @@ export interface Page {
   strokes: Stroke[]
   background?: PageBackground
   order: number
+  createdAt?: number
   updatedAt: number
   deletedAt?: number
   favoritedAt?: number
   pageType?: PageType
   customDate?: number
   afns?: number[]
+  properties?: PageProperties
 }
 
 export interface Tag {
@@ -155,6 +187,7 @@ export interface Template {
   name: string
   background: PageBackground
   pageType?: PageType
+  properties?: PageProperties
   tagNames: string[]
   textBlocks: TemplateTextBlock[]
   tasks: TemplateTask[]
@@ -187,3 +220,4 @@ export interface PdfBlobCache {
   blob: Blob
   cachedAt: number
 }
+
