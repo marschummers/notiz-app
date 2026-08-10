@@ -2010,13 +2010,14 @@ export default function DrawingCanvas({
     <div className="drawing">
       <div className="drawing-toolbar">
         <button
-          className={`icon-button${mousePenEnabled ? ' active' : ''}`}
+          className={`icon-button${mousePenEnabled && !eraser ? ' active' : ''}`}
           onClick={() => {
-            setMousePenEnabled((enabled) => !enabled)
+            setMousePenEnabled((enabled) => (eraser ? true : !enabled))
+            setEraser(false)
             onRequestExitLasso?.()
           }}
-          aria-label={mousePenEnabled ? 'Maus-Stift ausschalten' : 'Maus-Stift einschalten'}
-          title={mousePenEnabled ? 'Maus-Stift aktiv' : 'Mit der Maus zeichnen'}
+          aria-label={mousePenEnabled && !eraser ? 'Maus-Stift ausschalten' : 'Maus-Stift einschalten'}
+          title={mousePenEnabled && !eraser ? 'Maus-Stift aktiv' : 'Mit der Maus zeichnen'}
         >
           <PenIcon />
         </button>
@@ -2044,6 +2045,7 @@ export default function DrawingCanvas({
           className={`icon-button${eraser ? ' active' : ''}`}
           onClick={() => {
             setEraser((v) => !v)
+            setMousePenEnabled(true)
             onRequestExitLasso?.()
           }}
           aria-label="Radierer"
