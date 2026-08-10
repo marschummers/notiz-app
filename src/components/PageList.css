@@ -26,6 +26,20 @@
   color: var(--text);
 }
 
+.page-list-header .renameable-folder-heading {
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.page-list-header .renameable-folder-heading:hover {
+  color: var(--accent-strong);
+}
+
+.page-list-header .renameable-folder-heading:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
 .sidebar-toggle {
   padding: 8px 10px;
   border-radius: var(--radius-control);
