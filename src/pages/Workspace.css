@@ -4,3 +4,27 @@
   width: 100vw;
   overflow: hidden;
 }
+
+.sidebar-resize-handle {
+  position: relative;
+  z-index: 20;
+  width: 10px;
+  margin-left: -5px;
+  margin-right: -5px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.sidebar-resize-handle::after {
+  content: '';
+  position: absolute;
+  inset: 0 4px;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.sidebar-resize-handle:hover::after,
+.sidebar-resize-handle.active::after {
+  background: var(--accent);
+}

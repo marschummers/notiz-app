@@ -9,6 +9,8 @@ import './Sidebar.css'
 
 interface Props {
   open: boolean
+  width: number
+  resizing: boolean
   selection: Selection
   activeView: 'notes' | 'tasks' | 'search' | 'all-notes'
   onSelect: (s: Selection) => void
@@ -25,6 +27,8 @@ interface Props {
 
 export default function Sidebar({
   open,
+  width,
+  resizing,
   selection,
   activeView,
   onSelect,
@@ -72,7 +76,10 @@ export default function Sidebar({
     activeView === 'tasks' || activeView === 'search' || activeView === 'all-notes' ? { type: 'folder', id: '__none__' } : selection
 
   return (
-    <div className={`sidebar${open ? '' : ' collapsed'}`}>
+    <div
+      className={`sidebar${open ? '' : ' collapsed'}${resizing ? ' resizing' : ''}`}
+      style={open ? { width, minWidth: width } : undefined}
+    >
       <div className="sidebar-section">
         <div className={`tree-row${activeView === 'tasks' ? ' selected' : ''}`} onClick={onSelectTasks}>
           <span className="tree-label">☑ Aufgaben</span>
