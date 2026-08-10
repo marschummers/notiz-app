@@ -29,7 +29,9 @@ import { LassoIcon, TaskIcon, TextFieldIcon } from './icons'
 import PageProperties from './PageProperties'
 import './PageEditor.css'
 
-const BACKGROUND_LABELS: Record<PageBackground, string> = {
+type PagePattern = 'lined' | 'dotted' | 'cornell' | 'blank'
+
+const BACKGROUND_LABELS: Record<PagePattern, string> = {
   lined: 'Liniert',
   dotted: 'Gepunktet',
   cornell: 'Cornell',
@@ -86,6 +88,9 @@ export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBac
 
   if (!page) return null
 
+  const pageBackground = page.background ?? 'lined'
+  const darkPaper = pageBackground.startsWith('dark-')
+  const pagePattern = (darkPaper ? pageBackground.slice(5) : pageBackground) as PagePattern
   const tagIds = new Set((tagLinks ?? []).map((l) => l.tagId))
   const pageTags = (allTags ?? []).filter((t) => tagIds.has(t.id))
 
@@ -149,9 +154,12 @@ export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBac
         />
         <select
           className="background-select"
-          value={page.background ?? 'lined'}
-          onChange={(e) => updatePageBackground(pageId, e.target.value as PageBackground)}
-          aria-label="Seitenhintergrund"
+          value={pagePattern}
+          onChange={(e) => {
+            const pattern = e.target.value as PagePattern
+            updatePageBackground(pageId, (darkPaper ? `dark-${pattern}` : pattern) as PageBackground)
+          }}
+          aria-label="Papiermuster"
         >
           {Object.entries(BACKGROUND_LABELS).map(([value, label]) => (
             <option key={value} value={value}>
@@ -159,12 +167,21 @@ export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBac
             </option>
           ))}
         </select>
+        <button
+          className={`paper-mode-toggle${darkPaper ? ' active' : ''}`}
+          onClick={() => updatePageBackground(pageId, (darkPaper ? pagePattern : `dark-${pagePattern}`) as PageBackground)}
+          aria-label={darkPaper ? 'Helles Papier verwenden' : 'Dunkles Papier verwenden'}
+          title={darkPaper ? 'Helles Papier' : 'Dunkles Papier'}
+        >
+          <span aria-hidden="true">{darkPaper ? '☀' : '☾'}</span>
+          {darkPaper ? 'Hell' : 'Dunkel'}
+        </button>
       </div>
       <div className="page-editor-canvas">
         <DrawingCanvas
           key={pageId}
           initialStrokes={page.strokes}
-          background={page.background ?? 'lined'}
+          background={pageBackground}
           title={page.title}
           updatedAt={page.updatedAt}
           onChange={(strokes) => updatePageStrokes(pageId, strokes)}

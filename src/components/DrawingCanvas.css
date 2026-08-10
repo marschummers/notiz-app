@@ -552,3 +552,70 @@
 .link-autocomplete-row:hover {
   background: var(--accent-soft, rgba(185, 124, 69, 0.16));
 }
+
+/* Dunkles Papier ist eine Eigenschaft der einzelnen Notizseite, nicht des allgemeinen
+   App-Designs. Deshalb liegen alle Farben unter .dark-paper und beeinflussen weder andere
+   Seiten noch Werkzeugleisten. PDFs bleiben bewusst unveraendert weiss. */
+.drawing-canvas-wrap.dark-paper,
+.dark-paper .drawing-background {
+  background-color: #191915;
+}
+
+.dark-paper {
+  color-scheme: dark;
+}
+
+.dark-paper .bg-lined {
+  background-image: repeating-linear-gradient(to bottom, transparent, transparent 39px, #3d3b32 39px, #3d3b32 40px);
+}
+
+.dark-paper .bg-dotted {
+  background-image: radial-gradient(#575348 1.2px, transparent 1.2px);
+}
+
+.dark-paper .cornell-title,
+.dark-paper .page-updated-at {
+  color: #c9c0ad;
+}
+
+.dark-paper .cornell-subject,
+.dark-paper .cornell-details,
+.dark-paper .cornell-keypoints,
+.dark-paper .cornell-summary {
+  border-color: #5b5649;
+  background-image: repeating-linear-gradient(to bottom, transparent, transparent 27px, #3d3b32 27px, #3d3b32 28px);
+}
+
+.dark-paper .cornell-label {
+  color: #aaa18e;
+}
+
+.dark-paper .task-block {
+  border-color: #514d43;
+  background: rgba(42, 41, 35, 0.94);
+  color: #f3ead8;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.38);
+}
+
+.dark-paper .text-block {
+  color: #f3ead8;
+}
+
+.dark-paper .text-block.active {
+  border-color: #665c4b;
+  background: rgba(45, 42, 35, 0.95);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+.dark-paper .text-block-placeholder {
+  color: #aaa18e;
+}
+
+.dark-paper .link-autocomplete {
+  background: #292821;
+  border-color: #575247;
+}
+
+.dark-paper .link-autocomplete-row {
+  color: #f3ead8;
+}

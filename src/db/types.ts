@@ -39,7 +39,15 @@ export interface Folder {
 // Papiermuster fuer den Seitenhintergrund. 'lined' ist der Standard (liniert mit
 // grosszuegigem Zeilenabstand fuers Handschreiben), 'cornell' kombiniert das mit einer
 // schmalen Stichwort-Spalte links und einer Zusammenfassungs-Zeile unten.
-export type PageBackground = 'lined' | 'dotted' | 'cornell' | 'blank'
+export type PageBackground =
+  | 'lined'
+  | 'dotted'
+  | 'cornell'
+  | 'blank'
+  | 'dark-lined'
+  | 'dark-dotted'
+  | 'dark-cornell'
+  | 'dark-blank'
 
 // Zentral erlaubte Seitentypen sowie das generische Property-Datenformat. Die Definitionen fuer
 // Anzeige, Auswahlwerte und Typ-Empfehlungen liegen in lib/propertyDefinitions.ts. Die alten
