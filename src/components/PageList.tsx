@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
-import { createPage, createPageFromTemplate, deletePage, deleteTemplate, movePage, reorderPages } from '../lib/actions'
+import { createPage, createPageFromTemplate, deletePage, deleteTemplate, movePage, renameFolder, reorderPages } from '../lib/actions'
 import { formatRelativeTime } from '../lib/format'
 import type { Selection } from '../lib/selection'
 import { useDragReorder } from '../lib/useDragReorder'
@@ -145,13 +145,37 @@ export default function PageList({ selection, sidebarOpen, onToggleSidebar, onOp
     return names.length > 0 ? names.reverse().join(' › ') : 'Unbekannter Ordner'
   }
 
+  function renameSelectedFolder() {
+    if (selection.type !== 'folder' || !selection.id || !folder) return
+    const name = window.prompt('Ordner umbenennen', folder.name)
+    if (name?.trim()) renameFolder(selection.id, name.trim())
+  }
+
   return (
     <div className="page-list">
       <div className="page-list-header">
         <button className="sidebar-toggle" onClick={onToggleSidebar} aria-label={sidebarOpen ? 'Seitenleiste einfahren' : 'Seitenleiste ausfahren'}>
           ☰
         </button>
-        <h1>{heading}</h1>
+        {selection.type === 'folder' && selection.id ? (
+          <h1
+            className="renameable-folder-heading"
+            role="button"
+            tabIndex={0}
+            title="Ordner umbenennen"
+            onClick={renameSelectedFolder}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                renameSelectedFolder()
+              }
+            }}
+          >
+            {heading}
+          </h1>
+        ) : (
+          <h1>{heading}</h1>
+        )}
         {selection.type === 'folder' && <NewPageMenu folderId={selection.id} onOpenPage={onOpenPage} />}
       </div>
       {(pages ?? []).length === 0 && <p className="page-list-hint">Noch keine Seiten hier.</p>}
