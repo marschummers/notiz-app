@@ -1,6 +1,7 @@
 import { db, newId } from '../db/db'
-import type { PageBackground, PageType, PdfPrintout, Stroke } from '../db/types'
+import type { PageBackground, PageProperties, PagePropertyKey, PagePropertyValue, PageType, PdfPrintout, Stroke } from '../db/types'
 import { uploadPdf } from './pdfStorage'
+import { PAGE_PROPERTY_DEFINITIONS } from './propertyDefinitions'
 import { supabase } from './supabaseClient'
 
 export async function createFolder(parentId: string | undefined, name = 'Neuer Ordner'): Promise<string> {
@@ -44,11 +45,23 @@ export async function deleteFolder(id: string): Promise<void> {
 export async function createPage(folderId: string | undefined, title = 'Neue Seite'): Promise<string> {
   const id = newId()
   const now = Date.now()
-  // customDate startet auf das Erstelldatum (nicht updatedAt, das aendert sich bei jeder
-  // Bearbeitung) - bleibt aber ein normales, im Eigenschaften-Panel frei aenderbares/loeschbares
-  // Feld, kein separates "erstellt am" mit eigener Bedeutung.
-  await db.pages.add({ id, folderId, title, strokes: [], background: 'lined', order: now, updatedAt: now, customDate: now })
+  await db.pages.add({
+    id,
+    folderId,
+    title,
+    strokes: [],
+    background: 'lined',
+    order: now,
+    createdAt: now,
+    updatedAt: now,
+    pageType: 'Notiz',
+    properties: { type: 'Notiz' },
+  })
   return id
+}
+
+async function touchPage(pageId: string, now = Date.now()): Promise<void> {
+  await db.pages.update(pageId, { updatedAt: now })
 }
 
 // Siehe reorderFolders - gleiches Prinzip fuer Seiten innerhalb eines Ordners.
@@ -81,11 +94,32 @@ export async function toggleFavorite(id: string, favorite: boolean): Promise<voi
 }
 
 export async function updatePageType(id: string, pageType: PageType): Promise<void> {
-  await db.pages.update(id, { pageType, updatedAt: Date.now() })
+  await updatePageProperty(id, 'type', pageType)
 }
 
 export async function updatePageCustomDate(id: string, customDate: number | undefined): Promise<void> {
-  await db.pages.update(id, { customDate, updatedAt: Date.now() })
+  await updatePageProperty(id, 'date', customDate)
+}
+
+export async function updatePageProperty(
+  id: string,
+  key: PagePropertyKey,
+  value: PagePropertyValue | undefined,
+): Promise<void> {
+  if (key === 'createdAt' || key === 'updatedAt') return
+  const allowedOptions = PAGE_PROPERTY_DEFINITIONS[key].options
+  if (allowedOptions && value !== '' && (typeof value !== 'string' || !allowedOptions.includes(value))) return
+  const page = await db.pages.get(id)
+  if (!page) return
+  const properties: PageProperties = { ...(page.properties ?? {}) }
+  if (value === undefined) delete properties[key]
+  else properties[key] = value
+
+  const changes: Partial<typeof page> = { properties, updatedAt: Date.now() }
+  if (key === 'type') changes.pageType = value as PageType | undefined
+  if (key === 'date') changes.customDate = typeof value === 'number' ? value : undefined
+  if (key === 'afn') changes.afns = Array.isArray(value) ? value.filter((item): item is number => typeof item === 'number') : undefined
+  await db.pages.update(id, changes)
 }
 
 // Fuegt eine AFN (numerische Referenznummer) hinzu bzw. entfernt sie wieder - echtes Array-Feld
@@ -96,14 +130,15 @@ export async function addAfnToPage(id: string, afn: number): Promise<void> {
   if (!page) return
   const current = page.afns ?? []
   if (current.includes(afn)) return
-  await db.pages.update(id, { afns: [...current, afn], updatedAt: Date.now() })
+  await updatePageProperty(id, 'afn', [...current, afn])
 }
 
 export async function removeAfnFromPage(id: string, afn: number): Promise<void> {
   const page = await db.pages.get(id)
   if (!page) return
   const current = page.afns ?? []
-  await db.pages.update(id, { afns: current.filter((a) => a !== afn), updatedAt: Date.now() })
+  const next = current.filter((a) => a !== afn)
+  await updatePageProperty(id, 'afn', next.length > 0 ? next : undefined)
 }
 
 export async function deletePage(id: string): Promise<void> {
@@ -150,6 +185,7 @@ export async function attachPdfToPage(pageId: string, file: File): Promise<PdfPr
 
   const printout: PdfPrintout = { id, pageId, fileName: file.name, storagePath, createdAt: now, updatedAt: now }
   await db.pdfPrintouts.add(printout)
+  await touchPage(pageId, now)
   return printout
 }
 
@@ -158,8 +194,10 @@ export async function attachPdfToPage(pageId: string, file: File): Promise<PdfPr
 // synchronisiert wird und ohne aktive Metadaten-Zeile ohnehin nicht mehr erreichbar waere.
 export async function removePdfFromPage(id: string): Promise<void> {
   const now = Date.now()
+  const printout = await db.pdfPrintouts.get(id)
   await db.pdfPrintouts.update(id, { deletedAt: now, updatedAt: now })
   await db.pdfBlobs.delete(id)
+  if (printout) await touchPage(printout.pageId, now)
 }
 
 // Findet einen bestehenden Tag mit diesem Namen (case-insensitiv) oder legt einen neuen an -
@@ -182,6 +220,7 @@ export async function deleteTag(id: string): Promise<void> {
     await db.pageTags.update(link.id, { deletedAt: now, updatedAt: now })
   }
   await db.tags.update(id, { deletedAt: now, updatedAt: now })
+  for (const pageId of new Set(links.map((link) => link.pageId))) await touchPage(pageId, now)
 }
 
 export async function addTagToPage(pageId: string, tagId: string): Promise<void> {
@@ -191,6 +230,7 @@ export async function addTagToPage(pageId: string, tagId: string): Promise<void>
     .first()
   if (existing) return
   await db.pageTags.add({ id: newId(), pageId, tagId, updatedAt: now })
+  await touchPage(pageId, now)
 }
 
 export async function removeTagFromPage(pageId: string, tagId: string): Promise<void> {
@@ -199,6 +239,7 @@ export async function removeTagFromPage(pageId: string, tagId: string): Promise<
   for (const link of links) {
     await db.pageTags.update(link.id, { deletedAt: now, updatedAt: now })
   }
+  if (links.length > 0) await touchPage(pageId, now)
 }
 
 // Legt ein To-do an gewaehlter Position auf einer Seite an (x/y im selben unskalierten
@@ -208,24 +249,36 @@ export async function createTask(pageId: string, x: number, y: number, text = ''
   const id = newId()
   const now = Date.now()
   await db.tasks.add({ id, pageId, text, completed: false, x, y, createdAt: now, updatedAt: now })
+  await touchPage(pageId, now)
   return id
 }
 
 export async function updateTaskText(id: string, text: string): Promise<void> {
-  await db.tasks.update(id, { text, updatedAt: Date.now() })
+  const task = await db.tasks.get(id)
+  const now = Date.now()
+  await db.tasks.update(id, { text, updatedAt: now })
+  if (task) await touchPage(task.pageId, now)
 }
 
 export async function toggleTask(id: string, completed: boolean): Promise<void> {
-  await db.tasks.update(id, { completed, updatedAt: Date.now() })
+  const task = await db.tasks.get(id)
+  const now = Date.now()
+  await db.tasks.update(id, { completed, updatedAt: now })
+  if (task) await touchPage(task.pageId, now)
 }
 
 export async function moveTask(id: string, x: number, y: number): Promise<void> {
-  await db.tasks.update(id, { x, y, updatedAt: Date.now() })
+  const task = await db.tasks.get(id)
+  const now = Date.now()
+  await db.tasks.update(id, { x, y, updatedAt: now })
+  if (task) await touchPage(task.pageId, now)
 }
 
 export async function deleteTask(id: string): Promise<void> {
   const now = Date.now()
+  const task = await db.tasks.get(id)
   await db.tasks.update(id, { deletedAt: now, updatedAt: now })
+  if (task) await touchPage(task.pageId, now)
 }
 
 // Legt ein frei platziertes Textfeld an - gleiche Koordinatenlogik wie createTask (x/y im
@@ -234,27 +287,39 @@ export async function createTextBlock(pageId: string, x: number, y: number, text
   const id = newId()
   const now = Date.now()
   await db.textBlocks.add({ id, pageId, text, x, y, createdAt: now, updatedAt: now })
+  await touchPage(pageId, now)
   return id
 }
 
 export async function updateTextBlockText(id: string, text: string): Promise<void> {
-  await db.textBlocks.update(id, { text, updatedAt: Date.now() })
+  const block = await db.textBlocks.get(id)
+  const now = Date.now()
+  await db.textBlocks.update(id, { text, updatedAt: now })
+  if (block) await touchPage(block.pageId, now)
 }
 
 export async function moveTextBlock(id: string, x: number, y: number): Promise<void> {
-  await db.textBlocks.update(id, { x, y, updatedAt: Date.now() })
+  const block = await db.textBlocks.get(id)
+  const now = Date.now()
+  await db.textBlocks.update(id, { x, y, updatedAt: now })
+  if (block) await touchPage(block.pageId, now)
 }
 
 // Speichert die vom Nutzer per Ziehen gewaehlte Breite eines Textfelds (siehe db/types.ts
 // TextBlock.width) - wird beim Verlassen des Bearbeitungsmodus aufgerufen, siehe
 // components/DrawingCanvas.tsx TextBlockItem.
 export async function updateTextBlockWidth(id: string, width: number): Promise<void> {
-  await db.textBlocks.update(id, { width, updatedAt: Date.now() })
+  const block = await db.textBlocks.get(id)
+  const now = Date.now()
+  await db.textBlocks.update(id, { width, updatedAt: now })
+  if (block) await touchPage(block.pageId, now)
 }
 
 export async function deleteTextBlock(id: string): Promise<void> {
   const now = Date.now()
+  const block = await db.textBlocks.get(id)
   await db.textBlocks.update(id, { deletedAt: now, updatedAt: now })
+  if (block) await touchPage(block.pageId, now)
 }
 
 // Speichert einen Schnappschuss der aktuell sichtbaren Inhalte einer Seite als Vorlage (siehe
@@ -277,6 +342,7 @@ export async function saveAsTemplate(pageId: string, name: string): Promise<stri
     name,
     background: page.background ?? 'lined',
     pageType: page.pageType,
+    properties: page.properties,
     tagNames,
     textBlocks: textBlocks.map((t) => ({ text: t.text, x: t.x, y: t.y })),
     tasks: tasks.map((t) => ({ text: t.text, completed: t.completed, x: t.x, y: t.y })),
@@ -307,9 +373,10 @@ export async function createPageFromTemplate(folderId: string | undefined, templ
     strokes: [],
     background: template.background,
     order: now,
+    createdAt: now,
     updatedAt: now,
-    customDate: now,
     pageType: template.pageType,
+    properties: template.properties,
   })
 
   for (const name of template.tagNames) {
@@ -325,3 +392,4 @@ export async function createPageFromTemplate(folderId: string | undefined, templ
 
   return pageId
 }
+

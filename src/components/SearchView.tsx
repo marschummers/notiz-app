@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
+import { getPageAfns } from '../lib/propertyDefinitions'
 import type { Folder, Page, Tag, Task } from '../db/types'
 import './SearchView.css'
 
@@ -38,7 +39,7 @@ export default function SearchView({ onOpenPage, onSelectFolder, onSelectTag }: 
 
   const matchedPages = active
     ? sortByRelevance(
-        (pages ?? []).filter((p) => (p.title || '').toLowerCase().includes(q) || (p.afns ?? []).some((afn) => String(afn).includes(q))),
+        (pages ?? []).filter((p) => (p.title || '').toLowerCase().includes(q) || getPageAfns(p).some((afn) => String(afn).includes(q))),
         (p: Page) => p.title || '',
         q,
       )
@@ -72,8 +73,8 @@ export default function SearchView({ onOpenPage, onSelectFolder, onSelectTag }: 
               <span className="search-row-icon">📄</span>
               <div className="search-row-text">
                 <div className="search-row-title">{p.title || 'Ohne Titel'}</div>
-                {!!p.afns && p.afns.length > 0 && (
-                  <div className="search-row-sub">{p.afns.map((afn) => `AFN ${afn}`).join(', ')}</div>
+                {getPageAfns(p).length > 0 && (
+                  <div className="search-row-sub">{getPageAfns(p).map((afn) => `AFN ${afn}`).join(', ')}</div>
                 )}
               </div>
             </div>
@@ -122,3 +123,4 @@ export default function SearchView({ onOpenPage, onSelectFolder, onSelectTag }: 
     </div>
   )
 }
+
