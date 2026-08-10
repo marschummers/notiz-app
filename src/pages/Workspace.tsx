@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../lib/auth'
 import { syncAll } from '../lib/sync'
 import type { Selection } from '../lib/selection'
@@ -11,11 +11,16 @@ import AllNotesView from '../components/AllNotesView'
 import './Workspace.css'
 
 export default function Workspace() {
+  const DEFAULT_SIDEBAR_WIDTH = 260
+  const MIN_SIDEBAR_WIDTH = 200
   const { session, signOut } = useAuth()
   const [selection, setSelection] = useState<Selection>({ type: 'folder', id: undefined })
   const [activeView, setActiveView] = useState<'notes' | 'tasks' | 'search' | 'all-notes'>('notes')
   const [openPageId, setOpenPageId] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH)
+  const [resizingSidebar, setResizingSidebar] = useState(false)
+  const sidebarResizeRef = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
 
@@ -53,6 +58,27 @@ export default function Workspace() {
     setOpenPageId(null)
   }
 
+  function startSidebarResize(e: React.PointerEvent<HTMLDivElement>) {
+    e.preventDefault()
+    sidebarResizeRef.current = { pointerId: e.pointerId, startX: e.clientX, startWidth: sidebarWidth }
+    e.currentTarget.setPointerCapture(e.pointerId)
+    setResizingSidebar(true)
+  }
+
+  function moveSidebarResize(e: React.PointerEvent<HTMLDivElement>) {
+    const resize = sidebarResizeRef.current
+    if (!resize || resize.pointerId !== e.pointerId) return
+    const maxWidth = Math.max(MIN_SIDEBAR_WIDTH, Math.min(560, window.innerWidth - 160))
+    setSidebarWidth(Math.min(maxWidth, Math.max(MIN_SIDEBAR_WIDTH, resize.startWidth + e.clientX - resize.startX)))
+  }
+
+  function finishSidebarResize(e: React.PointerEvent<HTMLDivElement>) {
+    if (sidebarResizeRef.current?.pointerId !== e.pointerId) return
+    sidebarResizeRef.current = null
+    setResizingSidebar(false)
+    e.currentTarget.releasePointerCapture(e.pointerId)
+  }
+
   // Ctrl+K/Cmd+K oeffnet die Suche von ueberall im Workspace aus, wie in den meisten Apps mit
   // Befehls-/Suchpalette ueblich.
   useEffect(() => {
@@ -71,6 +97,8 @@ export default function Workspace() {
     <div className="workspace">
       <Sidebar
         open={sidebarOpen}
+        width={sidebarWidth}
+        resizing={resizingSidebar}
         selection={selection}
         activeView={activeView}
         onSelect={selectFolderOrTag}
@@ -93,6 +121,20 @@ export default function Workspace() {
         userEmail={session?.user.email}
         onSignOut={signOut}
       />
+      {sidebarOpen && (
+        <div
+          className={`sidebar-resize-handle${resizingSidebar ? ' active' : ''}`}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Breite der Seitenleiste ändern"
+          title="Seitenleiste breiter oder schmaler ziehen"
+          onPointerDown={startSidebarResize}
+          onPointerMove={moveSidebarResize}
+          onPointerUp={finishSidebarResize}
+          onPointerCancel={finishSidebarResize}
+          onDoubleClick={() => setSidebarWidth(DEFAULT_SIDEBAR_WIDTH)}
+        />
+      )}
       {openPageId ? (
         <PageEditor
           pageId={openPageId}
