@@ -831,6 +831,7 @@ function TextBlockItem({
     if (touchType !== 'direct') return
     clearLongPressTimer()
     longPressArmedRef.current = false
+    startClientRef.current = { x: t.clientX, y: t.clientY }
     startDrag(t.clientX, t.clientY)
   }
 
@@ -932,21 +933,19 @@ function TextBlockItem({
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
     >
-      {editing && (
-        <div
-          className="text-block-drag-handle"
-          onTouchStart={handleHandleTouchStart}
-          onMouseDown={handleHandleMouseDown}
-          aria-hidden="true"
-        >
-          <span />
-          <span />
-          <span />
-          <span />
-          <span />
-          <span />
-        </div>
-      )}
+      <div
+        className="text-block-drag-handle"
+        onTouchStart={handleHandleTouchStart}
+        onMouseDown={handleHandleMouseDown}
+        aria-hidden="true"
+      >
+        <span />
+        <span />
+        <span />
+        <span />
+        <span />
+        <span />
+      </div>
       {editing ? (
         <div className="text-block-edit-wrap">
           <textarea
@@ -996,6 +995,7 @@ function TextBlockItem({
                   className="page-link"
                   onClick={(e) => {
                     e.stopPropagation()
+                    if (justDraggedRef.current) return
                     onOpenPageLink(seg.pageId)
                   }}
                 >
