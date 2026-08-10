@@ -38,6 +38,13 @@ function PdfPageHost({ canvas, style }: { canvas: HTMLCanvasElement; style?: CSS
 }
 
 const COLORS = ['#08060d', '#d1263f', '#1d5fd6']
+const DARK_PAPER_INK = '#f3ead8'
+
+function displayStrokeColor(stroke: Stroke, darkPaper: boolean): string {
+  if (!darkPaper || stroke.pdfAnchor) return stroke.color
+  const color = stroke.color.toLowerCase()
+  return color === '#08060d' || color === '#000' || color === '#000000' || color === 'black' ? DARK_PAPER_INK : stroke.color
+}
 
 // x-Koordinaten (Striche + Tasks) werden relativ zur Dokumentbreite gespeichert (Bruchteil,
 // z.B. 0.5 = Seitenmitte) statt als absolute Pixel - so bleibt ein Element auf einem breiten
@@ -68,9 +75,9 @@ function midPoint(a: Point, b: Point): Point {
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, pressure: (a.pressure + b.pressure) / 2 }
 }
 
-function drawSegment(ctx: CanvasRenderingContext2D, from: Point, control: Point, to: Point, stroke: Stroke) {
+function drawSegment(ctx: CanvasRenderingContext2D, from: Point, control: Point, to: Point, stroke: Stroke, darkPaper = false) {
   ctx.globalCompositeOperation = stroke.eraser ? 'destination-out' : 'source-over'
-  ctx.strokeStyle = stroke.color
+  ctx.strokeStyle = displayStrokeColor(stroke, darkPaper)
   ctx.lineWidth = stroke.eraser ? stroke.width * 3 : Math.max(stroke.width * control.pressure, 0.8)
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
@@ -80,18 +87,18 @@ function drawSegment(ctx: CanvasRenderingContext2D, from: Point, control: Point,
   ctx.stroke()
 }
 
-function redrawAll(ctx: CanvasRenderingContext2D, width: number, height: number, strokes: Stroke[]) {
+function redrawAll(ctx: CanvasRenderingContext2D, width: number, height: number, strokes: Stroke[], darkPaper = false) {
   ctx.clearRect(0, 0, width, height)
   for (const stroke of strokes) {
     const pts = stroke.points
     if (pts.length === 1) {
-      drawSegment(ctx, pts[0], pts[0], pts[0], stroke)
+      drawSegment(ctx, pts[0], pts[0], pts[0], stroke, darkPaper)
       continue
     }
     for (let i = 1; i < pts.length - 1; i++) {
       const from = i === 1 ? pts[0] : midPoint(pts[i - 1], pts[i])
       const to = midPoint(pts[i], pts[i + 1])
-      drawSegment(ctx, from, pts[i], to, stroke)
+      drawSegment(ctx, from, pts[i], to, stroke, darkPaper)
     }
   }
 }
@@ -1200,6 +1207,9 @@ export default function DrawingCanvas({
   onRequestExitLasso,
   toolbarExtra,
 }: Props) {
+  const darkPaper = background.startsWith('dark-')
+  const paperPattern = (darkPaper ? background.slice(5) : background) as 'lined' | 'dotted' | 'cornell' | 'blank'
+  const darkPaperRef = useRef(darkPaper)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
   // Safari behandelt <canvas> mit gezeichnetem Inhalt wie ein Bild (Hover-Vorschau,
@@ -1464,6 +1474,13 @@ export default function DrawingCanvas({
   // bleibt die Flaeche leer statt Tinte kurz an falscher Position aufblitzen zu lassen.
   const widthSettledRef = useRef(false)
 
+  useEffect(() => {
+    darkPaperRef.current = darkPaper
+    if (widthSettledRef.current) redrawCanvas()
+    // redrawCanvas liest die Zeichen-Daten aus Refs; nur der Papiermodus loest diesen Effekt aus.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [darkPaper])
+
   // Zeichnet neu, mit fuer PDF-gebundene Striche FRISCH aus der aktuellen Seitengroesse
   // abgeleiteten Positionen (siehe toDrawableStrokes) - zentrale Stelle, die bei jeder
   // relevanten Aenderung (Breite/Resize, PDF fertig geladen) erneut aufgerufen wird, damit
@@ -1486,7 +1503,7 @@ export default function DrawingCanvas({
         selected.has(idx) ? { ...s, points: s.points.map((p) => ({ ...p, x: p.x + offset.dx, y: p.y + offset.dy })) } : s,
       )
     }
-    redrawAll(ctx, canvas.clientWidth, canvas.clientHeight, drawable)
+    redrawAll(ctx, canvas.clientWidth, canvas.clientHeight, drawable, darkPaperRef.current)
 
     if (lassoGestureRef.current === 'drawing') {
       drawDashedPath(ctx, lassoPathRef.current)
@@ -1792,9 +1809,9 @@ export default function DrawingCanvas({
       if (n >= 3) {
         const from = midPoint(pts[n - 3], pts[n - 2])
         const to = midPoint(pts[n - 2], pts[n - 1])
-        drawSegment(ctx, from, pts[n - 2], to, stroke)
+        drawSegment(ctx, from, pts[n - 2], to, stroke, darkPaperRef.current)
       } else if (n === 2) {
-        drawSegment(ctx, pts[0], pts[0], pts[1], stroke)
+        drawSegment(ctx, pts[0], pts[0], pts[1], stroke, darkPaperRef.current)
       }
     }
 
@@ -2087,7 +2104,10 @@ export default function DrawingCanvas({
           <button
             key={c}
             className="swatch"
-            style={{ background: c, outline: !eraser && color === c ? '2px solid #999' : 'none' }}
+            style={{
+              background: darkPaper && c === COLORS[0] ? DARK_PAPER_INK : c,
+              outline: !eraser && color === c ? '2px solid #999' : 'none',
+            }}
             onClick={() => {
               setColor(c)
               setEraser(false)
@@ -2157,7 +2177,7 @@ export default function DrawingCanvas({
           Noch keine Eingabe
         </div>
       </div>
-      <div className="drawing-canvas-wrap" ref={wrapRef}>
+      <div className={`drawing-canvas-wrap${darkPaper ? ' dark-paper' : ''}`} ref={wrapRef}>
         {/* Eigenes Element statt CSS-Hintergrund direkt auf dem <canvas>: WebKit aktualisiert
             den Compositor-Layer eines Canvas-Elements beim Klassenwechsel manchmal nicht
             zuverlässig (Papiermuster blieb nach "Leer" -> "Liniert" bis zum Neuladen falsch). */}
@@ -2170,13 +2190,13 @@ export default function DrawingCanvas({
             transform: `translate(${viewRef.current.x}px, ${viewRef.current.y}px) scale(${viewRef.current.scale})`,
           }}
         >
-          {(background === 'lined' || background === 'dotted') &&
+          {(paperPattern === 'lined' || paperPattern === 'dotted') &&
             Array.from({ length: Math.max(1, Math.ceil(contentHeight / PATTERN_CHUNK_HEIGHT)) }).map((_, i) => {
               const top = i * PATTERN_CHUNK_HEIGHT
               const height = Math.min(PATTERN_CHUNK_HEIGHT, contentHeight - top)
-              return <div key={i} className={`drawing-background-chunk bg-${background}`} style={{ top, height }} />
+              return <div key={i} className={`drawing-background-chunk bg-${paperPattern}`} style={{ top, height }} />
             })}
-          {background === 'cornell' && (
+          {paperPattern === 'cornell' && (
             <div className="cornell-page">
               <div className="cornell-title">{title || 'Ohne Titel'}</div>
               <div className="cornell-subject">

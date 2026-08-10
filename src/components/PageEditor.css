@@ -125,6 +125,25 @@
   font-size: 13px;
 }
 
+.paper-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-dim);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.paper-mode-toggle:hover,
+.paper-mode-toggle.active {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
 .page-editor-canvas {
   flex: 1;
   min-height: 0;
