@@ -49,6 +49,16 @@ export function EraserIcon(props: SVGProps<SVGSVGElement>) {
   )
 }
 
+export function PenIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <IconBase {...props}>
+      <path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0 0-3l-.5-.5a2.1 2.1 0 0 0-3 0l-10 10L4 20Z" />
+      <path d="m13.5 7 3.5 3.5" />
+      <path d="m5 15 4 4" />
+    </IconBase>
+  )
+}
+
 export function UndoIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <IconBase {...props}>

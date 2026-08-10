@@ -4,7 +4,7 @@ import { formatRelativeTime } from '../lib/format'
 import { parseLinkedText } from '../lib/pageLinks'
 import type { RenderedPdfPage } from '../lib/pdfRender'
 import { loadPdfBlob } from '../lib/pdfStorage'
-import { BroomIcon, EraserIcon, PdfIcon, TrashIcon, UndoIcon } from './icons'
+import { BroomIcon, EraserIcon, PdfIcon, PenIcon, TrashIcon, UndoIcon } from './icons'
 import './DrawingCanvas.css'
 
 // Vertikaler Abstand zwischen zwei uebereinander gestapelten PDF-Seiten (siehe .pdf-layer
@@ -1168,10 +1168,16 @@ export default function DrawingCanvas({
   const [color, setColor] = useState(COLORS[0])
   const [baseWidth, setBaseWidth] = useState(3)
   const [eraser, setEraser] = useState(false)
+  const [mousePenEnabled, setMousePenEnabled] = useState(false)
+  const mousePenEnabledRef = useRef(false)
   const [strokeCount, setStrokeCount] = useState(initialStrokes.length)
   const [zoomPercent, setZoomPercent] = useState(100)
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
   const [editingTextBlockId, setEditingTextBlockId] = useState<string | null>(null)
+
+  useEffect(() => {
+    mousePenEnabledRef.current = mousePenEnabled
+  }, [mousePenEnabled])
   // Aktuelle Breite der Zeichenflaeche in CSS-Pixeln - Nenner fuer die relative x-Umrechnung
   // (siehe toAbsoluteX/toStoredX). canvasWidthRef fuer den Touch-Event-Mount-Effekt (dort sind
   // nur Refs sicher aktuell, siehe colorRef/baseWidthRef-Muster), canvasWidth-State fuer die
@@ -1859,6 +1865,7 @@ export default function DrawingCanvas({
         startLassoGesture(pointFrom(e.clientX, e.clientY, 0.5))
         return
       }
+      if (!mousePenEnabledRef.current) return
       mouseDown = true
       startStroke(pointFrom(e.clientX, e.clientY, 0.5))
       updateDebug('mouse', 0.5)
@@ -2002,6 +2009,17 @@ export default function DrawingCanvas({
   return (
     <div className="drawing">
       <div className="drawing-toolbar">
+        <button
+          className={`icon-button${mousePenEnabled ? ' active' : ''}`}
+          onClick={() => {
+            setMousePenEnabled((enabled) => !enabled)
+            onRequestExitLasso?.()
+          }}
+          aria-label={mousePenEnabled ? 'Maus-Stift ausschalten' : 'Maus-Stift einschalten'}
+          title={mousePenEnabled ? 'Maus-Stift aktiv' : 'Mit der Maus zeichnen'}
+        >
+          <PenIcon />
+        </button>
         {COLORS.map((c) => (
           <button
             key={c}
