@@ -45,7 +45,7 @@
   padding: 30px;
   border: 1px solid var(--border);
   border-radius: 20px;
-  background: var(--surface);
+  background: var(--bg-elevated);
   box-shadow: 0 24px 80px rgb(0 0 0 / 45%);
 }
 
@@ -55,7 +55,7 @@
 
 .profile-name-dialog > p:not(.profile-name-eyebrow) {
   margin: 0 0 24px;
-  color: var(--text-muted);
+  color: var(--text-dim);
   line-height: 1.5;
 }
 
@@ -80,13 +80,13 @@
   padding: 13px 14px;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: var(--background);
+  background: var(--bg);
   color: var(--text);
   font: inherit;
 }
 
 .profile-name-dialog small {
-  color: var(--text-muted);
+  color: var(--text-faint);
 }
 
 .profile-name-actions {
@@ -98,6 +98,6 @@
 
 .profile-name-error {
   margin: 4px 0 0;
-  color: #e36b61;
+  color: var(--bad);
 }
 
