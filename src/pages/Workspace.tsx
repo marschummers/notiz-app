@@ -243,7 +243,7 @@ function ProfileNameDialog({ email, initialName, onSave, onCancel }: { email: st
         <form onSubmit={submit}>
           <label>
             <span>Name</span>
-            <input value={name} onChange={(event) => setName(event.target.value)} placeholder="z. B. Martin Kreißl" autoFocus autoComplete="name" />
+            <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Vor- und Nachname" autoFocus autoComplete="name" />
           </label>
           <small>{email}</small>
           {error && <p className="profile-name-error">{error}</p>}
