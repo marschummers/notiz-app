@@ -1,5 +1,5 @@
 import { db, newId } from '../db/db'
-import type { Project, ProjectTask, ProjectTaskAfn } from '../db/types'
+import type { Project, ProjectTask, ProjectTaskAfn, ProjectMilestone } from '../db/types'
 
 export async function createProject(input: Pick<Project, 'name' | 'ownerUserId'> & Partial<Project>): Promise<string> {
   const now = Date.now()
@@ -14,14 +14,51 @@ export async function updateProject(id: string, changes: Partial<Omit<Project, '
 
 export async function deleteProject(id: string): Promise<void> {
   const now = Date.now()
-  await db.transaction('rw', db.projects, db.projectTasks, db.projectTaskAfns, async () => {
+  await db.transaction('rw', db.projects, db.projectTasks, db.projectTaskAfns, db.projectMilestones, async () => {
     const tasks = await db.projectTasks.where('projectId').equals(id).toArray()
     for (const task of tasks) {
       const afns = await db.projectTaskAfns.where('taskId').equals(task.id).toArray()
       await Promise.all(afns.map((afn) => db.projectTaskAfns.update(afn.id, { deletedAt: now, updatedAt: now })))
       await db.projectTasks.update(task.id, { deletedAt: now, updatedAt: now })
     }
+    const milestones = await db.projectMilestones.where('projectId').equals(id).toArray()
+    await Promise.all(milestones.map((milestone) => db.projectMilestones.update(milestone.id, { deletedAt: now, updatedAt: now })))
     await db.projects.update(id, { deletedAt: now, updatedAt: now })
+  })
+}
+
+export async function createProjectMilestone(projectId: string, title: string): Promise<string> {
+  const now = Date.now()
+  const id = newId()
+  const last = await db.projectMilestones.where('projectId').equals(projectId).sortBy('sortOrder')
+  await db.projectMilestones.add({ id, projectId, title: title.trim() || 'Neuer Meilenstein', status: 'planned', sortOrder: (last.at(-1)?.sortOrder ?? 0) + 1, createdAt: now, updatedAt: now })
+  return id
+}
+
+export async function updateProjectMilestone(id: string, changes: Partial<Omit<ProjectMilestone, 'id' | 'projectId' | 'createdAt'>>): Promise<void> {
+  await db.projectMilestones.update(id, { ...changes, updatedAt: Date.now() })
+}
+
+export async function deleteProjectMilestone(id: string): Promise<void> {
+  const now = Date.now()
+  await db.transaction('rw', db.projectMilestones, db.projectTasks, async () => {
+    const tasks = await db.projectTasks.where('milestoneId').equals(id).toArray()
+    await Promise.all(tasks.map((task) => db.projectTasks.update(task.id, { milestoneId: undefined, updatedAt: now })))
+    await db.projectMilestones.update(id, { deletedAt: now, updatedAt: now })
+  })
+}
+
+export async function moveProjectMilestone(id: string, direction: -1 | 1): Promise<void> {
+  const current = await db.projectMilestones.get(id)
+  if (!current) return
+  const siblings = (await db.projectMilestones.where('projectId').equals(current.projectId).toArray()).filter((item) => !item.deletedAt).sort((a, b) => a.sortOrder - b.sortOrder)
+  const index = siblings.findIndex((item) => item.id === id)
+  const other = siblings[index + direction]
+  if (!other) return
+  const now = Date.now()
+  await db.transaction('rw', db.projectMilestones, async () => {
+    await db.projectMilestones.update(current.id, { sortOrder: other.sortOrder, updatedAt: now })
+    await db.projectMilestones.update(other.id, { sortOrder: current.sortOrder, updatedAt: now })
   })
 }
 
