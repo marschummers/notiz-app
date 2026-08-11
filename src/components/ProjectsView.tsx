@@ -142,30 +142,25 @@ function ProjectDetail({ project, tasks, milestones, afns, profiles, members, us
     <div className="project-detail-content">
       <button className="back-link" onClick={onBack}>← Projekte</button>
       <header className="project-read-header">
-        <div className="project-read-title"><h1>{projectShortName(project) || projectCustomer(project)}</h1>{projectShortName(project) && <p>{projectCustomer(project)}</p>}</div>
-        <StatusBadge status={project.status} label={projectStatus[project.status]}/>
+        <div className="project-read-title">
+          <h1><span>{projectCustomer(project)}</span>{projectShortName(project) && <><i> | </i>{projectShortName(project)}</>}</h1>
+          <p><span>Verantwortlich: {personInitials(ownerName)}</span><span>Team: {teamIds.map((id) => personInitials(profileName(id, profiles, userId, userEmail))).join(', ')}</span><span>Zeitraum: {formatRange(project.startDate, project.targetDate)}</span></p>
+        </div>
+        <div className="project-header-actions"><button className="secondary-action compact" onClick={() => setEditingProject(true)}>Projekt bearbeiten</button><button className="secondary-action compact" onClick={() => setEditingTeam(true)}>Team bearbeiten</button><StatusBadge status={project.status} label={projectStatus[project.status]}/></div>
       </header>
-      <div className="project-meta-grid">
-        <MetaItem label="Verantwortlich">{ownerName}</MetaItem>
-        <MetaItem label="Team">{teamIds.map((id) => profileName(id, profiles, userId, userEmail)).join(' · ')}</MetaItem>
-        <MetaItem label="Zeitraum">{formatRange(project.startDate, project.targetDate)}</MetaItem>
-      </div>
-      <section className="project-read-description"><span>Beschreibung</span><p>{project.description || 'Noch keine Beschreibung hinterlegt.'}</p></section>
-      <button className="secondary-action" onClick={() => setEditingProject(true)}>Projekt bearbeiten</button>
-      <button className="secondary-action team-edit-button" onClick={() => setEditingTeam(true)}>Team bearbeiten</button>
 
       {nextMilestone && <NextMilestone milestone={nextMilestone} tasks={tasks} onOpen={() => setOpenedMilestoneId(nextMilestone.id)}/>}
-
-      <section className="project-milestones-section">
-        <div className="project-tasks-heading"><div><p className="projects-eyebrow">Planung</p><h2>Meilensteine</h2></div><button className="primary compact" onClick={() => setEditingMilestone('new')}>+ Meilenstein</button></div>
-        <div className="milestone-list">{milestones.length === 0 ? <div className="project-empty-state"><strong>Noch keine Meilensteine</strong><span>Lege den ersten wichtigen Projekttermin an.</span></div> : [...milestones].sort((a,b) => a.sortOrder - b.sortOrder).map((milestone, index, ordered) => <MilestoneRow key={milestone.id} milestone={milestone} tasks={tasks.filter((task) => task.milestoneId === milestone.id)} onOpen={() => setOpenedMilestoneId(milestone.id)} onEdit={() => setEditingMilestone(milestone)} onMove={(direction) => moveProjectMilestone(milestone.id, direction)} canUp={index > 0} canDown={index < ordered.length - 1}/>)}</div>
-      </section>
 
       <section className="project-tasks-section">
         <div className="project-tasks-heading"><div><p className="projects-eyebrow">Projektarbeit</p><h2>Aufgaben</h2></div><button className="primary compact" onClick={() => { setTaskMilestonePreset(undefined); setEditingTask('new') }}>+ Aufgabe</button></div>
         <div className="task-filter-bar" aria-label="Aufgaben filtern">{taskFilters.map((value) => <button key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}><span>{value === 'all' ? 'Alle' : taskStatus[value]}</span><strong>{counts[value]}</strong></button>)}</div>
         <label className="assignee-filter">Verantwortlich<select value={assigneeFilter} onChange={(event) => setAssigneeFilter(event.target.value)}><option value="all">Alle</option><option value={userId}>Meine</option>{teamProfiles.filter((profile) => profile.id !== userId).map((profile) => <option key={profile.id} value={profile.id}>{profile.displayName || profile.email}</option>)}</select></label>
-        <div className="compact-task-list">{visibleTasks.length === 0 ? <div className="project-empty-state"><strong>Keine Aufgaben in diesem Filter</strong><span>Über „+ Aufgabe“ kannst du eine neue Projektaufgabe anlegen.</span></div> : visibleTasks.map((task) => <TaskRow key={task.id} task={task} profiles={profiles} userId={userId} userEmail={userEmail} afns={afns.filter((afn) => afn.taskId === task.id).map((afn) => afn.afnNumber)} onClick={() => setEditingTask(task)}/>)}</div>
+        <div className="compact-task-list">{visibleTasks.length === 0 ? <div className="project-empty-state"><strong>Keine Aufgaben in diesem Filter</strong><span>Über „+ Aufgabe“ kannst du eine neue Projektaufgabe anlegen.</span></div> : visibleTasks.map((task) => <TaskRow key={task.id} project={project} task={task} profiles={profiles} userId={userId} userEmail={userEmail} afns={afns.filter((afn) => afn.taskId === task.id).map((afn) => afn.afnNumber)} onClick={() => setEditingTask(task)}/>)}</div>
+      </section>
+
+      <section className="project-milestones-section">
+        <div className="project-tasks-heading"><div><p className="projects-eyebrow">Planung</p><h2>Meilensteine</h2></div><button className="primary compact" onClick={() => setEditingMilestone('new')}>+ Meilenstein</button></div>
+        <div className="milestone-list">{milestones.length === 0 ? <div className="project-empty-state"><strong>Noch keine Meilensteine</strong><span>Lege den ersten wichtigen Projekttermin an.</span></div> : [...milestones].sort((a,b) => a.sortOrder - b.sortOrder).map((milestone, index, ordered) => <MilestoneRow key={milestone.id} milestone={milestone} tasks={tasks.filter((task) => task.milestoneId === milestone.id)} onOpen={() => setOpenedMilestoneId(milestone.id)} onEdit={() => setEditingMilestone(milestone)} onMove={(direction) => moveProjectMilestone(milestone.id, direction)} canUp={index > 0} canDown={index < ordered.length - 1}/>)}</div>
       </section>
     </div>
     {editingProject && (
@@ -183,13 +178,9 @@ function ProjectDetail({ project, tasks, milestones, afns, profiles, members, us
   </main>
 }
 
-function MetaItem({ label, children }: { label: string; children: ReactNode }) {
-  return <div className="project-meta-item"><span>{label}</span><strong>{children}</strong></div>
-}
-
-function TaskRow({ task, afns, profiles, userId, userEmail, onClick }: { task: ProjectTask; afns: number[]; profiles: UserProfile[]; userId: string; userEmail?: string; onClick: () => void }) {
+function TaskRow({ project, task, afns, profiles, userId, userEmail, onClick }: { project: Project; task: ProjectTask; afns: number[]; profiles: UserProfile[]; userId: string; userEmail?: string; onClick: () => void }) {
   return <button className={`compact-task-row task-${task.status}`} onClick={onClick}>
-    <div className="task-row-main"><strong>{task.title || 'Ohne Titel'}</strong><div className="task-row-meta"><span>{profileName(task.assigneeUserId, profiles, userId, userEmail)}</span><span>{task.dueDate ? formatDate(task.dueDate) : 'Ohne Termin'}</span>{task.status === 'waiting' && task.waitingFor && <span className="waiting-copy">Wartet auf: {task.waitingFor}</span>}</div>{afns.length > 0 && <div className="afn-chip-list">{afns.map((afn) => <span key={afn}>AFN {afn}</span>)}</div>}</div>
+    <span className="task-row-customer">[{projectCustomer(project)}]</span>{projectShortName(project) && <span className="task-row-project">{projectShortName(project)}</span>}<strong className="task-row-title">{task.title || 'Ohne Titel'}</strong><span className="task-row-assignee">{personInitials(profileName(task.assigneeUserId, profiles, userId, userEmail))}</span><span className="task-row-date">{task.dueDate ? formatDate(task.dueDate) : 'Ohne Termin'}</span>{task.status === 'waiting' && task.waitingFor && <span className="waiting-copy">Wartet: {task.waitingFor}</span>}{afns.length > 0 && <span className="task-row-afns">{afns.map((afn) => `AFN ${afn}`).join(', ')}</span>}
     <StatusBadge status={task.status} label={taskStatus[task.status]}/>
   </button>
 }
@@ -324,6 +315,12 @@ function profileName(id: string | undefined, profiles: UserProfile[], userId: st
   if (profile) return profile.displayName || profile.email
   if (id === userId) return userEmail || 'Ich'
   return 'Unbekannter Benutzer'
+}
+
+function personInitials(name: string) {
+  if (name === 'Nicht zugewiesen') return '–'
+  const parts = name.trim().split(/[\s.@_-]+/).filter(Boolean)
+  return (parts.length > 1 ? `${parts[0][0]}${parts.at(-1)![0]}` : parts[0]?.slice(0, 2) || '?').toLocaleUpperCase('de')
 }
 
 function formatDate(value: number) { return new Date(value).toLocaleDateString('de-DE') }
