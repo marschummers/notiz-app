@@ -1,6 +1,6 @@
 import type { EntityTable } from 'dexie'
 import { db } from '../db/db'
-import type { Folder, Page, PageBackground, PageProperties, PageType, Tag, PageTag, Task, TextBlock, Template, TemplateTextBlock, TemplateTask, Stroke, PdfPrintout } from '../db/types'
+import type { Folder, Page, PageBackground, PageProperties, PageType, Tag, PageTag, Task, TextBlock, Template, TemplateTextBlock, TemplateTask, Stroke, PdfPrintout, Project, ProjectTask, ProjectTaskAfn, ProjectStatus, ProjectTaskStatus, ProjectWaitingFor } from '../db/types'
 import { supabase } from './supabaseClient'
 
 // Faengt fehlende/kaputte Zeitstempel ab, statt dass new Date(...).toISOString() mit
@@ -165,6 +165,10 @@ interface RemotePdfPrintout {
   deleted_at: string | null
 }
 
+interface RemoteProject { id: string; user_id: string; name: string; customer_name: string | null; owner_user_id: string; status: string; start_date: string | null; target_date: string | null; description: string | null; created_at: string; updated_at: string; deleted_at: string | null }
+interface RemoteProjectTask { id: string; user_id: string; project_id: string; title: string; description: string | null; assignee_user_id: string | null; status: string; due_date: string | null; waiting_for: string | null; sort_order: number; created_at: string; updated_at: string; deleted_at: string | null }
+interface RemoteProjectTaskAfn { id: string; user_id: string; task_id: string; afn_number: number; updated_at: string; deleted_at: string | null }
+
 // Zieht Ordner, Seiten, Tasks, Tags, PDF-Ausdruck-Metadaten und deren Verknuepfungen mit
 // Supabase zusammen. Ordner zuerst: pages/tasks/page_tags/pdf_printouts referenzieren
 // folder_id/page_id/tag_id als Fremdschluessel, die Zeile muss also dort existieren, bevor die
@@ -175,6 +179,25 @@ export async function syncAll(): Promise<void> {
   const { data: userData, error: userError } = await client.auth.getUser()
   if (userError || !userData.user) throw new Error('Nicht eingeloggt.')
   const userId = userData.user.id
+
+  // Minimales gemeinsames Benutzerverzeichnis fuer Verantwortliche. Auth bleibt die einzige
+  // Identitaetsquelle; lokal werden nur Anzeigename/E-Mail fuer Offline-Darstellung gecacht.
+  const profileNow = new Date().toISOString()
+  const { error: profileError } = await client.from('notiz_profiles').upsert({
+    id: userId,
+    email: userData.user.email ?? '',
+    display_name: userData.user.user_metadata?.full_name ?? null,
+    updated_at: profileNow,
+  })
+  if (profileError) throw new Error(`notiz_profiles: ${profileError.message}`)
+  const { data: profiles, error: profilesError } = await client.from('notiz_profiles').select('*')
+  if (profilesError) throw new Error(`notiz_profiles: ${profilesError.message}`)
+  await db.userProfiles.bulkPut((profiles ?? []).map((profile) => ({
+    id: profile.id as string,
+    email: profile.email as string,
+    displayName: (profile.display_name as string | null) ?? undefined,
+    updatedAt: ms(profile.updated_at as string),
+  })))
 
   await mergeTable<Folder, RemoteFolder>(
     db.folders,
@@ -389,5 +412,32 @@ export async function syncAll(): Promise<void> {
       deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined,
     }),
   )
+
+  await mergeTable<Project, RemoteProject>(db.projects, 'notiz_projects', (p) => ({
+    id: p.id, user_id: userId, name: p.name, customer_name: p.customerName ?? null,
+    owner_user_id: p.ownerUserId, status: p.status, start_date: p.startDate ? iso(p.startDate) : null,
+    target_date: p.targetDate ? iso(p.targetDate) : null, description: p.description ?? null,
+    created_at: iso(p.createdAt), updated_at: iso(p.updatedAt), deleted_at: p.deletedAt ? iso(p.deletedAt) : null,
+  }), (r) => ({ id: r.id, name: r.name, customerName: r.customer_name ?? undefined, ownerUserId: r.owner_user_id,
+    status: r.status as ProjectStatus, startDate: r.start_date ? ms(r.start_date) : undefined,
+    targetDate: r.target_date ? ms(r.target_date) : undefined, description: r.description ?? undefined,
+    createdAt: ms(r.created_at), updatedAt: ms(r.updated_at), deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined }))
+
+  await mergeTable<ProjectTask, RemoteProjectTask>(db.projectTasks, 'notiz_project_tasks', (t) => ({
+    id: t.id, user_id: userId, project_id: t.projectId, title: t.title, description: t.description ?? null,
+    assignee_user_id: t.assigneeUserId ?? null, status: t.status, due_date: t.dueDate ? iso(t.dueDate) : null,
+    waiting_for: t.waitingFor ?? null, sort_order: t.sortOrder, created_at: iso(t.createdAt),
+    updated_at: iso(t.updatedAt), deleted_at: t.deletedAt ? iso(t.deletedAt) : null,
+  }), (r) => ({ id: r.id, projectId: r.project_id, title: r.title, description: r.description ?? undefined,
+    assigneeUserId: r.assignee_user_id ?? undefined, status: r.status as ProjectTaskStatus,
+    dueDate: r.due_date ? ms(r.due_date) : undefined, waitingFor: (r.waiting_for as ProjectWaitingFor) || undefined,
+    sortOrder: r.sort_order, createdAt: ms(r.created_at), updatedAt: ms(r.updated_at), deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined }))
+
+  await mergeTable<ProjectTaskAfn, RemoteProjectTaskAfn>(db.projectTaskAfns, 'notiz_project_task_afns', (a) => ({
+    id: a.id, user_id: userId, task_id: a.taskId, afn_number: a.afnNumber,
+    updated_at: iso(a.updatedAt), deleted_at: a.deletedAt ? iso(a.deletedAt) : null,
+  }), (r) => ({ id: r.id, taskId: r.task_id, afnNumber: r.afn_number,
+    updatedAt: ms(r.updated_at), deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined }))
 }
+
 
