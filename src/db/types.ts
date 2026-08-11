@@ -232,6 +232,7 @@ export interface PdfBlobCache {
 export type ProjectStatus = 'active' | 'waiting' | 'completed' | 'archived'
 export type ProjectTaskStatus = 'open' | 'in_progress' | 'waiting' | 'completed'
 export type ProjectMilestoneStatus = 'planned' | 'in_progress' | 'completed'
+export type ProjectMemberRole = 'owner' | 'member'
 export type ProjectWaitingFor = 'Kunde' | 'Entwicklung' | 'Support' | 'Vertrieb' | 'Extern' | 'Sonstige'
 
 export interface Project {
@@ -281,6 +282,16 @@ export interface ProjectTaskAfn {
   id: string
   taskId: string
   afnNumber: number
+  updatedAt: number
+  deletedAt?: number
+}
+
+export interface ProjectMember {
+  id: string
+  projectId: string
+  userId: string
+  role: ProjectMemberRole
+  createdAt: number
   updatedAt: number
   deletedAt?: number
 }

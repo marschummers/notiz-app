@@ -16,6 +16,7 @@ import ProjectsView from '../components/ProjectsView'
 import AccessRequestsView from '../components/AccessRequestsView'
 import './Workspace.css'
 import type { ProjectNavigation } from '../lib/projectNavigation'
+import { subscribeProjectRealtime } from '../lib/projectRealtime'
 
 export default function Workspace() {
   const DEFAULT_SIDEBAR_WIDTH = 260
@@ -60,6 +61,8 @@ export default function Workspace() {
     handleSync()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => subscribeProjectRealtime(), [])
 
   function openPage(id: string) {
     setOpenPageId(id)

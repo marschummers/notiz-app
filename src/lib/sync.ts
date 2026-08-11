@@ -1,6 +1,6 @@
 import type { EntityTable } from 'dexie'
 import { db } from '../db/db'
-import type { Folder, Page, PageBackground, PageProperties, PageType, Tag, PageTag, Task, TextBlock, Template, TemplateTextBlock, TemplateTask, Stroke, PdfPrintout, Project, ProjectTask, ProjectTaskAfn, ProjectMilestone, ProjectStatus, ProjectTaskStatus, ProjectWaitingFor, ProjectMilestoneStatus } from '../db/types'
+import type { Folder, Page, PageBackground, PageProperties, PageType, Tag, PageTag, Task, TextBlock, Template, TemplateTextBlock, TemplateTask, Stroke, PdfPrintout, Project, ProjectTask, ProjectTaskAfn, ProjectMilestone, ProjectStatus, ProjectTaskStatus, ProjectWaitingFor, ProjectMilestoneStatus, ProjectMember, ProjectMemberRole } from '../db/types'
 import { supabase } from './supabaseClient'
 
 // Faengt fehlende/kaputte Zeitstempel ab, statt dass new Date(...).toISOString() mit
@@ -169,6 +169,7 @@ interface RemoteProject { id: string; user_id: string; name: string; customer_na
 interface RemoteProjectTask { id: string; user_id: string; project_id: string; milestone_id: string | null; title: string; description: string | null; assignee_user_id: string | null; status: string; due_date: string | null; waiting_for: string | null; sort_order: number; created_at: string; updated_at: string; deleted_at: string | null }
 interface RemoteProjectMilestone { id: string; user_id: string; project_id: string; title: string; description: string | null; due_date: string | null; status: string; sort_order: number; created_at: string; updated_at: string; deleted_at: string | null }
 interface RemoteProjectTaskAfn { id: string; user_id: string; task_id: string; afn_number: number; updated_at: string; deleted_at: string | null }
+interface RemoteProjectMember { id: string; project_id: string; user_id: string; role: string; created_at: string; updated_at: string; deleted_at: string | null }
 
 // Zieht Ordner, Seiten, Tasks, Tags, PDF-Ausdruck-Metadaten und deren Verknuepfungen mit
 // Supabase zusammen. Ordner zuerst: pages/tasks/page_tags/pdf_printouts referenzieren
@@ -433,6 +434,12 @@ export async function syncAll(): Promise<void> {
   }), (r) => ({ id: r.id, name: r.name, customerName: r.customer_name ?? undefined, ownerUserId: r.owner_user_id,
     status: r.status as ProjectStatus, startDate: r.start_date ? ms(r.start_date) : undefined,
     targetDate: r.target_date ? ms(r.target_date) : undefined, description: r.description ?? undefined,
+    createdAt: ms(r.created_at), updatedAt: ms(r.updated_at), deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined }))
+
+  await mergeTable<ProjectMember, RemoteProjectMember>(db.projectMembers, 'notiz_project_members', (m) => ({
+    id: m.id, project_id: m.projectId, user_id: m.userId, role: m.role,
+    created_at: iso(m.createdAt), updated_at: iso(m.updatedAt), deleted_at: m.deletedAt ? iso(m.deletedAt) : null,
+  }), (r) => ({ id: r.id, projectId: r.project_id, userId: r.user_id, role: r.role as ProjectMemberRole,
     createdAt: ms(r.created_at), updatedAt: ms(r.updated_at), deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined }))
 
   // Meilensteine vor Aufgaben synchronisieren, damit milestone_id auf neuen GerÃ¤ten nie auf
