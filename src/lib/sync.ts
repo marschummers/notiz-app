@@ -1,6 +1,6 @@
 import type { EntityTable } from 'dexie'
 import { db } from '../db/db'
-import type { Folder, Page, PageBackground, PageProperties, PageType, Tag, PageTag, Task, TextBlock, Template, TemplateTextBlock, TemplateTask, Stroke, PdfPrintout, Project, ProjectTask, ProjectTaskAfn, ProjectStatus, ProjectTaskStatus, ProjectWaitingFor } from '../db/types'
+import type { Folder, Page, PageBackground, PageProperties, PageType, Tag, PageTag, Task, TextBlock, Template, TemplateTextBlock, TemplateTask, Stroke, PdfPrintout, Project, ProjectTask, ProjectTaskAfn, ProjectMilestone, ProjectStatus, ProjectTaskStatus, ProjectWaitingFor, ProjectMilestoneStatus } from '../db/types'
 import { supabase } from './supabaseClient'
 
 // Faengt fehlende/kaputte Zeitstempel ab, statt dass new Date(...).toISOString() mit
@@ -166,7 +166,8 @@ interface RemotePdfPrintout {
 }
 
 interface RemoteProject { id: string; user_id: string; name: string; customer_name: string | null; owner_user_id: string; status: string; start_date: string | null; target_date: string | null; description: string | null; created_at: string; updated_at: string; deleted_at: string | null }
-interface RemoteProjectTask { id: string; user_id: string; project_id: string; title: string; description: string | null; assignee_user_id: string | null; status: string; due_date: string | null; waiting_for: string | null; sort_order: number; created_at: string; updated_at: string; deleted_at: string | null }
+interface RemoteProjectTask { id: string; user_id: string; project_id: string; milestone_id: string | null; title: string; description: string | null; assignee_user_id: string | null; status: string; due_date: string | null; waiting_for: string | null; sort_order: number; created_at: string; updated_at: string; deleted_at: string | null }
+interface RemoteProjectMilestone { id: string; user_id: string; project_id: string; title: string; description: string | null; due_date: string | null; status: string; sort_order: number; created_at: string; updated_at: string; deleted_at: string | null }
 interface RemoteProjectTaskAfn { id: string; user_id: string; task_id: string; afn_number: number; updated_at: string; deleted_at: string | null }
 
 // Zieht Ordner, Seiten, Tasks, Tags, PDF-Ausdruck-Metadaten und deren Verknuepfungen mit
@@ -434,12 +435,22 @@ export async function syncAll(): Promise<void> {
     targetDate: r.target_date ? ms(r.target_date) : undefined, description: r.description ?? undefined,
     createdAt: ms(r.created_at), updatedAt: ms(r.updated_at), deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined }))
 
+  // Meilensteine vor Aufgaben synchronisieren, damit milestone_id auf neuen GerÃ¤ten nie auf
+  // eine noch nicht hochgeladene FremdschlÃ¼ssel-Zeile zeigt.
+  await mergeTable<ProjectMilestone, RemoteProjectMilestone>(db.projectMilestones, 'notiz_project_milestones', (m) => ({
+    id: m.id, user_id: userId, project_id: m.projectId, title: m.title, description: m.description ?? null,
+    due_date: m.dueDate ? iso(m.dueDate) : null, status: m.status, sort_order: m.sortOrder,
+    created_at: iso(m.createdAt), updated_at: iso(m.updatedAt), deleted_at: m.deletedAt ? iso(m.deletedAt) : null,
+  }), (r) => ({ id: r.id, projectId: r.project_id, title: r.title, description: r.description ?? undefined,
+    dueDate: r.due_date ? ms(r.due_date) : undefined, status: r.status as ProjectMilestoneStatus, sortOrder: r.sort_order,
+    createdAt: ms(r.created_at), updatedAt: ms(r.updated_at), deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined }))
+
   await mergeTable<ProjectTask, RemoteProjectTask>(db.projectTasks, 'notiz_project_tasks', (t) => ({
-    id: t.id, user_id: userId, project_id: t.projectId, title: t.title, description: t.description ?? null,
+    id: t.id, user_id: userId, project_id: t.projectId, milestone_id: t.milestoneId ?? null, title: t.title, description: t.description ?? null,
     assignee_user_id: t.assigneeUserId ?? null, status: t.status, due_date: t.dueDate ? iso(t.dueDate) : null,
     waiting_for: t.waitingFor ?? null, sort_order: t.sortOrder, created_at: iso(t.createdAt),
     updated_at: iso(t.updatedAt), deleted_at: t.deletedAt ? iso(t.deletedAt) : null,
-  }), (r) => ({ id: r.id, projectId: r.project_id, title: r.title, description: r.description ?? undefined,
+  }), (r) => ({ id: r.id, projectId: r.project_id, milestoneId: r.milestone_id ?? undefined, title: r.title, description: r.description ?? undefined,
     assigneeUserId: r.assignee_user_id ?? undefined, status: r.status as ProjectTaskStatus,
     dueDate: r.due_date ? ms(r.due_date) : undefined, waitingFor: (r.waiting_for as ProjectWaitingFor) || undefined,
     sortOrder: r.sort_order, createdAt: ms(r.created_at), updatedAt: ms(r.updated_at), deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined }))
