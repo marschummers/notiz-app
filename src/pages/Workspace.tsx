@@ -10,6 +10,7 @@ import TasksView from '../components/TasksView'
 import SearchView from '../components/SearchView'
 import AllNotesView from '../components/AllNotesView'
 import Dashboard from '../components/Dashboard'
+import ProjectsView from '../components/ProjectsView'
 import './Workspace.css'
 
 export default function Workspace() {
@@ -17,7 +18,7 @@ export default function Workspace() {
   const MIN_SIDEBAR_WIDTH = 200
   const { session, signOut } = useAuth()
   const [selection, setSelection] = useState<Selection>({ type: 'folder', id: undefined })
-  const [activeView, setActiveView] = useState<'start' | 'notes' | 'tasks' | 'search' | 'all-notes'>('start')
+  const [activeView, setActiveView] = useState<'start' | 'notes' | 'projects' | 'tasks' | 'search' | 'all-notes'>('start')
   const [openPageId, setOpenPageId] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH)
@@ -117,6 +118,10 @@ export default function Workspace() {
           setActiveView('notes')
           setOpenPageId(null)
         }}
+        onSelectProjects={() => {
+          setActiveView('projects')
+          setOpenPageId(null)
+        }}
         onSelectTasks={() => {
           setActiveView('tasks')
           setOpenPageId(null)
@@ -171,6 +176,8 @@ export default function Workspace() {
           onOpenAllNotes={() => setActiveView('all-notes')}
           onOpenTasks={() => setActiveView('tasks')}
         />
+      ) : activeView === 'projects' ? (
+        <ProjectsView userId={session?.user.id ?? ''} userEmail={session?.user.email} />
       ) : activeView === 'tasks' ? (
         <TasksView onOpenPage={openPage} />
       ) : activeView === 'search' ? (
