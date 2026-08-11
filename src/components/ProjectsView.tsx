@@ -156,7 +156,7 @@ function TaskEditDialog({ projectId, task, afns, profiles, userId, userEmail, on
   const [description, setDescription] = useState(task?.description ?? '')
   const [status, setStatus] = useState<ProjectTaskStatus>(task?.status ?? 'open')
   const [dueDate, setDueDate] = useState(task?.dueDate)
-  const [assigneeUserId, setAssigneeUserId] = useState(task?.assigneeUserId ?? userId)
+  const [assigneeUserId, setAssigneeUserId] = useState(task ? (task.assigneeUserId ?? '') : userId)
   const [waitingFor, setWaitingFor] = useState<ProjectWaitingFor | undefined>(task?.waitingFor)
   const [afnText, setAfnText] = useState(afns.join(', '))
 
