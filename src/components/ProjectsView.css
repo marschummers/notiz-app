@@ -52,7 +52,7 @@
 .overview-task-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .overview-afns{flex-shrink:0;color:var(--text-faint);font-size:.68rem}
 .overview-due-date input{display:block;width:150px;padding:0 9px;font-size:.76rem}
-.task-overview-toolbar{display:flex;justify-content:flex-end;margin:0 0 calc(var(--project-content-gap) * -0.5)}.other-tasks-toggle{width:auto}.project-detail-task-list{margin-top:14px;border-top:1px solid var(--project-border-soft)}
+.task-overview-toolbar{display:flex;justify-content:flex-end;margin:0 0 var(--project-content-gap)}.other-tasks-toggle{width:auto}.project-detail-task-list{margin-top:14px;border-top:1px solid var(--project-border-soft)}
 
 /* Projekt-Detail */
 .back-link{display:inline-flex;margin-bottom:12px;padding:4px 0;border:0;background:transparent;color:var(--project-text-secondary)}
