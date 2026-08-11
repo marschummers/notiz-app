@@ -175,6 +175,8 @@ export default function Workspace() {
           onOpenSearch={() => setActiveView('search')}
           onOpenAllNotes={() => setActiveView('all-notes')}
           onOpenTasks={() => setActiveView('tasks')}
+          onOpenProjects={() => setActiveView('projects')}
+          userId={session?.user.id ?? ''}
         />
       ) : activeView === 'projects' ? (
         <ProjectsView userId={session?.user.id ?? ''} userEmail={session?.user.email} />
