@@ -1,4 +1,42 @@
-:root {
+:root,
+:root[data-theme='winweb'] {
+  /* Winweb CI als dezentes, dunkles Arbeits-Theme. Die Originalfarben bleiben bei Logo und
+     starken Akzenten unverändert; aufgehellte Varianten sichern die Lesbarkeit auf dunklem Grund. */
+  --bg: #11151f;
+  --bg-elevated: #191f2c;
+  --bg-sunken: #0b0e15;
+  --bg-accent-tint: #17203b;
+
+  --text: #f0f0f0;
+  --text-dim: #b5bac6;
+  --text-faint: #7d8596;
+
+  --border: #343d50;
+  --border-soft: #252c3a;
+
+  --accent: #213a8f;
+  --accent-strong: #7189d5;
+  --accent-soft: rgba(33, 58, 143, 0.3);
+  --accent-text: #ffffff;
+  --brand-red: #dd0b2f;
+  --brand-red-soft: rgba(221, 11, 47, 0.16);
+
+  --good: #7c9a6f;
+  --bad: #e05268;
+  --warn: #d1b34b;
+
+  --radius-card: 14px;
+  --radius-control: 9px;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
+
+  color-scheme: dark;
+  font: 16px/145% Ubuntu, system-ui, 'Segoe UI', Roboto, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+:root[data-theme='copper'] {
   /* Kupfer/Anthrazit-Designsystem, uebernommen aus den anderen Apps (Winweb BWA App) fuer
      einheitliches Erscheinungsbild. Gilt fuer das App-Chrome (Sidebar, Kopfzeilen, Buttons) -
      die Zeichenflaeche selbst bleibt bewusst cremeweiss/papierartig, unabhaengig davon (siehe
@@ -32,11 +70,8 @@
   --radius-control: 9px;
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
 
-  color-scheme: dark;
-  font: 16px/145% system-ui, 'Segoe UI', Roboto, sans-serif;
-  color: var(--text);
-  background: var(--bg);
-  -webkit-font-smoothing: antialiased;
+  --brand-red: #bf6152;
+  --brand-red-soft: rgba(191, 97, 82, 0.16);
 }
 
 * {
@@ -59,3 +94,4 @@ body {
   overflow: hidden;
   background: var(--bg);
 }
+
