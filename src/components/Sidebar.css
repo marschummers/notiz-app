@@ -243,18 +243,36 @@
 }
 
 .sidebar-account {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  gap: 7px;
   font-size: 12px;
   color: var(--text-faint);
-  gap: 8px;
 }
 
-.sidebar-account span {
+.sidebar-account-identity {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.sidebar-account-identity strong {
+  overflow: hidden;
+  color: var(--text-dim);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-account-identity span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.sidebar-account-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 .sidebar-account button {
