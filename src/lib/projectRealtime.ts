@@ -33,12 +33,16 @@ async function applyProjectRow(table: string, row: Row) {
     id: String(row.id), taskId: String(row.task_id), afnNumber: Number(row.afn_number),
     updatedAt: time(row.updated_at) ?? Date.now(), deletedAt: time(row.deleted_at),
   })
+  if (table === 'notiz_project_task_comments') await db.projectTaskComments.put({
+    id: String(row.id), taskId: String(row.task_id), authorUserId: String(row.author_user_id), body: String(row.body ?? ''),
+    createdAt: time(row.created_at) ?? Date.now(), updatedAt: time(row.updated_at) ?? Date.now(), deletedAt: time(row.deleted_at),
+  })
 }
 
 export function subscribeProjectRealtime() {
   if (!supabase) return () => undefined
   const client = supabase
-  const tables = ['notiz_projects', 'notiz_project_members', 'notiz_project_tasks', 'notiz_project_milestones', 'notiz_project_task_afns']
+  const tables = ['notiz_projects', 'notiz_project_members', 'notiz_project_tasks', 'notiz_project_milestones', 'notiz_project_task_afns', 'notiz_project_task_comments']
   let channel = client.channel('notiz-project-realtime')
   for (const table of tables) {
     channel = channel.on('postgres_changes', { event: '*', schema: 'public', table }, (payload) => {
