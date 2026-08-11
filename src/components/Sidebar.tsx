@@ -12,8 +12,10 @@ interface Props {
   width: number
   resizing: boolean
   selection: Selection
-  activeView: 'notes' | 'tasks' | 'search' | 'all-notes'
+  activeView: 'start' | 'notes' | 'tasks' | 'search' | 'all-notes'
   onSelect: (s: Selection) => void
+  onSelectStart: () => void
+  onSelectNotes: () => void
   onSelectTasks: () => void
   onSelectSearch: () => void
   onSelectAllNotes: () => void
@@ -32,6 +34,8 @@ export default function Sidebar({
   selection,
   activeView,
   onSelect,
+  onSelectStart,
+  onSelectNotes,
   onSelectTasks,
   onSelectSearch,
   onSelectAllNotes,
@@ -72,8 +76,7 @@ export default function Sidebar({
   // Ordnern/Tags nichts als "ausgewaehlt" markiert sein, auch wenn `selection` (fuer den
   // Rueckweg zu Notizen) noch den letzten Ordner/Tag im Speicher haelt. Ein Platzhalter, der nie
   // zu einem echten Ordner passt, statt FolderTree selbst anzufassen.
-  const visibleSelection: Selection =
-    activeView === 'tasks' || activeView === 'search' || activeView === 'all-notes' ? { type: 'folder', id: '__none__' } : selection
+  const visibleSelection: Selection = activeView === 'notes' ? selection : { type: 'folder', id: '__none__' }
 
   return (
     <div
@@ -81,6 +84,15 @@ export default function Sidebar({
       style={open ? { width, minWidth: width } : undefined}
     >
       <div className="sidebar-section">
+        <div className={`tree-row main-nav-row${activeView === 'start' ? ' selected' : ''}`} onClick={onSelectStart}>
+          <span className="tree-label">⌂ Start</span>
+        </div>
+        <div className={`tree-row main-nav-row${activeView === 'notes' ? ' selected' : ''}`} onClick={onSelectNotes}>
+          <span className="tree-label">▤ Notizen</span>
+        </div>
+      </div>
+
+      <div className="sidebar-section sidebar-tools-section">
         <div className={`tree-row${activeView === 'tasks' ? ' selected' : ''}`} onClick={onSelectTasks}>
           <span className="tree-label">☑ Aufgaben</span>
           {!!openTaskCount && <span className="task-badge">{openTaskCount}</span>}
@@ -178,3 +190,4 @@ export default function Sidebar({
     </div>
   )
 }
+

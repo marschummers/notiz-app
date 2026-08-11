@@ -9,6 +9,7 @@ import PageEditor from '../components/PageEditor'
 import TasksView from '../components/TasksView'
 import SearchView from '../components/SearchView'
 import AllNotesView from '../components/AllNotesView'
+import Dashboard from '../components/Dashboard'
 import './Workspace.css'
 
 export default function Workspace() {
@@ -16,7 +17,7 @@ export default function Workspace() {
   const MIN_SIDEBAR_WIDTH = 200
   const { session, signOut } = useAuth()
   const [selection, setSelection] = useState<Selection>({ type: 'folder', id: undefined })
-  const [activeView, setActiveView] = useState<'notes' | 'tasks' | 'search' | 'all-notes'>('notes')
+  const [activeView, setActiveView] = useState<'start' | 'notes' | 'tasks' | 'search' | 'all-notes'>('start')
   const [openPageId, setOpenPageId] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH)
@@ -108,6 +109,14 @@ export default function Workspace() {
         selection={selection}
         activeView={activeView}
         onSelect={selectFolderOrTag}
+        onSelectStart={() => {
+          setActiveView('start')
+          setOpenPageId(null)
+        }}
+        onSelectNotes={() => {
+          setActiveView('notes')
+          setOpenPageId(null)
+        }}
         onSelectTasks={() => {
           setActiveView('tasks')
           setOpenPageId(null)
@@ -153,6 +162,15 @@ export default function Workspace() {
           }}
           onOpenPage={openPage}
         />
+      ) : activeView === 'start' ? (
+        <Dashboard
+          sidebarOpen={sidebarOpen}
+          onToggleSidebar={() => setSidebarOpen((v) => !v)}
+          onOpenPage={openPage}
+          onOpenSearch={() => setActiveView('search')}
+          onOpenAllNotes={() => setActiveView('all-notes')}
+          onOpenTasks={() => setActiveView('tasks')}
+        />
       ) : activeView === 'tasks' ? (
         <TasksView onOpenPage={openPage} />
       ) : activeView === 'search' ? (
@@ -169,3 +187,4 @@ export default function Workspace() {
     </div>
   )
 }
+
