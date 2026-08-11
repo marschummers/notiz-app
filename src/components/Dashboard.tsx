@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { ReactNode } from 'react'
 import { db } from '../db/db'
-import type { Page, Task } from '../db/types'
+import type { Page, Project, ProjectTask, Task } from '../db/types'
 import { createPage, toggleTask } from '../lib/actions'
 import { formatRelativeTime } from '../lib/format'
 import { getPagePropertyValue } from '../lib/propertyDefinitions'
@@ -14,6 +14,8 @@ interface Props {
   onOpenSearch: () => void
   onOpenAllNotes: () => void
   onOpenTasks: () => void
+  onOpenProjects: () => void
+  userId: string
 }
 
 function DashboardSection({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
@@ -28,11 +30,12 @@ function DashboardSection({ title, action, children }: { title: string; action?:
   )
 }
 
-function QuickActions({ onNewPage, onSearch, onAllNotes, onTasks }: {
+function QuickActions({ onNewPage, onSearch, onAllNotes, onTasks, onProjects }: {
   onNewPage: () => void
   onSearch: () => void
   onAllNotes: () => void
   onTasks: () => void
+  onProjects: () => void
 }) {
   return (
     <div className="dashboard-quick-actions" aria-label="Schnellaktionen">
@@ -40,8 +43,40 @@ function QuickActions({ onNewPage, onSearch, onAllNotes, onTasks }: {
       <button onClick={onSearch}>⌕ Suche</button>
       <button onClick={onAllNotes}>Alle Notizen</button>
       <button onClick={onTasks}>Aufgaben</button>
+      <button onClick={onProjects}>Projekte</button>
     </div>
   )
+}
+
+function ProjectSection({ projects, tasks, userId, onOpenProjects }: { projects: Project[]; tasks: ProjectTask[]; userId: string; onOpenProjects: () => void }) {
+  const activeProjects = projects.filter((project) => project.status === 'active' || project.status === 'waiting')
+  const myTasks = tasks.filter((task) => task.assigneeUserId === userId && task.status !== 'completed')
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const visibleTasks = [...myTasks].sort((a, b) => (a.dueDate ?? Infinity) - (b.dueDate ?? Infinity)).slice(0, 5)
+  const projectById = new Map(projects.map((project) => [project.id, project]))
+
+  return <DashboardSection title="Projekte" action={<button className="dashboard-text-action" onClick={onOpenProjects}>Projektbereich öffnen</button>}>
+    <div className="dashboard-project-metrics">
+      <DashboardMetric value={activeProjects.length} label="Aktiv" />
+      <DashboardMetric value={myTasks.length} label="Meine Aufgaben" />
+      <DashboardMetric value={myTasks.filter((task) => task.status === 'waiting').length} label="Wartet" />
+      <DashboardMetric value={myTasks.filter((task) => task.dueDate && task.dueDate < today.getTime()).length} label="Überfällig" />
+    </div>
+    <div className="dashboard-project-columns">
+      <div><h3>Meine Projektaufgaben</h3>{visibleTasks.length === 0 ? <p className="dashboard-empty">Keine offenen Projektaufgaben.</p> : visibleTasks.map((task) => {
+        const project = projectById.get(task.projectId)
+        return <button className="dashboard-project-task" key={task.id} onClick={onOpenProjects}>
+          <span className="dashboard-project-task-main">{project?.customerName && <small>[{project.customerName}]</small>}<strong>{task.title}</strong></span>
+          <span className="dashboard-project-task-meta">{project?.name || 'Unbekanntes Projekt'} · {task.dueDate ? new Date(task.dueDate).toLocaleDateString('de-DE') : 'ohne Termin'}</span>
+        </button>
+      })}</div>
+      <div><h3>Aktive Projekte</h3>{activeProjects.length === 0 ? <p className="dashboard-empty">Keine aktiven Projekte.</p> : activeProjects.slice(0, 5).map((project) => <button className="dashboard-active-project" key={project.id} onClick={onOpenProjects}><span><strong>{project.name}</strong>{project.customerName && <small>{project.customerName}</small>}</span><span>{project.status === 'waiting' ? 'Wartet' : 'Aktiv'}</span></button>)}</div>
+    </div>
+  </DashboardSection>
+}
+
+function DashboardMetric({ value, label }: { value: number; label: string }) {
+  return <div><strong>{value}</strong><span>{label}</span></div>
 }
 
 function OpenTasksSection({ tasks, pageById, onOpenPage, onOpenTasks }: {
@@ -134,10 +169,14 @@ export default function Dashboard({
   onOpenSearch,
   onOpenAllNotes,
   onOpenTasks,
+  onOpenProjects,
+  userId,
 }: Props) {
   const pages = useLiveQuery(() => db.pages.filter((page) => !page.deletedAt).toArray(), []) ?? []
   const tasks = useLiveQuery(() => db.tasks.filter((task) => !task.deletedAt).toArray(), []) ?? []
   const folders = useLiveQuery(() => db.folders.filter((folder) => !folder.deletedAt).toArray(), []) ?? []
+  const projects = useLiveQuery(() => db.projects.filter((project) => !project.deletedAt).toArray(), []) ?? []
+  const projectTasks = useLiveQuery(() => db.projectTasks.filter((task) => !task.deletedAt).toArray(), []) ?? []
   const pageById = new Map(pages.map((page) => [page.id, page]))
   const folderById = new Map(folders.map((folder) => [folder.id, folder]))
 
@@ -155,8 +194,11 @@ export default function Dashboard({
           <p>Deine persönliche Arbeitszentrale</p>
         </div>
       </header>
-      <QuickActions onNewPage={createNewPage} onSearch={onOpenSearch} onAllNotes={onOpenAllNotes} onTasks={onOpenTasks} />
+      <QuickActions onNewPage={createNewPage} onSearch={onOpenSearch} onAllNotes={onOpenAllNotes} onTasks={onOpenTasks} onProjects={onOpenProjects} />
       <div className="dashboard-grid">
+        <div className="dashboard-wide-section">
+          <ProjectSection projects={projects} tasks={projectTasks} userId={userId} onOpenProjects={onOpenProjects} />
+        </div>
         <OpenTasksSection tasks={tasks} pageById={pageById} onOpenPage={onOpenPage} onOpenTasks={onOpenTasks} />
         <RecentPagesSection pages={pages} folderById={folderById} onOpenPage={onOpenPage} />
         <div className="dashboard-wide-section">
