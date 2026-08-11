@@ -1,8 +1,8 @@
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
-import type { Project, ProjectMilestone, ProjectMilestoneStatus, ProjectStatus, ProjectTask, ProjectTaskStatus, ProjectWaitingFor, UserProfile } from '../db/types'
-import { createProject, createProjectMilestone, createProjectTask, deleteProject, deleteProjectMilestone, deleteProjectTask, moveProjectMilestone, replaceProjectTaskAfns, updateProject, updateProjectMilestone, updateProjectTask } from '../lib/projectActions'
+import type { Project, ProjectMember, ProjectMilestone, ProjectMilestoneStatus, ProjectStatus, ProjectTask, ProjectTaskStatus, ProjectWaitingFor, UserProfile } from '../db/types'
+import { createProject, createProjectMilestone, createProjectTask, deleteProject, deleteProjectMilestone, deleteProjectTask, moveProjectMilestone, replaceProjectTaskAfns, setProjectTeam, updateProject, updateProjectMilestone, updateProjectTask } from '../lib/projectActions'
 import BufferedDateInput from './BufferedDateInput'
 import type { ProjectNavigation } from '../lib/projectNavigation'
 import { projectCustomer, projectDisplayName, projectShortName } from '../lib/projectDisplay'
@@ -23,6 +23,7 @@ export default function ProjectsView({ userId, userEmail, navigation, onNavigate
   const milestones = useLiveQuery(() => db.projectMilestones.filter((milestone) => !milestone.deletedAt).toArray(), []) ?? []
   const afns = useLiveQuery(() => db.projectTaskAfns.filter((afn) => !afn.deletedAt).toArray(), []) ?? []
   const profiles = useLiveQuery(() => db.userProfiles.toArray(), []) ?? []
+  const members = useLiveQuery(() => db.projectMembers.filter((member) => !member.deletedAt).toArray(), []) ?? []
   const [section, setSection] = useState<'dashboard' | 'projects'>('dashboard')
   const [search, setSearch] = useState('')
   const [showClosed, setShowClosed] = useState(false)
@@ -35,7 +36,7 @@ export default function ProjectsView({ userId, userEmail, navigation, onNavigate
 
   if (selected) {
     return <ProjectDetail project={selected} tasks={tasks.filter((task) => task.projectId === selected.id)} milestones={milestones.filter((milestone) => milestone.projectId === selected.id)} afns={afns}
-      profiles={profiles} userId={userId} userEmail={userEmail} filter={taskFilter} setFilter={setTaskFilter}
+      profiles={profiles} members={members.filter((member) => member.projectId === selected.id)} userId={userId} userEmail={userEmail} filter={taskFilter} setFilter={setTaskFilter}
       onBack={() => onNavigate({ type: 'overview' })} />
   }
 
@@ -122,15 +123,19 @@ function TaskOverview({ title, tasks, projects, afns, onOpen }: { title: string;
   })}</div>}</section>
 }
 
-function ProjectDetail({ project, tasks, milestones, afns, profiles, userId, userEmail, filter, setFilter, onBack }: { project: Project; tasks: ProjectTask[]; milestones: ProjectMilestone[]; afns: { taskId: string; afnNumber: number }[]; profiles: UserProfile[]; userId: string; userEmail?: string; filter: TaskFilter; setFilter: (value: TaskFilter) => void; onBack: () => void }) {
+function ProjectDetail({ project, tasks, milestones, afns, profiles, members, userId, userEmail, filter, setFilter, onBack }: { project: Project; tasks: ProjectTask[]; milestones: ProjectMilestone[]; afns: { taskId: string; afnNumber: number }[]; profiles: UserProfile[]; members: ProjectMember[]; userId: string; userEmail?: string; filter: TaskFilter; setFilter: (value: TaskFilter) => void; onBack: () => void }) {
   const [editingProject, setEditingProject] = useState(false)
   const [editingTask, setEditingTask] = useState<ProjectTask | 'new' | null>(null)
   const [editingMilestone, setEditingMilestone] = useState<ProjectMilestone | 'new' | null>(null)
   const [openedMilestoneId, setOpenedMilestoneId] = useState<string | null>(null)
   const [taskMilestonePreset, setTaskMilestonePreset] = useState<string | undefined>()
-  const visibleTasks = useMemo(() => [...tasks].filter((task) => filter === 'all' || task.status === filter).sort((a, b) => a.sortOrder - b.sortOrder), [tasks, filter])
+  const [editingTeam, setEditingTeam] = useState(false)
+  const [assigneeFilter, setAssigneeFilter] = useState('all')
+  const visibleTasks = useMemo(() => [...tasks].filter((task) => (filter === 'all' || task.status === filter) && (assigneeFilter === 'all' || task.assigneeUserId === assigneeFilter)).sort((a, b) => a.sortOrder - b.sortOrder), [tasks, filter, assigneeFilter])
   const counts = Object.fromEntries(taskFilters.map((value) => [value, value === 'all' ? tasks.length : tasks.filter((task) => task.status === value).length]))
   const ownerName = profileName(project.ownerUserId, profiles, userId, userEmail)
+  const teamIds = [...new Set([project.ownerUserId, ...members.map((member) => member.userId)])]
+  const teamProfiles = teamIds.map((id) => profiles.find((profile) => profile.id === id)).filter((profile): profile is UserProfile => Boolean(profile))
   const nextMilestone = getNextMilestone(milestones)
 
   return <main className="projects-view project-detail-view">
@@ -142,10 +147,12 @@ function ProjectDetail({ project, tasks, milestones, afns, profiles, userId, use
       </header>
       <div className="project-meta-grid">
         <MetaItem label="Verantwortlich">{ownerName}</MetaItem>
+        <MetaItem label="Team">{teamIds.map((id) => profileName(id, profiles, userId, userEmail)).join(' · ')}</MetaItem>
         <MetaItem label="Zeitraum">{formatRange(project.startDate, project.targetDate)}</MetaItem>
       </div>
       <section className="project-read-description"><span>Beschreibung</span><p>{project.description || 'Noch keine Beschreibung hinterlegt.'}</p></section>
       <button className="secondary-action" onClick={() => setEditingProject(true)}>Projekt bearbeiten</button>
+      <button className="secondary-action team-edit-button" onClick={() => setEditingTeam(true)}>Team bearbeiten</button>
 
       {nextMilestone && <NextMilestone milestone={nextMilestone} tasks={tasks} onOpen={() => setOpenedMilestoneId(nextMilestone.id)}/>}
 
@@ -157,20 +164,21 @@ function ProjectDetail({ project, tasks, milestones, afns, profiles, userId, use
       <section className="project-tasks-section">
         <div className="project-tasks-heading"><div><p className="projects-eyebrow">Projektarbeit</p><h2>Aufgaben</h2></div><button className="primary compact" onClick={() => { setTaskMilestonePreset(undefined); setEditingTask('new') }}>+ Aufgabe</button></div>
         <div className="task-filter-bar" aria-label="Aufgaben filtern">{taskFilters.map((value) => <button key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}><span>{value === 'all' ? 'Alle' : taskStatus[value]}</span><strong>{counts[value]}</strong></button>)}</div>
+        <label className="assignee-filter">Verantwortlich<select value={assigneeFilter} onChange={(event) => setAssigneeFilter(event.target.value)}><option value="all">Alle</option><option value={userId}>Meine</option>{teamProfiles.filter((profile) => profile.id !== userId).map((profile) => <option key={profile.id} value={profile.id}>{profile.displayName || profile.email}</option>)}</select></label>
         <div className="compact-task-list">{visibleTasks.length === 0 ? <div className="project-empty-state"><strong>Keine Aufgaben in diesem Filter</strong><span>Über „+ Aufgabe“ kannst du eine neue Projektaufgabe anlegen.</span></div> : visibleTasks.map((task) => <TaskRow key={task.id} task={task} profiles={profiles} userId={userId} userEmail={userEmail} afns={afns.filter((afn) => afn.taskId === task.id).map((afn) => afn.afnNumber)} onClick={() => setEditingTask(task)}/>)}</div>
       </section>
     </div>
     {editingProject && (
-      <ProjectEditDialog project={project} profiles={profiles} userId={userId} userEmail={userEmail}
-        onClose={() => setEditingProject(false)} onDeleted={onBack}/>
+      <ProjectEditDialog project={project} onClose={() => setEditingProject(false)} onDeleted={onBack}/>
     )}
     {editingTask && (
       <TaskEditDialog projectId={project.id} task={editingTask === 'new' ? undefined : editingTask} milestones={milestones} milestonePreset={taskMilestonePreset}
-        profiles={profiles} userId={userId} userEmail={userEmail}
+        profiles={profiles} memberIds={teamIds} userId={userId} userEmail={userEmail}
         afns={editingTask === 'new' ? [] : afns.filter((afn) => afn.taskId === editingTask.id).map((afn) => afn.afnNumber)}
         onClose={() => setEditingTask(null)}/>
     )}
     {editingMilestone && <MilestoneEditDialog projectId={project.id} milestone={editingMilestone === 'new' ? undefined : editingMilestone} onClose={() => setEditingMilestone(null)}/>}
+    {editingTeam && <TeamEditDialog project={project} members={members} profiles={profiles} userId={userId} userEmail={userEmail} onClose={() => setEditingTeam(false)}/>}
     {openedMilestoneId && milestones.find((m) => m.id === openedMilestoneId) && <MilestoneDetailDialog milestone={milestones.find((m) => m.id === openedMilestoneId)!} tasks={tasks.filter((task) => task.milestoneId === openedMilestoneId)} onTask={(task) => { setOpenedMilestoneId(null); setEditingTask(task) }} onAddTask={() => { setTaskMilestonePreset(openedMilestoneId); setOpenedMilestoneId(null); setEditingTask('new') }} onClose={() => setOpenedMilestoneId(null)}/>}
   </main>
 }
@@ -195,7 +203,7 @@ function DialogShell({ title, subtitle, children, onClose }: { title: string; su
   </div>
 }
 
-function ProjectEditDialog({ project, profiles, userId, userEmail, onClose, onDeleted }: { project: Project; profiles: UserProfile[]; userId: string; userEmail?: string; onClose: () => void; onDeleted: () => void }) {
+function ProjectEditDialog({ project, onClose, onDeleted }: { project: Project; onClose: () => void; onDeleted: () => void }) {
   const [draft, setDraft] = useState(() => ({ ...project, name: projectShortName(project) ?? '', customerName: projectCustomer(project) }))
   async function save(event: FormEvent) {
     event.preventDefault()
@@ -217,7 +225,6 @@ function ProjectEditDialog({ project, profiles, userId, userEmail, onClose, onDe
         <FormField label="Kunde" wide><input value={draft.customerName ?? ''} onChange={(event) => setDraft({ ...draft, customerName: event.target.value })} autoFocus required /></FormField>
         <FormField label="Projektname" wide><input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Optional, z. B. Supermarkt" /></FormField>
         <FormField label="Status"><select value={draft.status} onChange={(event) => setDraft({ ...draft, status: event.target.value as ProjectStatus })}>{Object.entries(projectStatus).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></FormField>
-        <FormField label="Verantwortlich"><select value={draft.ownerUserId} onChange={(event) => setDraft({ ...draft, ownerUserId: event.target.value })}>{profileOptions(profiles, userId, userEmail)}</select></FormField>
         <FormField label="Startdatum"><BufferedDateInput value={draft.startDate} onSave={(value) => setDraft({ ...draft, startDate: value })}/></FormField>
         <FormField label="Zieltermin"><BufferedDateInput value={draft.targetDate} onSave={(value) => setDraft({ ...draft, targetDate: value })}/></FormField>
         <FormField label="Beschreibung" wide><textarea value={draft.description ?? ''} onChange={(event) => setDraft({ ...draft, description: event.target.value || undefined })} rows={4}/></FormField>
@@ -241,7 +248,7 @@ function MilestoneDetailDialog({ milestone, tasks, onTask, onAddTask, onClose }:
   return <DialogShell title={milestone.title} subtitle="Meilenstein" onClose={onClose}><div className="milestone-detail"><p>{milestone.description || 'Keine Beschreibung hinterlegt.'}</p><div className="milestone-detail-meta"><span>{milestone.dueDate ? formatDate(milestone.dueDate) : 'Ohne Datum'}</span><StatusBadge status={milestone.status} label={milestoneStatus[milestone.status]}/></div><strong>{tasks.length ? `${done} von ${tasks.length} Aufgaben erledigt` : 'Noch keine Aufgaben'}</strong>{tasks.length > 0 && <div className="milestone-progress"><i style={{width: `${done / tasks.length * 100}%`}}/></div>}<div className="milestone-task-list">{tasks.map((task) => <button key={task.id} onClick={() => onTask(task)}><span>{task.status === 'completed' ? '✓' : '○'}</span>{task.title}</button>)}</div><button className="primary compact" onClick={onAddTask}>+ Aufgabe</button></div></DialogShell>
 }
 
-function TaskEditDialog({ projectId, task, milestones, milestonePreset, afns, profiles, userId, userEmail, onClose }: { projectId: string; task?: ProjectTask; milestones: ProjectMilestone[]; milestonePreset?: string; afns: number[]; profiles: UserProfile[]; userId: string; userEmail?: string; onClose: () => void }) {
+function TaskEditDialog({ projectId, task, milestones, milestonePreset, afns, profiles, memberIds, userId, userEmail, onClose }: { projectId: string; task?: ProjectTask; milestones: ProjectMilestone[]; milestonePreset?: string; afns: number[]; profiles: UserProfile[]; memberIds: string[]; userId: string; userEmail?: string; onClose: () => void }) {
   const [title, setTitle] = useState(task?.title ?? '')
   const [description, setDescription] = useState(task?.description ?? '')
   const [status, setStatus] = useState<ProjectTaskStatus>(task?.status ?? 'open')
@@ -267,7 +274,7 @@ function TaskEditDialog({ projectId, task, milestones, milestonePreset, afns, pr
         <FormField label="Beschreibung" wide><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={4} placeholder="Optional" /></FormField>
         <FormField label="Status"><select value={status} onChange={(event) => setStatus(event.target.value as ProjectTaskStatus)}>{Object.entries(taskStatus).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></FormField>
         <FormField label="Termin"><BufferedDateInput value={dueDate} onSave={setDueDate}/></FormField>
-        <FormField label="Verantwortlich"><select value={assigneeUserId} onChange={(event) => setAssigneeUserId(event.target.value)}><option value="">Nicht zugewiesen</option>{profileOptions(profiles, userId, userEmail)}</select></FormField>
+        <FormField label="Verantwortlich"><select value={assigneeUserId} onChange={(event) => setAssigneeUserId(event.target.value)}><option value="">Nicht zugewiesen</option>{profileOptions(profiles, userId, userEmail, memberIds)}</select></FormField>
         <FormField label="Meilenstein"><select value={milestoneId} onChange={(event) => setMilestoneId(event.target.value)}><option value="">Kein Meilenstein</option>{milestones.filter((m) => m.status !== 'completed' || m.id === task?.milestoneId).sort((a,b) => a.sortOrder - b.sortOrder).map((m) => <option key={m.id} value={m.id}>{m.title}</option>)}</select></FormField>
         {status === 'waiting' && <FormField label="Wartet auf"><select value={waitingFor ?? ''} onChange={(event) => setWaitingFor((event.target.value || undefined) as ProjectWaitingFor | undefined)}><option value="">Bitte wählen</option>{waitingOptions.map((value) => <option key={value}>{value}</option>)}</select></FormField>}
         <FormField label="AFN-Nummern" wide><input value={afnText} onChange={(event) => setAfnText(event.target.value)} inputMode="numeric" placeholder="181657, 181658"/><small>Mehrere Nummern mit Komma trennen.</small></FormField>
@@ -277,13 +284,38 @@ function TaskEditDialog({ projectId, task, milestones, milestonePreset, afns, pr
   </DialogShell>
 }
 
+function TeamEditDialog({ project, members, profiles, userId, userEmail, onClose }: { project: Project; members: ProjectMember[]; profiles: UserProfile[]; userId: string; userEmail?: string; onClose: () => void }) {
+  const initialIds = new Set([project.ownerUserId, ...members.map((member) => member.userId)])
+  const [ownerId, setOwnerId] = useState(project.ownerUserId)
+  const [selected, setSelected] = useState(initialIds)
+  const values = profiles.length ? profiles : [{ id: userId, email: userEmail ?? 'Ich', updatedAt: 0 }]
+  function toggle(id: string) {
+    const next = new Set(selected)
+    if (next.has(id) && id !== ownerId) next.delete(id)
+    else next.add(id)
+    setSelected(next)
+  }
+  async function save(event: FormEvent) {
+    event.preventDefault()
+    await setProjectTeam(project.id, ownerId, [...selected, ownerId])
+    onClose()
+  }
+  return <DialogShell title="Team bearbeiten" subtitle={projectDisplayName(project)} onClose={onClose}><form className="project-dialog-form" onSubmit={save}>
+    <div className="dialog-form-grid"><FormField label="Hauptverantwortlich" wide><select value={ownerId} onChange={(event) => { setOwnerId(event.target.value); setSelected(new Set([...selected, event.target.value])) }}>{profileOptions(values, userId, userEmail)}</select></FormField></div>
+    <div className="team-member-list">{values.map((profile) => <label key={profile.id}><input type="checkbox" checked={selected.has(profile.id)} disabled={profile.id === ownerId} onChange={() => toggle(profile.id)}/><span>{profile.displayName || profile.email}</span>{profile.id === ownerId && <small>Verantwortlich</small>}</label>)}</div>
+    <div className="dialog-actions"><span/><span/><button type="button" className="secondary-action" onClick={onClose}>Abbrechen</button><button className="primary">Speichern</button></div>
+  </form></DialogShell>
+}
+
 function FormField({ label, wide, children }: { label: string; wide?: boolean; children: ReactNode }) {
   return <label className={`dialog-form-field${wide ? ' wide' : ''}`}><span>{label}</span>{children}</label>
 }
 
-function profileOptions(profiles: UserProfile[], userId: string, userEmail?: string) {
+function profileOptions(profiles: UserProfile[], userId: string, userEmail?: string, preferredIds?: string[]) {
   const values = profiles.length ? profiles : [{ id: userId, email: userEmail ?? 'Ich', updatedAt: 0 }]
-  return values.map((profile) => <option key={profile.id} value={profile.id}>{profile.displayName || profile.email}</option>)
+  const preferred = new Set(preferredIds ?? [])
+  const ordered = preferredIds ? [...values].sort((a, b) => Number(preferred.has(b.id)) - Number(preferred.has(a.id))) : values
+  return ordered.map((profile) => <option key={profile.id} value={profile.id}>{profile.displayName || profile.email}{preferredIds && preferred.has(profile.id) ? ' · Team' : ''}</option>)
 }
 
 function profileName(id: string | undefined, profiles: UserProfile[], userId: string, userEmail?: string) {

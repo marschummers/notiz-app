@@ -1,10 +1,13 @@
 import { db, newId } from '../db/db'
-import type { Project, ProjectTask, ProjectTaskAfn, ProjectMilestone } from '../db/types'
+import type { Project, ProjectTask, ProjectTaskAfn, ProjectMilestone, ProjectMember } from '../db/types'
 
 export async function createProject(input: Pick<Project, 'name' | 'ownerUserId'> & Partial<Project>): Promise<string> {
   const now = Date.now()
   const id = newId()
-  await db.projects.add({ ...input, id, name: input.name.trim() || 'Neues Projekt', status: input.status ?? 'active', createdAt: now, updatedAt: now })
+  await db.transaction('rw', db.projects, db.projectMembers, async () => {
+    await db.projects.add({ ...input, id, name: input.name.trim() || 'Neues Projekt', status: input.status ?? 'active', createdAt: now, updatedAt: now })
+    await db.projectMembers.add({ id: newId(), projectId: id, userId: input.ownerUserId, role: 'owner', createdAt: now, updatedAt: now })
+  })
   return id
 }
 
@@ -14,7 +17,7 @@ export async function updateProject(id: string, changes: Partial<Omit<Project, '
 
 export async function deleteProject(id: string): Promise<void> {
   const now = Date.now()
-  await db.transaction('rw', db.projects, db.projectTasks, db.projectTaskAfns, db.projectMilestones, async () => {
+  await db.transaction('rw', db.projects, db.projectTasks, db.projectTaskAfns, db.projectMilestones, db.projectMembers, async () => {
     const tasks = await db.projectTasks.where('projectId').equals(id).toArray()
     for (const task of tasks) {
       const afns = await db.projectTaskAfns.where('taskId').equals(task.id).toArray()
@@ -23,6 +26,8 @@ export async function deleteProject(id: string): Promise<void> {
     }
     const milestones = await db.projectMilestones.where('projectId').equals(id).toArray()
     await Promise.all(milestones.map((milestone) => db.projectMilestones.update(milestone.id, { deletedAt: now, updatedAt: now })))
+    const members = await db.projectMembers.where('projectId').equals(id).toArray()
+    await Promise.all(members.map((member) => db.projectMembers.update(member.id, { deletedAt: now, updatedAt: now })))
     await db.projects.update(id, { deletedAt: now, updatedAt: now })
   })
 }
@@ -94,5 +99,24 @@ export async function replaceProjectTaskAfns(taskId: string, numbers: number[]):
       await db.projectTaskAfns.add(value)
     }
   }
+}
+
+export async function setProjectTeam(projectId: string, ownerUserId: string, userIds: string[]): Promise<void> {
+  const now = Date.now()
+  const wanted = new Set([ownerUserId, ...userIds])
+  const existing = await db.projectMembers.where('projectId').equals(projectId).toArray()
+  await db.transaction('rw', db.projects, db.projectMembers, async () => {
+    await db.projects.update(projectId, { ownerUserId, updatedAt: now })
+    for (const row of existing) {
+      if (!wanted.has(row.userId)) await db.projectMembers.update(row.id, { deletedAt: now, updatedAt: now })
+      else await db.projectMembers.update(row.id, { role: row.userId === ownerUserId ? 'owner' : 'member', deletedAt: undefined, updatedAt: now })
+    }
+    for (const userId of wanted) {
+      if (!existing.some((row) => row.userId === userId)) {
+        const row: ProjectMember = { id: newId(), projectId, userId, role: userId === ownerUserId ? 'owner' : 'member', createdAt: now, updatedAt: now }
+        await db.projectMembers.add(row)
+      }
+    }
+  })
 }
 

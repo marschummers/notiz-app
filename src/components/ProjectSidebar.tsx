@@ -8,9 +8,11 @@ import { projectCustomer, projectDisplayName, projectShortName } from '../lib/pr
 export default function ProjectSidebar({ userId, navigation, onNavigate }: { userId: string; navigation: ProjectNavigation; onNavigate: (navigation: ProjectNavigation) => void }) {
   const [search, setSearch] = useState('')
   const projects = useLiveQuery(() => db.projects.filter((project) => !project.deletedAt).toArray(), []) ?? []
+  const memberships = useLiveQuery(() => db.projectMembers.where('userId').equals(userId).filter((member) => !member.deletedAt).toArray(), [userId]) ?? []
   const query = search.trim().toLocaleLowerCase('de')
   const results = query ? projects.filter((project) => projectDisplayName(project).toLocaleLowerCase('de').includes(query)).slice(0, 8) : []
-  const mine = projects.filter((project) => project.ownerUserId === userId && (project.status === 'active' || project.status === 'waiting')).sort((a, b) => a.name.localeCompare(b.name, 'de'))
+  const memberProjectIds = new Set(memberships.map((member) => member.projectId))
+  const mine = projects.filter((project) => (project.ownerUserId === userId || memberProjectIds.has(project.id)) && (project.status === 'active' || project.status === 'waiting')).sort((a, b) => a.name.localeCompare(b.name, 'de'))
   const customerNames = new Map<string, string>()
   for (const project of projects) {
     const name = projectCustomer(project)
