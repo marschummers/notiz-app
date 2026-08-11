@@ -5,6 +5,7 @@ import type { Project, ProjectMilestone, ProjectMilestoneStatus, ProjectStatus, 
 import { createProject, createProjectMilestone, createProjectTask, deleteProject, deleteProjectMilestone, deleteProjectTask, moveProjectMilestone, replaceProjectTaskAfns, updateProject, updateProjectMilestone, updateProjectTask } from '../lib/projectActions'
 import BufferedDateInput from './BufferedDateInput'
 import type { ProjectNavigation } from '../lib/projectNavigation'
+import { projectCustomer, projectDisplayName, projectShortName } from '../lib/projectDisplay'
 import './ProjectsView.css'
 
 const projectStatus: Record<ProjectStatus, string> = { active: 'Aktiv', waiting: 'Wartet', completed: 'Abgeschlossen', archived: 'Archiviert' }
@@ -53,13 +54,13 @@ export default function ProjectsView({ userId, userEmail, navigation, onNavigate
       <TaskOverview title="Wartet auf andere" tasks={sortedMine.filter((task) => task.status === 'waiting')} projects={projects} afns={afns} onOpen={(id) => onNavigate({ type: 'project', id })}/>
     </> : <>
       <div className="project-list-tools"><input className="project-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Projekte durchsuchen‚Ä¶" />{navigation.type !== 'status' && <button onClick={() => setShowClosed((value) => !value)}>{showClosed ? 'Nur laufende' : 'Abgeschlossene & Archiv'}</button>}</div>
-      <div className="project-list">{listProjects.filter((project) => `${project.name} ${project.customerName ?? ''}`.toLowerCase().includes(search.toLowerCase())).map((project) => <button key={project.id} className="project-card" onClick={() => onNavigate({ type: 'project', id: project.id })}><span><strong>{project.name}</strong><small>{project.customerName || 'Kein Kunde hinterlegt'}</small></span><StatusBadge status={project.status} label={projectStatus[project.status]}/></button>)}</div>
+      <div className="project-list">{listProjects.filter((project) => projectDisplayName(project).toLowerCase().includes(search.toLowerCase())).map((project) => <button key={project.id} className="project-card" onClick={() => onNavigate({ type: 'project', id: project.id })}><strong>{projectDisplayName(project)}</strong><StatusBadge status={project.status} label={projectStatus[project.status]}/></button>)}</div>
     </>}
   </div></main>
 }
 
 function CustomerOverview({ customerName, projects, tasks, milestones, afns, profiles, userId, userEmail, onOpenProject, onBack }: { customerName: string; projects: Project[]; tasks: ProjectTask[]; milestones: ProjectMilestone[]; afns: { taskId: string; afnNumber: number }[]; profiles: UserProfile[]; userId: string; userEmail?: string; onOpenProject: (id: string) => void; onBack: () => void }) {
-  const customerProjects = projects.filter((project) => project.customerName?.trim().toLocaleLowerCase('de') === customerName.trim().toLocaleLowerCase('de'))
+  const customerProjects = projects.filter((project) => projectCustomer(project).toLocaleLowerCase('de') === customerName.trim().toLocaleLowerCase('de'))
   const active = customerProjects.filter((project) => project.status === 'active' || project.status === 'waiting')
   const projectIds = new Set(customerProjects.map((project) => project.id))
   const openTasks = tasks.filter((task) => projectIds.has(task.projectId) && task.status !== 'completed').sort((a, b) => (a.dueDate ?? Infinity) - (b.dueDate ?? Infinity))
@@ -68,9 +69,9 @@ function CustomerOverview({ customerName, projects, tasks, milestones, afns, pro
   return <main className="projects-view"><div className="project-page-content customer-overview">
     <button className="back-link" onClick={onBack}>‚Üê Projekte</button>
     <header className="project-read-header"><div className="project-read-title"><p className="projects-eyebrow">Kunde</p><h1>{customerName}</h1></div></header>
-    <CustomerSection title="Projekte" empty="Keine aktiven Projekte f√ºr diesen Kunden.">{active.map((project) => <button className="customer-row" key={project.id} onClick={() => onOpenProject(project.id)}><span><strong>{project.name}</strong><small>{profileName(project.ownerUserId, profiles, userId, userEmail)}</small></span><span>{project.targetDate ? formatDate(project.targetDate) : 'Ohne Zieltermin'}</span><StatusBadge status={project.status} label={projectStatus[project.status]}/></button>)}</CustomerSection>
-    <CustomerSection title="Offene Aufgaben" empty="Keine offenen Aufgaben.">{openTasks.map((task) => { const project = customerProjects.find((item) => item.id === task.projectId); const taskAfns = afns.filter((afn) => afn.taskId === task.id); return <button className="customer-row customer-task-row" key={task.id} onClick={() => onOpenProject(task.projectId)}><span><small>{project?.name}</small><strong>{task.title}</strong>{taskAfns.length > 0 && <small>{taskAfns.map((afn) => `AFN ${afn.afnNumber}`).join(', ')}</small>}</span><span>{profileName(task.assigneeUserId, profiles, userId, userEmail)}</span><span>{task.dueDate ? formatDate(task.dueDate) : 'Ohne Termin'}</span><StatusBadge status={task.status} label={taskStatus[task.status]}/></button>})}</CustomerSection>
-    <CustomerSection title="N√§chste Meilensteine" empty="Keine offenen Meilensteine mit Termin.">{upcoming.map((milestone) => { const project = customerProjects.find((item) => item.id === milestone.projectId); const assigned = tasks.filter((task) => task.milestoneId === milestone.id); const done = assigned.filter((task) => task.status === 'completed').length; return <button className="customer-row" key={milestone.id} onClick={() => onOpenProject(milestone.projectId)}><span><small>{project?.name}</small><strong>{milestone.title}</strong></span><span className={isOverdue(milestone) ? 'milestone-overdue' : ''}>{formatDate(milestone.dueDate!)}</span><span>{assigned.length ? `${done} / ${assigned.length} erledigt` : 'Noch keine Aufgaben'}</span></button>})}</CustomerSection>
+    <CustomerSection title="Projekte" empty="Keine aktiven Projekte f√ºr diesen Kunden.">{active.map((project) => <button className="customer-row" key={project.id} onClick={() => onOpenProject(project.id)}><span><strong>{projectShortName(project) || projectCustomer(project)}</strong><small>{profileName(project.ownerUserId, profiles, userId, userEmail)}</small></span><span>{project.targetDate ? formatDate(project.targetDate) : 'Ohne Zieltermin'}</span><StatusBadge status={project.status} label={projectStatus[project.status]}/></button>)}</CustomerSection>
+    <CustomerSection title="Offene Aufgaben" empty="Keine offenen Aufgaben.">{openTasks.map((task) => { const project = customerProjects.find((item) => item.id === task.projectId); const taskAfns = afns.filter((afn) => afn.taskId === task.id); return <button className="customer-row customer-task-row" key={task.id} onClick={() => onOpenProject(task.projectId)}><span><small>{project ? (projectShortName(project) || 'Allgemeines Projekt') : 'Unbekanntes Projekt'}</small><strong>{task.title}</strong>{taskAfns.length > 0 && <small>{taskAfns.map((afn) => `AFN ${afn.afnNumber}`).join(', ')}</small>}</span><span>{profileName(task.assigneeUserId, profiles, userId, userEmail)}</span><span>{task.dueDate ? formatDate(task.dueDate) : 'Ohne Termin'}</span><StatusBadge status={task.status} label={taskStatus[task.status]}/></button>})}</CustomerSection>
+    <CustomerSection title="N√§chste Meilensteine" empty="Keine offenen Meilensteine mit Termin.">{upcoming.map((milestone) => { const project = customerProjects.find((item) => item.id === milestone.projectId); const assigned = tasks.filter((task) => task.milestoneId === milestone.id); const done = assigned.filter((task) => task.status === 'completed').length; return <button className="customer-row" key={milestone.id} onClick={() => onOpenProject(milestone.projectId)}><span><small>{project ? (projectShortName(project) || 'Allgemeines Projekt') : 'Unbekanntes Projekt'}</small><strong>{milestone.title}</strong></span><span className={isOverdue(milestone) ? 'milestone-overdue' : ''}>{formatDate(milestone.dueDate!)}</span><span>{assigned.length ? `${done} / ${assigned.length} erledigt` : 'Noch keine Aufgaben'}</span></button>})}</CustomerSection>
   </div></main>
 }
 
@@ -84,7 +85,7 @@ function Metric({ label, value }: { label: string; value: number }) { return <di
 function UpcomingMilestones({ milestones, tasks, projects, onOpen }: { milestones: ProjectMilestone[]; tasks: ProjectTask[]; projects: Project[]; onOpen: (id: string) => void }) {
   const rows = milestones.filter((m) => m.status !== 'completed' && m.dueDate).sort((a,b) => milestoneSort(a,b)).slice(0, 8)
   if (!rows.length) return null
-  return <section className="project-section upcoming-milestones"><h2>N√§chste Meilensteine</h2>{rows.map((m) => { const project = projects.find((p) => p.id === m.projectId); const assigned = tasks.filter((t) => t.milestoneId === m.id); const done = assigned.filter((t) => t.status === 'completed').length; return <button key={m.id} onClick={() => onOpen(m.projectId)}><span className={isOverdue(m) ? 'milestone-overdue' : ''}>{formatDate(m.dueDate!)}</span><strong>{project?.name ?? 'Unbekanntes Projekt'}</strong><span>{m.title}</span><small>{assigned.length ? `${done} / ${assigned.length} erledigt` : 'Noch keine Aufgaben'}</small></button>})}</section>
+  return <section className="project-section upcoming-milestones"><h2>N√§chste Meilensteine</h2>{rows.map((m) => { const project = projects.find((p) => p.id === m.projectId); const assigned = tasks.filter((t) => t.milestoneId === m.id); const done = assigned.filter((t) => t.status === 'completed').length; return <button key={m.id} onClick={() => onOpen(m.projectId)}><span className={isOverdue(m) ? 'milestone-overdue' : ''}>{formatDate(m.dueDate!)}</span><strong>{project ? projectDisplayName(project) : 'Unbekanntes Projekt'}</strong><span>{m.title}</span><small>{assigned.length ? `${done} / ${assigned.length} erledigt` : 'Noch keine Aufgaben'}</small></button>})}</section>
 }
 
 function StatusBadge({ status, label }: { status: string; label: string }) {
@@ -108,216 +109,8 @@ function TaskOverview({ title, tasks, projects, afns, onOpen }: { title: string;
     const taskAfns = afns.filter((afn) => afn.taskId === task.id)
     return <div className="overview-task-row" key={task.id}>
       <button className="overview-task-main" onClick={() => onOpen(task.projectId)}>
-        {project?.customerName && <span className="overview-customer">[{project.customerName}]</span>}
-        <span className="overview-project">{project?.name || 'Unbekanntes Projekt'}</span>
-        <span className="overview-task-title">{task.title}</span>
-        {taskAfns.length > 0 && <span className="overview-afns">{taskAfns.map((afn) => `AFN ${afn.afnNumber}`).join(', ')}</span>}
-      </button>
-      <label className="overview-due-date" aria-label={`Termin f√ºr ${task.title}`}>
-        <BufferedDateInput value={task.dueDate} onSave={(dueDate) => updateProjectTask(task.id, { dueDate })}/>
-      </label>
-      <StatusBadge status={task.status} label={taskStatus[task.status]}/>
-    </div>
-  })}</div>}</section>
-}
-
-function ProjectDetail({ project, tasks, milestones, afns, profiles, userId, userEmail, filter, setFilter, onBack }: { project: Project; tasks: ProjectTask[]; milestones: ProjectMilestone[]; afns: { taskId: string; afnNumber: number }[]; profiles: UserProfile[]; userId: string; userEmail?: string; filter: TaskFilter; setFilter: (value: TaskFilter) => void; onBack: () => void }) {
-  const [editingProject, setEditingProject] = useState(false)
-  const [editingTask, setEditingTask] = useState<ProjectTask | 'new' | null>(null)
-  const [editingMilestone, setEditingMilestone] = useState<ProjectMilestone | 'new' | null>(null)
-  const [openedMilestoneId, setOpenedMilestoneId] = useState<string | null>(null)
-  const [taskMilestonePreset, setTaskMilestonePreset] = useState<string | undefined>()
-  const visibleTasks = useMemo(() => [...tasks].filter((task) => filter === 'all' || task.status === filter).sort((a, b) => a.sortOrder - b.sortOrder), [tasks, filter])
-  const counts = Object.fromEntries(taskFilters.map((value) => [value, value === 'all' ? tasks.length : tasks.filter((task) => task.status === value).length]))
-  const ownerName = profileName(project.ownerUserId, profiles, userId, userEmail)
-  const nextMilestone = getNextMilestone(milestones)
-
-  return <main className="projects-view project-detail-view">
-    <div className="project-detail-content">
-      <button className="back-link" onClick={onBack}>‚Üê Projekte</button>
-      <header className="project-read-header">
-        <div className="project-read-title"><h1>{project.name || 'Ohne Projektnamen'}</h1><p>{project.customerName || 'Kein Kunde hinterlegt'}</p></div>
-        <StatusBadge status={project.status} label={projectStatus[project.status]}/>
-      </header>
-      <div className="project-meta-grid">
-        <MetaItem label="Verantwortlich">{ownerName}</MetaItem>
-        <MetaItem label="Zeitraum">{formatRange(project.startDate, project.targetDate)}</MetaItem>
-      </div>
-      <section className="project-read-description"><span>Beschreibung</span><p>{project.description || 'Noch keine Beschreibung hinterlegt.'}</p></section>
-      <button className="secondary-action" onClick={() => setEditingProject(true)}>Projekt bearbeiten</button>
-
-      {nextMilestone && <NextMilestone milestone={nextMilestone} tasks={tasks} onOpen={() => setOpenedMilestoneId(nextMilestone.id)}/>}
-
-      <section className="project-milestones-section">
-        <div className="project-tasks-heading"><div><p className="projects-eyebrow">Planung</p><h2>Meilensteine</h2></div><button className="primary compact" onClick={() => setEditingMilestone('new')}>+ Meilenstein</button></div>
-        <div className="milestone-list">{milestones.length === 0 ? <div className="project-empty-state"><strong>Noch keine Meilensteine</strong><span>Lege den ersten wichtigen Projekttermin an.</span></div> : [...milestones].sort((a,b) => a.sortOrder - b.sortOrder).map((milestone, index, ordered) => <MilestoneRow key={milestone.id} milestone={milestone} tasks={tasks.filter((task) => task.milestoneId === milestone.id)} onOpen={() => setOpenedMilestoneId(milestone.id)} onEdit={() => setEditingMilestone(milestone)} onMove={(direction) => moveProjectMilestone(milestone.id, direction)} canUp={index > 0} canDown={index < ordered.length - 1}/>)}</div>
-      </section>
-
-      <section className="project-tasks-section">
-        <div className="project-tasks-heading"><div><p className="projects-eyebrow">Projektarbeit</p><h2>Aufgaben</h2></div><button className="primary compact" onClick={() => { setTaskMilestonePreset(undefined); setEditingTask('new') }}>+ Aufgabe</button></div>
-        <div className="task-filter-bar" aria-label="Aufgaben filtern">{taskFilters.map((value) => <button key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}><span>{value === 'all' ? 'Alle' : taskStatus[value]}</span><strong>{counts[value]}</strong></button>)}</div>
-        <div className="compact-task-list">{visibleTasks.length === 0 ? <div className="project-empty-state"><strong>Keine Aufgaben in diesem Filter</strong><span>√úber ‚Äû+ Aufgabe‚Äú kannst du eine neue Projektaufgabe anlegen.</span></div> : visibleTasks.map((task) => <TaskRow key={task.id} task={task} profiles={profiles} userId={userId} userEmail={userEmail} afns={afns.filter((afn) => afn.taskId === task.id).map((afn) => afn.afnNumber)} onClick={() => setEditingTask(task)}/>)}</div>
-      </section>
-    </div>
-    {editingProject && (
-      <ProjectEditDialog project={project} profiles={profiles} userId={userId} userEmail={userEmail}
-        onClose={() => setEditingProject(false)} onDeleted={onBack}/>
-    )}
-    {editingTask && (
-      <TaskEditDialog projectId={project.id} task={editingTask === 'new' ? undefined : editingTask} milestones={milestones} milestonePreset={taskMilestonePreset}
-        profiles={profiles} userId={userId} userEmail={userEmail}
-        afns={editingTask === 'new' ? [] : afns.filter((afn) => afn.taskId === editingTask.id).map((afn) => afn.afnNumber)}
-        onClose={() => setEditingTask(null)}/>
-    )}
-    {editingMilestone && <MilestoneEditDialog projectId={project.id} milestone={editingMilestone === 'new' ? undefined : editingMilestone} onClose={() => setEditingMilestone(null)}/>}
-    {openedMilestoneId && milestones.find((m) => m.id === openedMilestoneId) && <MilestoneDetailDialog milestone={milestones.find((m) => m.id === openedMilestoneId)!} tasks={tasks.filter((task) => task.milestoneId === openedMilestoneId)} onTask={(task) => { setOpenedMilestoneId(null); setEditingTask(task) }} onAddTask={() => { setTaskMilestonePreset(openedMilestoneId); setOpenedMilestoneId(null); setEditingTask('new') }} onClose={() => setOpenedMilestoneId(null)}/>}
-  </main>
-}
-
-function MetaItem({ label, children }: { label: string; children: ReactNode }) {
-  return <div className="project-meta-item"><span>{label}</span><strong>{children}</strong></div>
-}
-
-function TaskRow({ task, afns, profiles, userId, userEmail, onClick }: { task: ProjectTask; afns: number[]; profiles: UserProfile[]; userId: string; userEmail?: string; onClick: () => void }) {
-  return <button className={`compact-task-row task-${task.status}`} onClick={onClick}>
-    <div className="task-row-main"><strong>{task.title || 'Ohne Titel'}</strong><div className="task-row-meta"><span>{profileName(task.assigneeUserId, profiles, userId, userEmail)}</span><span>{task.dueDate ? formatDate(task.dueDate) : 'Ohne Termin'}</span>{task.status === 'waiting' && task.waitingFor && <span className="waiting-copy">Wartet auf: {task.waitingFor}</span>}</div>{afns.length > 0 && <div className="afn-chip-list">{afns.map((afn) => <span key={afn}>AFN {afn}</span>)}</div>}</div>
-    <StatusBadge status={task.status} label={taskStatus[task.status]}/>
-  </button>
-}
-
-function DialogShell({ title, subtitle, children, onClose }: { title: string; subtitle: string; children: ReactNode; onClose: () => void }) {
-  return <div className="project-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
-    <section className="project-dialog" role="dialog" aria-modal="true" aria-label={title}>
-      <header><div><p className="projects-eyebrow">{subtitle}</p><h2>{title}</h2></div><button className="dialog-close" onClick={onClose} aria-label="Dialog schlie√üen">√ó</button></header>
-      {children}
-    </section>
-  </div>
-}
-
-function ProjectEditDialog({ project, profiles, userId, userEmail, onClose, onDeleted }: { project: Project; profiles: UserProfile[]; userId: string; userEmail?: string; onClose: () => void; onDeleted: () => void }) {
-  const [draft, setDraft] = useState(project)
-  async function save(event: FormEvent) {
-    event.preventDefault()
-    await updateProject(project.id, {
-      name: draft.name,
-      customerName: draft.customerName,
-      ownerUserId: draft.ownerUserId,
-      status: draft.status,
-      startDate: draft.startDate,
-      targetDate: draft.targetDate,
-      description: draft.description,
-    })
-    onClose()
-  }
-  return <DialogShell title="Projekt bearbeiten" subtitle={project.name} onClose={onClose}>
-    <form className="project-dialog-form" onSubmit={save}>
-      <div className="dialog-form-grid">
-        <FormField label="Projektname" wide><input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} autoFocus /></FormField>
-        <FormField label="Kunde" wide><input value={draft.customerName ?? ''} onChange={(event) => setDraft({ ...draft, customerName: event.target.value || undefined })} placeholder="Optional" /></FormField>
-        <FormField label="Status"><select value={draft.status} onChange={(event) => setDraft({ ...draft, status: event.target.value as ProjectStatus })}>{Object.entries(projectStatus).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></FormField>
-        <FormField label="Verantwortlich"><select value={draft.ownerUserId} onChange={(event) => setDraft({ ...draft, ownerUserId: event.target.value })}>{profileOptions(profiles, userId, userEmail)}</select></FormField>
-        <FormField label="Startdatum"><BufferedDateInput value={draft.startDate} onSave={(value) => setDraft({ ...draft, startDate: value })}/></FormField>
-        <FormField label="Zieltermin"><BufferedDateInput value={draft.targetDate} onSave={(value) => setDraft({ ...draft, targetDate: value })}/></FormField>
-        <FormField label="Beschreibung" wide><textarea value={draft.description ?? ''} onChange={(event) => setDraft({ ...draft, description: event.target.value || undefined })} rows={4}/></FormField>
-      </div>
-      <div className="dialog-actions"><button type="button" className="danger-action" onClick={async () => { if (confirm(`Projekt ‚Äû${project.name}‚Äú l√∂schen?`)) { await deleteProject(project.id); onDeleted() } }}>Projekt l√∂schen</button><span/><button type="button" className="secondary-action" onClick={onClose}>Abbrechen</button><button className="primary">Speichern</button></div>
-    </form>
-  </DialogShell>
-}
-
-function MilestoneEditDialog({ projectId, milestone, onClose }: { projectId: string; milestone?: ProjectMilestone; onClose: () => void }) {
-  const [title, setTitle] = useState(milestone?.title ?? '')
-  const [description, setDescription] = useState(milestone?.description ?? '')
-  const [dueDate, setDueDate] = useState(milestone?.dueDate)
-  const [status, setStatus] = useState<ProjectMilestoneStatus>(milestone?.status ?? 'planned')
-  async function save(event: FormEvent) { event.preventDefault(); if (!title.trim()) return; const id = milestone?.id ?? await createProjectMilestone(projectId, title); await updateProjectMilestone(id, { title: title.trim(), description: description.trim() || undefined, dueDate, status }); onClose() }
-  return <DialogShell title={milestone ? 'Meilenstein bearbeiten' : 'Neuer Meilenstein'} subtitle="Projektplanung" onClose={onClose}><form className="project-dialog-form" onSubmit={save}><div className="dialog-form-grid"><FormField label="Titel" wide><input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus required/></FormField><FormField label="Beschreibung" wide><textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} placeholder="Optional"/></FormField><FormField label="Datum"><BufferedDateInput value={dueDate} onSave={setDueDate}/></FormField><FormField label="Status"><select value={status} onChange={(e) => setStatus(e.target.value as ProjectMilestoneStatus)}>{Object.entries(milestoneStatus).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></FormField></div><div className="dialog-actions">{milestone ? <button type="button" className="danger-action" onClick={async () => { if (confirm('Meilenstein l√∂schen? Die Aufgaben bleiben erhalten.')) { await deleteProjectMilestone(milestone.id); onClose() } }}>Meilenstein l√∂schen</button> : <span/>}<span/><button type="button" className="secondary-action" onClick={onClose}>Abbrechen</button><button className="primary" disabled={!title.trim()}>Speichern</button></div></form></DialogShell>
-}
-
-function MilestoneDetailDialog({ milestone, tasks, onTask, onAddTask, onClose }: { milestone: ProjectMilestone; tasks: ProjectTask[]; onTask: (task: ProjectTask) => void; onAddTask: () => void; onClose: () => void }) {
-  const done = tasks.filter((task) => task.status === 'completed').length
-  return <DialogShell title={milestone.title} subtitle="Meilenstein" onClose={onClose}><div className="milestone-detail"><p>{milestone.description || 'Keine Beschreibung hinterlegt.'}</p><div className="milestone-detail-meta"><span>{milestone.dueDate ? formatDate(milestone.dueDate) : 'Ohne Datum'}</span><StatusBadge status={milestone.status} label={milestoneStatus[milestone.status]}/></div><strong>{tasks.length ? `${done} von ${tasks.length} Aufgaben erledigt` : 'Noch keine Aufgaben'}</strong>{tasks.length > 0 && <div className="milestone-progress"><i style={{width: `${done / tasks.length * 100}%`}}/></div>}<div className="milestone-task-list">{tasks.map((task) => <button key={task.id} onClick={() => onTask(task)}><span>{task.status === 'completed' ? '‚úì' : '‚óã'}</span>{task.title}</button>)}</div><button className="primary compact" onClick={onAddTask}>+ Aufgabe</button></div></DialogShell>
-}
-
-function TaskEditDialog({ projectId, task, milestones, milestonePreset, afns, profiles, userId, userEmail, onClose }: { projectId: string; task?: ProjectTask; milestones: ProjectMilestone[]; milestonePreset?: string; afns: number[]; profiles: UserProfile[]; userId: string; userEmail?: string; onClose: () => void }) {
-  const [title, setTitle] = useState(task?.title ?? '')
-  const [description, setDescription] = useState(task?.description ?? '')
-  const [status, setStatus] = useState<ProjectTaskStatus>(task?.status ?? 'open')
-  const [dueDate, setDueDate] = useState(task?.dueDate)
-  const [assigneeUserId, setAssigneeUserId] = useState(task ? (task.assigneeUserId ?? '') : userId)
-  const [waitingFor, setWaitingFor] = useState<ProjectWaitingFor | undefined>(task?.waitingFor)
-  const [milestoneId, setMilestoneId] = useState(task?.milestoneId ?? milestonePreset ?? '')
-  const [afnText, setAfnText] = useState(afns.join(', '))
-
-  async function save(event: FormEvent) {
-    event.preventDefault()
-    if (!title.trim()) return
-    const id = task?.id ?? await createProjectTask(projectId, title, assigneeUserId || undefined)
-    await updateProjectTask(id, { title: title.trim(), description: description.trim() || undefined, status, dueDate, milestoneId: milestoneId || undefined, assigneeUserId: assigneeUserId || undefined, waitingFor: status === 'waiting' ? waitingFor : undefined })
-    await replaceProjectTaskAfns(id, parseAfns(afnText))
-    onClose()
-  }
-
-  return <DialogShell title={task ? 'Aufgabe bearbeiten' : 'Neue Aufgabe'} subtitle="Projektaufgabe" onClose={onClose}>
-    <form className="project-dialog-form" onSubmit={save}>
-      <div className="dialog-form-grid">
-        <FormField label="Titel" wide><input value={title} onChange={(event) => setTitle(event.target.value)} autoFocus required /></FormField>
-        <FormField label="Beschreibung" wide><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={4} placeholder="Optional" /></FormField>
-        <FormField label="Status"><select value={status} onChange={(event) => setStatus(event.target.value as ProjectTaskStatus)}>{Object.entries(taskStatus).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></FormField>
-        <FormField label="Termin"><BufferedDateInput value={dueDate} onSave={setDueDate}/></FormField>
-        <FormField label="Verantwortlich"><select value={assigneeUserId} onChange={(event) => setAssigneeUserId(event.target.value)}><option value="">Nicht zugewiesen</option>{profileOptions(profiles, userId, userEmail)}</select></FormField>
-        <FormField label="Meilenstein"><select value={milestoneId} onChange={(event) => setMilestoneId(event.target.value)}><option value="">Kein Meilenstein</option>{milestones.filter((m) => m.status !== 'completed' || m.id === task?.milestoneId).sort((a,b) => a.sortOrder - b.sortOrder).map((m) => <option key={m.id} value={m.id}>{m.title}</option>)}</select></FormField>
-        {status === 'waiting' && <FormField label="Wartet auf"><select value={waitingFor ?? ''} onChange={(event) => setWaitingFor((event.target.value || undefined) as ProjectWaitingFor | undefined)}><option value="">Bitte w√§hlen</option>{waitingOptions.map((value) => <option key={value}>{value}</option>)}</select></FormField>}
-        <FormField label="AFN-Nummern" wide><input value={afnText} onChange={(event) => setAfnText(event.target.value)} inputMode="numeric" placeholder="181657, 181658"/><small>Mehrere Nummern mit Komma trennen.</small></FormField>
-      </div>
-      <div className="dialog-actions">{task ? <button type="button" className="danger-action" onClick={async () => { if (confirm('Aufgabe l√∂schen?')) { await deleteProjectTask(task.id); onClose() } }}>Aufgabe l√∂schen</button> : <span/>}<span/><button type="button" className="secondary-action" onClick={onClose}>Abbrechen</button><button className="primary" disabled={!title.trim()}>Speichern</button></div>
-    </form>
-  </DialogShell>
-}
-
-function FormField({ label, wide, children }: { label: string; wide?: boolean; children: ReactNode }) {
-  return <label className={`dialog-form-field${wide ? ' wide' : ''}`}><span>{label}</span>{children}</label>
-}
-
-function profileOptions(profiles: UserProfile[], userId: string, userEmail?: string) {
-  const values = profiles.length ? profiles : [{ id: userId, email: userEmail ?? 'Ich', updatedAt: 0 }]
-  return values.map((profile) => <option key={profile.id} value={profile.id}>{profile.displayName || profile.email}</option>)
-}
-
-function profileName(id: string | undefined, profiles: UserProfile[], userId: string, userEmail?: string) {
-  if (!id) return 'Nicht zugewiesen'
-  const profile = profiles.find((value) => value.id === id)
-  if (profile) return profile.displayName || profile.email
-  if (id === userId) return userEmail || 'Ich'
-  return 'Unbekannter Benutzer'
-}
-
-function formatDate(value: number) { return new Date(value).toLocaleDateString('de-DE') }
-function formatRange(start?: number, target?: number) {
-  if (!start && !target) return 'Noch nicht festgelegt'
-  return `${start ? formatDate(start) : 'Offen'} ‚Üí ${target ? formatDate(target) : 'Offen'}`
-}
-function parseAfns(value: string) { return value.split(/[,;\s]+/).map(Number).filter((number) => Number.isInteger(number) && number > 0) }
-
-function startOfToday() { const value = new Date(); value.setHours(0, 0, 0, 0); return value.getTime() }
-function isOverdue(milestone: ProjectMilestone) { return !!milestone.dueDate && milestone.dueDate < startOfToday() && milestone.status !== 'completed' }
-function milestoneSort(a: ProjectMilestone, b: ProjectMilestone) {
-  const now = startOfToday()
-  const aOverdue = !!a.dueDate && a.dueDate < now
-  const bOverdue = !!b.dueDate && b.dueDate < now
-  if (aOverdue !== bOverdue) return aOverdue ? -1 : 1
-  return (a.dueDate ?? Infinity) - (b.dueDate ?? Infinity)
-}
-function getNextMilestone(milestones: ProjectMilestone[]) {
-  const open = milestones.filter((m) => m.status !== 'completed')
-  const today = startOfToday()
-  const upcoming = open.filter((m) => m.dueDate && m.dueDate >= today).sort((a,b) => a.dueDate! - b.dueDate!)
-  if (upcoming.length) return upcoming[0]
-  const overdue = open.filter((m) => m.dueDate && m.dueDate < today).sort((a,b) => a.dueDate! - b.dueDate!)
-  return overdue[0] ?? open.filter((m) => !m.dueDate).sort((a,b) => a.sortOrder - b.sortOrder)[0]
-}
-function milestoneTiming(milestone: ProjectMilestone, open: number) {
-  if (!milestone.dueDate || milestone.status === 'completed') return ''
-  const days = Math.ceil((milestone.dueDate - startOfToday()) / 86400000)
-  return days >= 0 && days <= 7 && open > 0 ? ` ¬∑ ${days === 0 ? 'heute' : `in ${days} Tagen`} ¬∑ ${open} offen` : ''
-}
+        {project && <span className="overview-customer">[{projectCustomer(project)}]</span>}
+        {project && projectShortName(project) && <span className="overview-project">{projectShortName(project)}</span>}
+        <span classN€Mª∂âûÀk∫wµÁu•±ïÕ—Ωπï%êÄÙÙÙÅΩ¡ïπïë5•±ïÕ—Ωπï%ê•ÙÅΩπQÖÕ¨ıÏ°—ÖÕ¨§ÄÙ¯ÅÏÅÕï—=¡ïπïë5•±ïÕ—Ωπï%ê°π’±∞§ÏÅÕï—ë•—•πùQÖÕ¨°—ÖÕ¨§ÅıÙÅΩπëëQÖÕ¨ıÏ†§ÄÙ¯ÅÏÅÕï—QÖÕ≠5•±ïÕ—ΩπïA…ïÕï–°Ω¡ïπïë5•±ïÕ—Ωπï%ê§ÏÅÕï—=¡ïπïë5•±ïÕ—Ωπï%ê°π’±∞§ÏÅÕï—ë•—•πùQÖÕ¨†ùπï‹ú§ÅıÙÅΩπ±ΩÕîıÏ†§ÄÙ¯ÅÕï—=¡ïπïë5•±ïÕ—Ωπï%ê°π’±∞•Ùº˘Ù4(ÄÄΩµÖ•∏¯4)Ù4(4)ô’πç—•Ω∏Å5ï—Ö%—ï¥°ÏÅ±Öâï∞∞Åç°•±ë…ï∏ÅÙËÅÏÅ±Öâï∞ËÅÕ—…•πúÏÅç°•±ë…ï∏ËÅIïÖç—9ΩëîÅÙ§ÅÏ4(ÄÅ…ï—’…∏ÄÒë•ÿÅç±ÖÕÕ9ÖµîÙâ¡…Ω©ïç–µµï—Ñµ•—ï¥à¯ÒÕ¡Ö∏˘Ì±Öâï±ÙΩÕ¡Ö∏¯ÒÕ—…Ωπú˘Ìç°•±ë…ïπÙΩÕ—…Ωπú¯Ωë•ÿ¯4)Ù4(4)ô’πç—•Ω∏ÅQÖÕ≠IΩ‹°ÏÅ—ÖÕ¨∞ÅÖôπÃ∞Å¡…Ωô•±ïÃ∞Å’Õï…%ê∞Å’Õï…µÖ•∞∞ÅΩπ±•ç¨ÅÙËÅÏÅ—ÖÕ¨ËÅA…Ω©ïç—QÖÕ¨ÏÅÖôπÃËÅπ’µâï…mtÏÅ¡…Ωô•±ïÃËÅUÕï…A…Ωô•±ïmtÏÅ’Õï…%êËÅÕ—…•πúÏÅ’Õï…µÖ•∞¸ËÅÕ—…•πúÏÅΩπ±•ç¨ËÄ†§ÄÙ¯ÅŸΩ•êÅÙ§ÅÏ4(ÄÅ…ï—’…∏ÄÒâ’——Ω∏Åç±ÖÕÕ9ÖµîıÌÅçΩµ¡Öç–µ—ÖÕ¨µ…Ω‹Å—ÖÕ¨¥ëÌ—ÖÕ¨πÕ—Ö—’ÕıÅÙÅΩπ±•ç¨ıÌΩπ±•ç≠Ù¯4(ÄÄÄÄÒë•ÿÅç±ÖÕÕ9ÖµîÙâ—ÖÕ¨µ…Ω‹µµÖ•∏à¯ÒÕ—…Ωπú˘Ì—ÖÕ¨π—•—±îÅÒÄù=°πîÅQ•—ï∞ùÙΩÕ—…Ωπú¯Òë•ÿÅç±ÖÕÕ9ÖµîÙâ—ÖÕ¨µ…Ω‹µµï—Ñà¯ÒÕ¡Ö∏˘Ì¡…Ωô•±ï9Öµî°—ÖÕ¨πÖÕÕ•ùπïïUÕï…%ê∞Å¡…Ωô•±ïÃ∞Å’Õï…%ê∞Å’Õï…µÖ•∞•ÙΩÕ¡Ö∏¯ÒÕ¡Ö∏˘Ì—ÖÕ¨πë’ïÖ—îÄ¸ÅôΩ…µÖ—Ö—î°—ÖÕ¨πë’ïÖ—î§ÄËÄù=°πîÅQï…µ•∏ùÙΩÕ¡Ö∏˘Ì—ÖÕ¨πÕ—Ö—’ÃÄÙÙÙÄù›Ö•—•πúúÄòòÅ—ÖÕ¨π›Ö•—•πùΩ»ÄòòÄÒÕ¡Ö∏Åç±ÖÕÕ9ÖµîÙâ›Ö•—•πúµçΩ¡‰à˘]Ö…—ï–ÅÖ’òËÅÌ—ÖÕ¨π›Ö•—•πùΩ…ÙΩÕ¡Ö∏˘ÙΩë•ÿ˘ÌÖôπÃπ±ïπù—†Ä¯Ä¿ÄòòÄÒë•ÿÅç±ÖÕÕ9ÖµîÙâÖô∏µç°•¿µ±•Õ–à˘ÌÖôπÃπµÖ¿†°Öô∏§ÄÙ¯ÄÒÕ¡Ö∏Å≠ï‰ıÌÖôπÙ˘8ÅÌÖôπÙΩÕ¡Ö∏¯•ÙΩë•ÿ˘ÙΩë•ÿ¯4(ÄÄÄÄÒM—Ö—’Õ	ÖëùîÅÕ—Ö—’ÃıÌ—ÖÕ¨πÕ—Ö—’ÕÙÅ±Öâï∞ıÌ—ÖÕ≠M—Ö—’Õm—ÖÕ¨πÕ—Ö—’ÕuÙº¯4(ÄÄΩâ’——Ω∏¯4)Ù4(4)ô’πç—•Ω∏Å•Ö±ΩùM°ï±∞°ÏÅ—•—±î∞ÅÕ’â—•—±î∞Åç°•±ë…ï∏∞ÅΩπ±ΩÕîÅÙËÅÏÅ—•—±îËÅÕ—…•πúÏÅÕ’â—•—±îËÅÕ—…•πúÏÅç°•±ë…ï∏ËÅIïÖç—9ΩëîÏÅΩπ±ΩÕîËÄ†§ÄÙ¯ÅŸΩ•êÅÙ§ÅÏ4(ÄÅ…ï—’…∏ÄÒë•ÿÅç±ÖÕÕ9ÖµîÙâ¡…Ω©ïç–µë•Ö±ΩúµâÖç≠ë…Ω¿àÅΩπ5Ω’ÕïΩ›∏ıÏ°ïŸïπ–§ÄÙ¯ÅÏÅ•òÄ°ïŸïπ–π—Ö…ùï–ÄÙÙÙÅïŸïπ–πç’……ïπ—QÖ…ùï–§ÅΩπ±ΩÕî†§ÅıÙ¯4(ÄÄÄÄÒÕïç—•Ω∏Åç±ÖÕÕ9ÖµîÙâ¡…Ω©ïç–µë•Ö±ΩúàÅ…Ω±îÙâë•Ö±ΩúàÅÖ…•ÑµµΩëÖ∞Ùâ—…’îàÅÖ…•Ñµ±Öâï∞ıÌ—•—±ïÙ¯4(ÄÄÄÄÄÄÒ°ïÖëï»¯Òë•ÿ¯Ò¿Åç±ÖÕÕ9ÖµîÙâ¡…Ω©ïç—ÃµïÂïâ…Ω‹à˘ÌÕ’â—•—±ïÙΩ¿¯Ò†»˘Ì—•—±ïÙΩ†»¯Ωë•ÿ¯Òâ’——Ω∏Åç±ÖÕÕ9ÖµîÙâë•Ö±Ωúµç±ΩÕîàÅΩπ±•ç¨ıÌΩπ±ΩÕïÙÅÖ…•Ñµ±Öâï∞Ùâ•Ö±ΩúÅÕç°±•ó}ï∏à˚\Ωâ’——Ω∏¯Ω°ïÖëï»¯4(ÄÄÄÄÄÅÌç°•±ë…ïπÙ4(ÄÄÄÄΩÕïç—•Ω∏¯4(ÄÄΩë•ÿ¯4)Ù4(4)ô’πç—•Ω∏ÅA…Ω©ïç—ë•—•Ö±Ωú°ÏÅ¡…Ω©ïç–∞Å¡…Ωô•±ïÃ∞Å’Õï…%ê∞Å’Õï…µÖ•∞∞ÅΩπ±ΩÕî∞ÅΩπï±ï—ïêÅÙËÅÏÅ¡…Ω©ïç–ËÅA…Ω©ïç–ÏÅ¡…Ωô•±ïÃËÅUÕï…A…Ωô•±ïmtÏÅ’Õï…%êËÅÕ—…•πúÏÅ’Õï…µÖ•∞¸ËÅÕ—…•πúÏÅΩπ±ΩÕîËÄ†§ÄÙ¯ÅŸΩ•êÏÅΩπï±ï—ïêËÄ†§ÄÙ¯ÅŸΩ•êÅÙ§ÅÏ4(ÄÅçΩπÕ–Åmë…Öô–∞ÅÕï—…Öô—tÄÙÅ’ÕïM—Ö—î††§ÄÙ¯Ä°ÏÄ∏∏π¡…Ω©ïç–∞ÅπÖµîËÅ¡…Ω©ïç—M°Ω…—9Öµî°¡…Ω©ïç–§Ä¸¸Äúú∞Åç’Õ—Ωµï…9ÖµîËÅ¡…Ω©ïç—’Õ—Ωµï»°¡…Ω©ïç–§ÅÙ§§4(ÄÅÖÕÂπåÅô’πç—•Ω∏ÅÕÖŸî°ïŸïπ–ËÅΩ…µŸïπ–§ÅÏ4(ÄÄÄÅïŸïπ–π¡…ïŸïπ—ïôÖ’±–†§4(ÄÄÄÅ•òÄ†Öë…Öô–πç’Õ—Ωµï…9Öµî¸π—…•¥†§§Å…ï—’…∏4(ÄÄÄÅÖ›Ö•–Å’¡ëÖ—ïA…Ω©ïç–°¡…Ω©ïç–π•ê∞ÅÏ4(ÄÄÄÄÄÅπÖµîËÅë…Öô–ππÖµîπ—…•¥†§∞4(ÄÄÄÄÄÅç’Õ—Ωµï…9ÖµîËÅë…Öô–πç’Õ—Ωµï…9Öµîπ—…•¥†§∞4(ÄÄÄÄÄÅΩ›πï…UÕï…%êËÅë…Öô–πΩ›πï…UÕï…%ê∞4(ÄÄÄÄÄÅÕ—Ö—’ÃËÅë…Öô–πÕ—Ö—’Ã∞4(ÄÄÄÄÄÅÕ—Ö…—Ö—îËÅë…Öô–πÕ—Ö…—Ö—î∞4(ÄÄÄÄÄÅ—Ö…ùï—Ö—îËÅë…Öô–π—Ö…ùï—Ö—î∞4(ÄÄÄÄÄÅëïÕç…•¡—•Ω∏ËÅë…Öô–πëïÕç…•¡—•Ω∏∞4(ÄÄÄÅÙ§4(ÄÄÄÅΩπ±ΩÕî†§4(ÄÅÙ4(ÄÅ…ï—’…∏ÄÒ•Ö±ΩùM°ï±∞Å—•—±îÙâA…Ω©ï≠–ÅâïÖ…âï•—ï∏àÅÕ’â—•—±îıÌ¡…Ω©ïç—•Õ¡±ÖÂ9Öµî°¡…Ω©ïç–•ÙÅΩπ±ΩÕîıÌΩπ±ΩÕïÙ¯4(ÄÄÄÄÒôΩ…¥Åç±ÖÕÕ9ÖµîÙâ¡…Ω©ïç–µë•Ö±ΩúµôΩ…¥àÅΩπM’âµ•–ıÌÕÖŸïÙ¯4(ÄÄÄÄÄÄÒë•ÿÅç±ÖÕÕ9ÖµîÙâë•Ö±ΩúµôΩ…¥µù…•êà¯4(ÄÄÄÄÄÄÄÄÒΩ…µ•ï±êÅ±Öâï∞Ùâ-’πëîàÅ›•ëî¯Ò•π¡’–ÅŸÖ±’îıÌë…Öô–πç’Õ—Ωµï…9ÖµîÄ¸¸ÄúùÙÅΩπ°ÖπùîıÏ°ïŸïπ–§ÄÙ¯ÅÕï—…Öô–°ÏÄ∏∏πë…Öô–∞Åç’Õ—Ωµï…9ÖµîËÅïŸïπ–π—Ö…ùï–πŸÖ±’îÅÙ•ÙÅÖ’—ΩΩç’ÃÅ…ï≈’•…ïêÄº¯ΩΩ…µ•ï±ê¯4(ÄÄÄÄÄÄÄÄÒΩ…µ•ï±êÅ±Öâï∞ÙâA…Ω©ï≠—πÖµîàÅ›•ëî¯Ò•π¡’–ÅŸÖ±’îıÌë…Öô–ππÖµïÙÅΩπ°ÖπùîıÏ°ïŸïπ–§ÄÙ¯ÅÕï—…Öô–°ÏÄ∏∏πë…Öô–∞ÅπÖµîËÅïŸïπ–π—Ö…ùï–πŸÖ±’îÅÙ•ÙÅ¡±Öçï°Ω±ëï»Ùâ=¡—•ΩπÖ∞∞ÅË∏Å∏ÅM’¡ï…µÖ…≠–àÄº¯ΩΩ…µ•ï±ê¯4(ÄÄÄÄÄÄÄÄÒΩ…µ•ï±êÅ±Öâï∞ÙâM—Ö—’Ãà¯ÒÕï±ïç–ÅŸÖ±’îıÌë…Öô–πÕ—Ö—’ÕÙÅΩπ°ÖπùîıÏ°ïŸïπ–§ÄÙ¯ÅÕï—…Öô–°ÏÄ∏∏πë…Öô–∞ÅÕ—Ö—’ÃËÅïŸïπ–π—Ö…ùï–πŸÖ±’îÅÖÃÅA…Ω©ïç—M—Ö—’ÃÅÙ•Ù˘Ì=â©ïç–πïπ—…•ïÃ°¡…Ω©ïç—M—Ö—’Ã§πµÖ¿†°mŸÖ±’î∞Å±Öâï±t§ÄÙ¯ÄÒΩ¡—•Ω∏Å≠ï‰ıÌŸÖ±’ïÙÅŸÖ±’îıÌŸÖ±’ïÙ˘Ì±Öâï±ÙΩΩ¡—•Ω∏¯•ÙΩÕï±ïç–¯ΩΩ…µ•ï±ê¯4(ÄÄÄÄÄÄÄÄÒΩ…µ•ï±êÅ±Öâï∞ÙâYï…Öπ—›Ω…—±•ç†à¯ÒÕï±ïç–ÅŸÖ±’îıÌë…Öô–πΩ›πï…UÕï…%ëÙÅΩπ°ÖπùîıÏ°ïŸïπ–§ÄÙ¯ÅÕï—…Öô–°ÏÄ∏∏πë…Öô–∞ÅΩ›πï…UÕï…%êËÅïŸïπ–π—Ö…ùï–πŸÖ±’îÅÙ•Ù˘Ì¡…Ωô•±ï=¡—•ΩπÃ°¡…Ωô•±ïÃ∞Å’Õï…%ê∞Å’Õï…µÖ•∞•ÙΩÕï±ïç–¯ΩΩ…µ•ï±ê¯4(ÄÄÄÄÄÄÄÄÒΩ…µ•ï±êÅ±Öâï∞ÙâM—Ö…—ëÖ—’¥à¯Ò	’ôôï…ïëÖ—ï%π¡’–ÅŸÖ±’îıÌë…Öô–πÕ—Ö…—Ö—ïÙÅΩπMÖŸîıÏ°ŸÖ±’î§ÄÙ¯ÅÕï—…Öô–°ÏÄ∏∏πë…Öô–∞ÅÕ—Ö…—Ö—îËÅŸÖ±’îÅÙ•Ùº¯ΩΩ…µ•ï±ê¯4(ÄÄÄÄÄÄÄÄÒΩ…µ•ï±êÅ±Öâï∞Ùâi•ï±—ï…µ•∏à¯Ò	’ôôï…ïëÖ—ï%π¡’–ÅŸÖ±’îıÌë…Öô–π—Ö…ùï—Ö—ïÙÅΩπMÖŸîıÏ°ŸÖ±’î§ÄÙ¯ÅÕï—…Öô–°ÏÄ∏∏πë…Öô–∞Å—Ö…ùï—Ö—îËÅŸÖ±’îÅÙ•Ùº¯ΩΩ…µ•ï±ê¯4(ÄÄÄÄÄÄÄÄÒΩ…µ•ï±êÅ±Öâï∞Ùâ	ïÕç°…ï•â’πúàÅ›•ëî¯Ò—ï·—Ö…ïÑÅŸÖ±’îıÌë…Öô–πëïÕç…•¡—•Ω∏Ä¸¸ÄúùÙÅΩπ°ÖπùîıÏ°ïŸïπ–§ÄÙ¯ÅÕï—…Öô–°ÏÄ∏∏πë…Öô–∞ÅëïÕç…•¡—•Ω∏ËÅïŸïπ–π—Ö…ùï–πŸÖ±’îÅÒÅ’πëïô•πïêÅÙ•ÙÅ…Ω›ÃıÏ—Ùº¯ΩΩ…µ•ï±ê¯4(ÄÄÄÄÄÄΩë•ÿ¯4(ÄÄÄÄÄÄÒë•ÿÅç±ÖÕÕ9ÖµîÙâë•Ö±ΩúµÖç—•ΩπÃà¯Òâ’——Ω∏Å—Â¡îÙââ’——Ω∏àÅç±ÖÕÕ9ÖµîÙâëÖπùï»µÖç—•Ω∏àÅΩπ±•ç¨ıÌÖÕÂπåÄ†§ÄÙ¯ÅÏÅ•òÄ°çΩπô•…¥°ÅA…Ω©ï≠–ÉäxëÌ¡…Ω©ïç—•Õ¡±ÖÂ9Öµî°¡…Ω©ïç–•˜äpÅ≥ŸÕç°ï∏˝Ä§§ÅÏÅÖ›Ö•–Åëï±ï—ïA…Ω©ïç–°¡…Ω©ïç–π•ê§ÏÅΩπï±ï—ïê†§ÅÙÅıÙ˘A…Ω©ï≠–Å≥ŸÕç°ï∏Ωâ’——Ω∏¯ÒÕ¡Ö∏º¯Òâ’——Ω∏Å—Â¡îÙââ’——Ω∏àÅç±ÖÕÕ9ÖµîÙâÕïçΩπëÖ…‰µÖç—•Ω∏àÅΩπ±•ç¨ıÌΩπ±ΩÕïÙ˘ââ…ïç°ï∏Ωâ’——Ω∏¯Òâ’——Ω∏Åç±ÖÕÕ9ÖµîÙâ¡…•µÖ…‰àÅë•ÕÖâ±ïêıÏÖë…Öô–πç’Õ—Ωµï…9Öµî¸π—…•¥†•Ù˘M¡ï•ç°ï…∏Ωâ’——Ω∏¯Ωë•ÿ¯4(ÄÄÄÄΩôΩ…¥¯4(ÄÄΩ•Ö±ΩùM°ï±∞¯4)Ù4(4)ô’πç—•Ω∏Å5•±ïÕ—Ωπïë•—•Ö±Ωú°ÏÅ¡…Ω©ïç—%ê∞Åµ•±ïÕ—Ωπî∞ÅΩπ±ΩÕîÅÙËÅÏÅ¡…Ω©ïç—%êËÅÕ—…•πúÏÅµ•±ïÕ—Ωπî¸ËÅA…Ω©ïç—5•±ïÕ—ΩπîÏÅΩπ±ΩÕîËÄ†§ÄÙ¯ÅŸΩ•êÅÙ§ÅÏ4(ÄÅçΩπÕ–Åm—•—±î∞ÅÕï—Q•—±ïtÄÙÅ’ÕïM—Ö—î°µ•±ïÕ—Ωπî¸π—•—±îÄ¸¸Äúú§4(ÄÅçΩπÕ–ÅmëïÕç…•¡—•Ω∏∞ÅÕï—ïÕç…•¡—•ΩπtÄÙÅ’ÕïM—Ö—î°µ•±ïÕ—Ωπî¸πëïÕç…•¡—•Ω∏Ä¸¸Äúú§4(ÄÅçΩπÕ–Åmë’ïÖ—î∞ÅÕï—’ïÖ—ïtÄÙÅ’ÕïM—Ö—î°µ•±ïÕ—Ωπî¸πë’ïÖ—î§4(ÄÅçΩπÕ–ÅmÕ—Ö—’Ã∞ÅÕï—M—Ö—’ÕtÄÙÅ’ÕïM—Ö—îÒA…Ω©ïç—5•±ïÕ—ΩπïM—Ö—’Ã¯°µ•±ïÕ—Ωπî¸πÕ—Ö—’ÃÄ¸¸Äù¡±Öππïêú§4(ÄÅÖÕÂπåÅô’πç—•Ω∏ÅÕÖŸî°ïŸïπ–ËÅΩ…µŸïπ–§ÅÏÅïŸïπ–π¡…ïŸïπ—ïôÖ’±–†§ÏÅ•òÄ†Ö—•—±îπ—…•¥†§§Å…ï—’…∏ÏÅçΩπÕ–Å•êÄÙÅµ•±ïÕ—Ωπî¸π•êÄ¸¸ÅÖ›Ö•–Åç…ïÖ—ïA…Ω©ïç—5•±ïÕ—Ωπî°¡…Ω©ïç—%ê∞Å—•—±î§ÏÅÖ›Ö•–Å’¡ëÖ—ïA…Ω©ïç—5•±ïÕ—Ωπî°•ê∞ÅÏÅ—•—±îËÅ—•—±îπ—…•¥†§∞ÅëïÕç…•¡—•Ω∏ËÅëïÕç…•¡—•Ω∏π—…•¥†§ÅÒÅ’πëïô•πïê∞Åë’ïÖ—î∞ÅÕ—Ö—’ÃÅÙ§ÏÅΩπ±ΩÕî†§ÅÙ4(ÄÅ…ï—’…∏ÄÒ•Ö±ΩùM°ï±∞Å—•—±îıÌµ•±ïÕ—ΩπîÄ¸Äù5ï•±ïπÕ—ï•∏ÅâïÖ…âï•—ï∏úÄËÄù9ï’ï»Å5ï•±ïπÕ—ï•∏ùÙÅÕ’â—•—±îÙâA…Ω©ï≠—¡±Öπ’πúàÅΩπ±ΩÕîıÌΩπ±ΩÕïÙ¯ÒôΩ…¥Åç±ÖÕÕ9ÖµîÙâ¡…Ω©ïç–µë•Ö±ΩúµôΩ…¥àÅΩπM’âµ•–ıÌÕÖŸïÙ¯Òë•ÿÅç±ÖÕÕ9ÖµîÙâë•Ö±ΩúµôΩ…¥µù…•êà¯ÒΩ…µ•ï±êÅ±Öâï∞ÙâQ•—ï∞àÅ›•ëî¯Ò•π¡’–ÅŸÖ±’îıÌ—•—±ïÙÅΩπ°ÖπùîıÏ°î§ÄÙ¯ÅÕï—Q•—±î°îπ—Ö…ùï–πŸÖ±’î•ÙÅÖ’—ΩΩç’ÃÅ…ï≈’•…ïêº¯ΩΩ…µ•ï±ê¯ÒΩ…µ•ï±êÅ±Öâï∞Ùâ	ïÕç°…ï•â’πúàÅ›•ëî¯Ò—ï·—Ö…ïÑÅŸÖ±’îıÌëïÕç…•¡—•ΩπÙÅΩπ°ÖπùîıÏ°î§ÄÙ¯ÅÕï—ïÕç…•¡—•Ω∏°îπ—Ö…ùï–πŸÖ±’î•ÙÅ…Ω›ÃıÏ—ÙÅ¡±Öçï°Ω±ëï»Ùâ=¡—•ΩπÖ∞àº¯ΩΩ…µ•ï±ê¯ÒΩ…µ•ï±êÅ±Öâï∞ÙâÖ—’¥à¯Ò	’ôôï…ïëÖ—ï%π¡’–ÅŸÖ±’îıÌë’ïÖ—ïÙÅΩπMÖŸîıÌÕï—’ïÖ—ïÙº¯ΩΩ…µ•ï±ê¯ÒΩ…µ•ï±êÅ±Öâï∞ÙâM—Ö—’Ãà¯ÒÕï±ïç–ÅŸÖ±’îıÌÕ—Ö—’ÕÙÅΩπ°ÖπùîıÏ°î§ÄÙ¯ÅÕï—M—Ö—’Ã°îπ—Ö…ùï–πŸÖ±’îÅÖÃÅA…Ω©ïç—5•±ïÕ—ΩπïM—Ö—’Ã•Ù˘Ì=â©ïç–πïπ—…•ïÃ°µ•±ïÕ—ΩπïM—Ö—’Ã§πµÖ¿†°mŸÖ±’î±±Öâï±t§ÄÙ¯ÄÒΩ¡—•Ω∏Å≠ï‰ıÌŸÖ±’ïÙÅŸÖ±’îıÌŸÖ±’ïÙ˘Ì±Öâï±ÙΩΩ¡—•Ω∏¯•ÙΩÕï±ïç–¯ΩΩ…µ•ï±ê¯Ωë•ÿ¯Òë•ÿÅç±ÖÕÕ9ÖµîÙâë•Ö±ΩúµÖç—•ΩπÃà˘Ìµ•±ïÕ—ΩπîÄ¸ÄÒâ’——Ω∏Å—Â¡îÙââ’——Ω∏àÅç±ÖÕÕ9ÖµîÙâëÖπùï»µÖç—•Ω∏àÅΩπ±•ç¨ıÌÖÕÂπåÄ†§ÄÙ¯ÅÏÅ•òÄ°çΩπô•…¥†ù5ï•±ïπÕ—ï•∏Å≥ŸÕç°ï∏¸Å•îÅ’ôùÖâï∏Åâ±ï•âï∏Åï…°Ö±—ï∏∏ú§§ÅÏÅÖ›Ö•–Åëï±ï—ïA…Ω©ïç—5•±ïÕ—Ωπî°µ•±ïÕ—Ωπîπ•ê§ÏÅΩπ±ΩÕî†§ÅÙÅıÙ˘5ï•±ïπÕ—ï•∏Å≥ŸÕç°ï∏Ωâ’——Ω∏¯ÄËÄÒÕ¡Ö∏º˘ÙÒÕ¡Ö∏º¯Òâ’——Ω∏Å—Â¡îÙââ’——Ω∏àÅç±ÖÕÕ9ÖµîÙâÕïçΩπëÖ…‰µÖç—•Ω∏àÅΩπ±•ç¨ıÌΩπ±ΩÕïÙ˘ââ…ïç°ï∏Ωâ’——Ω∏¯Òâ’——Ω∏Åç±ÖÕÕ9ÖµîÙâ¡…•µÖ…‰àÅë•ÕÖâ±ïêıÏÖ—•—±îπ—…•¥†•Ù˘M¡ï•ç°ï…∏Ωâ’——Ω∏¯Ωë•ÿ¯ΩôΩ…¥¯Ω•Ö±ΩùM°ï±∞¯4)Ù4(4)ô’πç—•Ω∏Å5•±ïÕ—Ωπïï—Ö•±•Ö±Ωú°ÏÅµ•±ïÕ—Ωπî∞Å—ÖÕ≠Ã∞ÅΩπQÖÕ¨∞ÅΩπëëQÖÕ¨∞ÅΩπ±ΩÕîÅÙËÅÏÅµ•±ïÕ—ΩπîËÅA…Ω©ïç—5•±ïÕ—ΩπîÏÅ—ÖÕ≠ÃËÅA…Ω©ïç—QÖÕ≠mtÏÅΩπQÖÕ¨ËÄ°—ÖÕ¨ËÅA…Ω©ïç—QÖÕ¨§ÄÙ¯ÅŸΩ•êÏÅΩπëëQÖÕ¨ËÄ†§ÄÙ¯ÅŸΩ•êÏÅΩπ±ΩÕîËÄ†§ÄÙ¯ÅŸΩ•êÅÙ§ÅÏ4(ÄÅçΩπÕ–ÅëΩπîÄÙÅ—ÖÕ≠Ãπô•±—ï»†°—ÖÕ¨§ÄÙ¯Å—ÖÕ¨πÕ—Ö—’ÃÄÙÙÙÄùçΩµ¡±ï—ïêú§π±ïπù—†4(ÄÅ…ï—’…∏ÄÒ•Ö±ΩùM°ï±∞Å—•—±îıÌµ•±ïÕ—Ωπîπ—•—±ïÙÅÕ’â—•—±îÙâ5ï•±ïπÕ—ï•∏àÅΩπ±ΩÕîıÌΩπ±ΩÕïÙ¯Òë•ÿÅç±ÖÕÕ9ÖµîÙâµ•±ïÕ—Ωπîµëï—Ö•∞à¯Ò¿˘Ìµ•±ïÕ—ΩπîπëïÕç…•¡—•Ω∏ÅÒÄù-ï•πîÅ	ïÕç°…ï•â’πúÅ°•π—ï…±ïù–∏ùÙΩ¿¯Òë•ÿÅç±ÖÕÕ9ÖµîÙâµ•±ïÕ—Ωπîµëï—Ö•∞µµï—Ñà¯ÒÕ¡Ö∏˘Ìµ•±ïÕ—Ωπîπë’ïÖ—îÄ¸ÅôΩ…µÖ—Ö—î°µ•±ïÕ—Ωπîπë’ïÖ—î§ÄËÄù=°πîÅÖ—’¥ùÙΩÕ¡Ö∏¯ÒM—Ö—’Õ	ÖëùîÅÕ—Ö—’ÃıÌµ•±ïÕ—ΩπîπÕ—Ö—’ÕÙÅ±Öâï∞ıÌµ•±ïÕ—ΩπïM—Ö—’Õmµ•±ïÕ—ΩπîπÕ—Ö—’ÕuÙº¯Ωë•ÿ¯ÒÕ—…Ωπú˘Ì—ÖÕ≠Ãπ±ïπù—†Ä¸ÅÄëÌëΩπïÙÅŸΩ∏ÄëÌ—ÖÕ≠Ãπ±ïπù—°ÙÅ’ôùÖâï∏Åï…±ïë•ù—ÄÄËÄù9Ωç†Å≠ï•πîÅ’ôùÖâï∏ùÙΩÕ—…Ωπú˘Ì—ÖÕ≠Ãπ±ïπù—†Ä¯Ä¿ÄòòÄÒë•ÿÅç±ÖÕÕ9ÖµîÙâµ•±ïÕ—Ωπîµ¡…Ωù…ïÕÃà¯Ò§ÅÕ—Â±îıÌÌ›•ë—†ËÅÄëÌëΩπîÄºÅ—ÖÕ≠Ãπ±ïπù—†Ä®Äƒ¿¡ÙïÅıÙº¯Ωë•ÿ˘ÙÒë•ÿÅç±ÖÕÕ9ÖµîÙâµ•±ïÕ—Ωπîµ—ÖÕ¨µ±•Õ–à˘Ì—ÖÕ≠ÃπµÖ¿†°—ÖÕ¨§ÄÙ¯ÄÒâ’——Ω∏Å≠ï‰ıÌ—ÖÕ¨π•ëÙÅΩπ±•ç¨ıÏ†§ÄÙ¯ÅΩπQÖÕ¨°—ÖÕ¨•Ù¯ÒÕ¡Ö∏˘Ì—ÖÕ¨πÕ—Ö—’ÃÄÙÙÙÄùçΩµ¡±ï—ïêúÄ¸ÄüärLúÄËÄüä^,ùÙΩÕ¡Ö∏˘Ì—ÖÕ¨π—•—±ïÙΩâ’——Ω∏¯•ÙΩë•ÿ¯Òâ’——Ω∏Åç±ÖÕÕ9ÖµîÙâ¡…•µÖ…‰ÅçΩµ¡Öç–àÅΩπ±•ç¨ıÌΩπëëQÖÕ≠Ù¯¨Å’ôùÖâîΩâ’——Ω∏¯Ωë•ÿ¯Ω•Ö±ΩùM°ï±∞¯4)Ù4(4)ô’πç—•Ω∏ÅQÖÕ≠ë•—•Ö±Ωú°ÏÅ¡…Ω©ïç—%ê∞Å—ÖÕ¨∞Åµ•±ïÕ—ΩπïÃ∞Åµ•±ïÕ—ΩπïA…ïÕï–∞ÅÖôπÃ∞Å¡…Ωô•±ïÃ∞Å’Õï…%ê∞Å’Õï…µÖ•∞∞ÅΩπ±ΩÕîÅÙËÅÏÅ¡…Ω©ïç—%êËÅÕ—…•πúÏÅ—ÖÕ¨¸ËÅA…Ω©ïç—QÖÕ¨ÏÅµ•±ïÕ—ΩπïÃËÅA…Ω©ïç—5•±ïÕ—ΩπïmtÏÅµ•±ïÕ—ΩπïA…ïÕï–¸ËÅÕ—…•πúÏÅÖôπÃËÅπ’µâï…mtÏÅ¡…Ωô•±ïÃËÅUÕï…A…Ωô•±ïmtÏÅ’Õï…%êËÅÕ—…•πúÏÅ’Õï…µÖ•∞¸ËÅÕ—…•πúÏÅΩπ±ΩÕîËÄ†§ÄÙ¯ÅŸΩ•êÅÙ§ÅÏ4(ÄÅçΩπÕ–Åm—•—±î∞ÅÕï—Q•—±ïtÄÙÅ’ÕïM—Ö—î°—ÖÕ¨¸π—•—±îÄ¸¸Äúú§4(ÄÅçΩπÕ–ÅmëïÕç…•¡—•Ω∏∞ÅÕï—ïÕç…•¡—•ΩπtÄÙÅ’ÕïM—Ö—î°—ÖÕ¨¸πëïÕç…•¡—•Ω∏Ä¸¸Äúú§4(ÄÅçΩπÕ–ÅmÕ—Ö—’Ã∞ÅÕï—M—Ö—’ÕtÄÙÅ’ÕïM—Ö—îÒA…Ω©ïç—QÖÕ≠M—Ö—’Ã¯°—ÖÕ¨¸πÕ—Ö—’ÃÄ¸¸ÄùΩ¡ï∏ú§4(ÄÅçΩπÕ–Åmë’ïÖ—î∞ÅÕï—’ïÖ—ïtÄÙÅ’ÕïM—Ö—î°—ÖÕ¨¸πë’ïÖ—î§4(ÄÅçΩπÕ–ÅmÖÕÕ•ùπïïUÕï…%ê∞ÅÕï—ÕÕ•ùπïïUÕï…%ëtÄÙÅ’ÕïM—Ö—î°—ÖÕ¨Ä¸Ä°—ÖÕ¨πÖÕÕ•ùπïïUÕï…%êÄ¸¸Äúú§ÄËÅ’Õï…%ê§4(ÄÅçΩπÕ–Åm›Ö•—•πùΩ»∞ÅÕï—]Ö•—•πùΩ…tÄÙÅ’ÕïM—Ö—îÒA…Ω©ïç—]Ö•—•πùΩ»ÅÅ’πëïô•πïê¯°—ÖÕ¨¸π›Ö•—•πùΩ»§4(ÄÅçΩπÕ–Åmµ•±ïÕ—Ωπï%ê∞ÅÕï—5•±ïÕ—Ωπï%ëtÄÙÅ’ÕïM—Ö—î°—ÖÕ¨¸πµ•±ïÕ—Ωπï%êÄ¸¸Åµ•±ïÕ—ΩπïA…ïÕï–Ä¸¸Äúú§4(ÄÅçΩπÕ–ÅmÖôπQï·–∞ÅÕï—ôπQï·—tÄÙÅ’ÕïM—Ö—î°ÖôπÃπ©Ω•∏†ú∞Äú§§4(4(ÄÅÖÕÂπåÅô’πç—•Ω∏ÅÕÖŸî°ïŸïπ–ËÅΩ…µŸïπ–§ÅÏ4(ÄÄÄÅïŸïπ–π¡…ïŸïπ—ïôÖ’±–†§4(ÄÄÄÅ•òÄ†Ö—•—±îπ—…•¥†§§Å…ï—’…∏4(ÄÄÄÅçΩπÕ–Å•êÄÙÅ—ÖÕ¨¸π•êÄ¸¸ÅÖ›Ö•–Åç…ïÖ—ïA…Ω©ïç—QÖÕ¨°¡…Ω©ïç—%ê∞Å—•—±î∞ÅÖÕÕ•ùπïïUÕï…%êÅÒÅ’πëïô•πïê§4(ÄÄÄÅÖ›Ö•–Å’¡ëÖ—ïA…Ω©ïç—QÖÕ¨°•ê∞ÅÏÅ—•—±îËÅ—•—±îπ—…•¥†§∞ÅëïÕç…•¡—•Ω∏ËÅëïÕç…•¡—•Ω∏π—…•¥†§ÅÒÅ’πëïô•πïê∞ÅÕ—Ö—’Ã∞Åë’ïÖ—î∞Åµ•±ïÕ—Ωπï%êËÅµ•±ïÕ—Ωπï%êÅÒÅ’πëïô•πïê∞ÅÖÕÕ•ùπïïUÕï…%êËÅÖÕÕ•ùπïïUÕï…%êÅÒÅ’πëïô•πïê∞Å›Ö•—•πùΩ»ËÅÕ—Ö—’ÃÄÙÙÙÄù›Ö•—•πúúÄ¸Å›Ö•—•πùΩ»ÄËÅ’πëïô•πïêÅÙ§4(ÄÄÄÅÖ›Ö•–Å…ï¡±ÖçïA…Ω©ïç—QÖÕ≠ôπÃ°•ê∞Å¡Ö…ÕïôπÃ°ÖôπQï·–§§4(ÄÄÄÅΩπ±ΩÕî†§4(ÄÅÙ4(4(ÄÅ…ï—’…∏ÄÒ•Ö±ΩùM°ï±∞Å—•—±îıÌ—ÖÕ¨Ä¸Äù’ôùÖâîÅâïÖ…âï•—ï∏úÄËÄù9ï’îÅ’ôùÖâîùÙÅÕ’â—•—±îÙâA…Ω©ï≠—Ö’ôùÖâîàÅΩπ±ΩÕîıÌΩπ±ΩÕïÙ¯4(ÄÄÄÄÒôΩ…¥Åç±ÖÕÕ9ÖµîÙâ¡…Ω©ïç–µë•Ö±ΩúµôΩ…¥àÅΩπM’âµ•–ıÌÕÖŸïÙ¯4(ÄÄÄÄÄÄÒë•ÿÅç±ÖÕÕ9ÖµîÙâë•Ö±ΩúµôΩ…¥µù…•êà¯4(ÄÄÄÄÄÄÄÄÒΩ…µ•ï±êÅ±Öâï∞ÙâQ•—ï∞àÅ›•ëî¯Ò•π¡’–ÅŸÖ±’îıÌ—•—±ïÙÅΩπ°ÖπùîıÏ°ïŸïπ–§ÄÙ¯ÅÕï—Q•—±î°ïŸïπ–π—Ö…ùï–πŸÖ±’î•ÙÅÖ’—ΩΩç’ÃÅ…ï≈’•…ïêÄº¯ΩΩ…µ•ï±ê¯4(ÄÄÄÄÄÄÄÄÒΩ…µ•ï±êÅ±Öâï∞Ùâ	ïÕç°…ï•â’πúàÅ›•ëî¯Ò—ï·—Ö…ïÑÅŸÖ±’îıÌëïÕç…•¡—•ΩπÙÅΩπ°ÖπùîıÏ°ïŸïπ–§ÄÙ¯ÅÕï—ïÕç…•¡—•Ω∏°ïŸïπ–π—Ö…ùï–πŸÖ±’î•ÙÅ…Ω›ÃıÏ—ÙÅ¡±Öçï°Ω±ëï»Ùâ=¡—•ΩπÖ∞àÄº¯ΩΩ…µ•ï±ê¯4(ÄÄÄÄÄÄÄÄÒΩ…µ•ï±êÅ±Öâï∞ÙâM—Ö—’Ãà¯ÒÕï±ïç–ÅŸÖ±’îıÌÕ—Ö—’ÕÙÅΩπ°ÖπùîıÏ°ïŸïπ–§ÄÙ¯ÅÕï—M—Ö—’Ã°ïŸïπ–π—Ö…ùï–πŸÖ±’îÅÖÃÅA…Ω©ïç—QÖÕ≠M—Ö—’Ã•Ù˘Ì=â©ïç–πïπ—…•ïÃ°—ÖÕ≠M—Ö—’Ã§πµÖ¿†°mŸÖ±’î∞Å±Öâï±t§ÄÙ¯ÄÒΩ¡—•Ω∏Å≠ï‰ıÌŸÖ±’ïÙÅŸÖ±’îıÌŸÖ±’ïÙ˘Ì±Öâï±ÙΩΩ¡—•Ω∏¯•ÙΩÕï±ïç–¯ΩΩ…µ•ï±ê¯4(ÄÄÄÄÄÄÄÄÒΩ…µ•ï±êÅ±Öâï∞ÙâQï…µ•∏à¯Ò	’ôôï…ïëÖ—ï%π¡’–ÅŸÖ±’îıÌë’ïÖ—ïÙÅΩπMÖŸîıÌÕï—’ïÖ—ïÙº¯ΩΩ…µ•ï±ê¯4(ÄÄÄÄÄÄÄÄÒΩ…µ•ï±êÅ±Öâï∞ÙâYï…Öπ—›Ω…—±•ç†à¯ÒÕï±ïç–ÅŸÖ±’îıÌÖÕÕ•ùπïïUÕï…%ëÙÅΩπ°ÖπùîıÏ°ïŸïπ–§ÄÙ¯ÅÕï—ÕÕ•ùπïïUÕï…%ê°ïŸïπ–π—Ö…ùï–πŸÖ±’î•Ù¯ÒΩ¡—•Ω∏ÅŸÖ±’îÙàà˘9•ç°–ÅÈ’ùï›•ïÕï∏ΩΩ¡—•Ω∏˘Ì¡…Ωô•±ï=¡—•ΩπÃ°¡…Ωô•±ïÃ∞Å’Õï…%ê∞Å’Õï…µÖ•∞•ÙΩÕï±ïç–¯ΩΩ…µ•ï±ê¯4(ÄÄÄÄÄÄÄÄÒΩ…µ•ï±êÅ±Öâï∞Ùâ5ï•±ïπÕ—ï•∏à¯ÒÕï±ïç–ÅŸÖ±’îıÌµ•±ïÕ—Ωπï%ëÙÅΩπ°ÖπùîıÏ°ïŸïπ–§ÄÙ¯ÅÕï—5•±ïÕ—Ωπï%ê°ïŸïπ–π—Ö…ùï–πŸÖ±’î•Ù¯ÒΩ¡—•Ω∏ÅŸÖ±’îÙàà˘-ï•∏Å5ï•±ïπÕ—ï•∏ΩΩ¡—•Ω∏˘Ìµ•±ïÕ—ΩπïÃπô•±—ï»†°¥§ÄÙ¯Å¥πÕ—Ö—’ÃÄÑÙÙÄùçΩµ¡±ï—ïêúÅÒÅ¥π•êÄÙÙÙÅ—ÖÕ¨¸πµ•±ïÕ—Ωπï%ê§πÕΩ…–†°Ñ±à§ÄÙ¯ÅÑπÕΩ…—=…ëï»Ä¥ÅàπÕΩ…—=…ëï»§πµÖ¿†°¥§ÄÙ¯ÄÒΩ¡—•Ω∏Å≠ï‰ıÌ¥π•ëÙÅŸÖ±’îıÌ¥π•ëÙ˘Ì¥π—•—±ïÙΩΩ¡—•Ω∏¯•ÙΩÕï±ïç–¯ΩΩ…µ•ï±ê¯4(ÄÄÄÄÄÄÄÅÌÕ—Ö—’ÃÄÙÙÙÄù›Ö•—•πúúÄòòÄÒΩ…µ•ï±êÅ±Öâï∞Ùâ]Ö…—ï–ÅÖ’òà¯ÒÕï±ïç–ÅŸÖ±’îıÌ›Ö•—•πùΩ»Ä¸¸ÄúùÙÅΩπ°ÖπùîıÏ°ïŸïπ–§ÄÙ¯ÅÕï—]Ö•—•πùΩ»†°ïŸïπ–π—Ö…ùï–πŸÖ±’îÅÒÅ’πëïô•πïê§ÅÖÃÅA…Ω©ïç—]Ö•—•πùΩ»ÅÅ’πëïô•πïê•Ù¯ÒΩ¡—•Ω∏ÅŸÖ±’îÙàà˘	•——îÅﬂë°±ï∏ΩΩ¡—•Ω∏˘Ì›Ö•—•πù=¡—•ΩπÃπµÖ¿†°ŸÖ±’î§ÄÙ¯ÄÒΩ¡—•Ω∏Å≠ï‰ıÌŸÖ±’ïÙ˘ÌŸÖ±’ïÙΩΩ¡—•Ω∏¯•ÙΩÕï±ïç–¯ΩΩ…µ•ï±ê˘Ù4(ÄÄÄÄÄÄÄÄÒΩ…µ•ï±êÅ±Öâï∞Ùâ8µ9’µµï…∏àÅ›•ëî¯Ò•π¡’–ÅŸÖ±’îıÌÖôπQï·—ÙÅΩπ°ÖπùîıÏ°ïŸïπ–§ÄÙ¯ÅÕï—ôπQï·–°ïŸïπ–π—Ö…ùï–πŸÖ±’î•ÙÅ•π¡’—5ΩëîÙâπ’µï…•åàÅ¡±Öçï°Ω±ëï»Ùàƒ‡ƒÿ‘‹∞Äƒ‡ƒÿ‘‡àº¯ÒÕµÖ±∞˘5ï°…ï…îÅ9’µµï…∏Åµ•–Å-ΩµµÑÅ—…ïππï∏∏ΩÕµÖ±∞¯ΩΩ…µ•ï±ê¯4(ÄÄÄÄÄÄΩë•ÿ¯4(ÄÄÄÄÄÄÒë•ÿÅç±ÖÕÕ9ÖµîÙâë•Ö±ΩúµÖç—•ΩπÃà˘Ì—ÖÕ¨Ä¸ÄÒâ’——Ω∏Å—Â¡îÙââ’——Ω∏àÅç±ÖÕÕ9ÖµîÙâëÖπùï»µÖç—•Ω∏àÅΩπ±•ç¨ıÌÖÕÂπåÄ†§ÄÙ¯ÅÏÅ•òÄ°çΩπô•…¥†ù’ôùÖâîÅ≥ŸÕç°ï∏¸ú§§ÅÏÅÖ›Ö•–Åëï±ï—ïA…Ω©ïç—QÖÕ¨°—ÖÕ¨π•ê§ÏÅΩπ±ΩÕî†§ÅÙÅıÙ˘’ôùÖâîÅ≥ŸÕç°ï∏Ωâ’——Ω∏¯ÄËÄÒÕ¡Ö∏º˘ÙÒÕ¡Ö∏º¯Òâ’——Ω∏Å—Â¡îÙââ’——Ω∏àÅç±ÖÕÕ9ÖµîÙâÕïçΩπëÖ…‰µÖç—•Ω∏àÅΩπ±•ç¨ıÌΩπ±ΩÕïÙ˘ââ…ïç°ï∏Ωâ’——Ω∏¯Òâ’——Ω∏Åç±ÖÕÕ9ÖµîÙâ¡…•µÖ…‰àÅë•ÕÖâ±ïêıÏÖ—•—±îπ—…•¥†•Ù˘M¡ï•ç°ï…∏Ωâ’——Ω∏¯Ωë•ÿ¯4(ÄÄÄÄΩôΩ…¥¯4(ÄÄΩ•Ö±ΩùM°ï±∞¯4)Ù4(4)ô’πç—•Ω∏ÅΩ…µ•ï±ê°ÏÅ±Öâï∞∞Å›•ëî∞Åç°•±ë…ï∏ÅÙËÅÏÅ±Öâï∞ËÅÕ—…•πúÏÅ›•ëî¸ËÅâΩΩ±ïÖ∏ÏÅç°•±ë…ï∏ËÅIïÖç—9ΩëîÅÙ§ÅÏ4(ÄÅ…ï—’…∏ÄÒ±Öâï∞Åç±ÖÕÕ9ÖµîıÌÅë•Ö±ΩúµôΩ…¥µô•ï±êëÌ›•ëîÄ¸ÄúÅ›•ëîúÄËÄúùıÅÙ¯ÒÕ¡Ö∏˘Ì±Öâï±ÙΩÕ¡Ö∏˘Ìç°•±ë…ïπÙΩ±Öâï∞¯4)Ù4(4)ô’πç—•Ω∏Å¡…Ωô•±ï=¡—•ΩπÃ°¡…Ωô•±ïÃËÅUÕï…A…Ωô•±ïmt∞Å’Õï…%êËÅÕ—…•πú∞Å’Õï…µÖ•∞¸ËÅÕ—…•πú§ÅÏ4(ÄÅçΩπÕ–ÅŸÖ±’ïÃÄÙÅ¡…Ωô•±ïÃπ±ïπù—†Ä¸Å¡…Ωô•±ïÃÄËÅmÏÅ•êËÅ’Õï…%ê∞ÅïµÖ•∞ËÅ’Õï…µÖ•∞Ä¸¸Äù%ç†ú∞Å’¡ëÖ—ïë–ËÄ¿Åıt4(ÄÅ…ï—’…∏ÅŸÖ±’ïÃπµÖ¿†°¡…Ωô•±î§ÄÙ¯ÄÒΩ¡—•Ω∏Å≠ï‰ıÌ¡…Ωô•±îπ•ëÙÅŸÖ±’îıÌ¡…Ωô•±îπ•ëÙ˘Ì¡…Ωô•±îπë•Õ¡±ÖÂ9ÖµîÅÒÅ¡…Ωô•±îπïµÖ•±ÙΩΩ¡—•Ω∏¯§4)Ù4(4)ô’πç—•Ω∏Å¡…Ωô•±ï9Öµî°•êËÅÕ—…•πúÅÅ’πëïô•πïê∞Å¡…Ωô•±ïÃËÅUÕï…A…Ωô•±ïmt∞Å’Õï…%êËÅÕ—…•πú∞Å’Õï…µÖ•∞¸ËÅÕ—…•πú§ÅÏ4(ÄÅ•òÄ†Ö•ê§Å…ï—’…∏Äù9•ç°–ÅÈ’ùï›•ïÕï∏ú4(ÄÅçΩπÕ–Å¡…Ωô•±îÄÙÅ¡…Ωô•±ïÃπô•πê†°ŸÖ±’î§ÄÙ¯ÅŸÖ±’îπ•êÄÙÙÙÅ•ê§4(ÄÅ•òÄ°¡…Ωô•±î§Å…ï—’…∏Å¡…Ωô•±îπë•Õ¡±ÖÂ9ÖµîÅÒÅ¡…Ωô•±îπïµÖ•∞4(ÄÅ•òÄ°•êÄÙÙÙÅ’Õï…%ê§Å…ï—’…∏Å’Õï…µÖ•∞ÅÒÄù%ç†ú4(ÄÅ…ï—’…∏ÄùUπâï≠Öππ—ï»Å	ïπ’—Èï»ú4)Ù4(4)ô’πç—•Ω∏ÅôΩ…µÖ—Ö—î°ŸÖ±’îËÅπ’µâï»§ÅÏÅ…ï—’…∏Åπï‹ÅÖ—î°ŸÖ±’î§π—Ω1ΩçÖ±ïÖ—ïM—…•πú†ùëîµú§ÅÙ4)ô’πç—•Ω∏ÅôΩ…µÖ—IÖπùî°Õ—Ö…–¸ËÅπ’µâï»∞Å—Ö…ùï–¸ËÅπ’µâï»§ÅÏ4(ÄÅ•òÄ†ÖÕ—Ö…–ÄòòÄÖ—Ö…ùï–§Å…ï—’…∏Äù9Ωç†Åπ•ç°–ÅôïÕ—ùï±ïù–ú4(ÄÅ…ï—’…∏ÅÄëÌÕ—Ö…–Ä¸ÅôΩ…µÖ—Ö—î°Õ—Ö…–§ÄËÄù=ôôï∏ùÙÉäHÄëÌ—Ö…ùï–Ä¸ÅôΩ…µÖ—Ö—î°—Ö…ùï–§ÄËÄù=ôôï∏ùıÄ4)Ù4)ô’πç—•Ω∏Å¡Ö…ÕïôπÃ°ŸÖ±’îËÅÕ—…•πú§ÅÏÅ…ï—’…∏ÅŸÖ±’îπÕ¡±•–†Ωl∞ÌqÕt¨º§πµÖ¿°9’µâï»§πô•±—ï»†°π’µâï»§ÄÙ¯Å9’µâï»π•Õ%π—ïùï»°π’µâï»§ÄòòÅπ’µâï»Ä¯Ä¿§ÅÙ4(4)ô’πç—•Ω∏ÅÕ—Ö…—=ôQΩëÖ‰†§ÅÏÅçΩπÕ–ÅŸÖ±’îÄÙÅπï‹ÅÖ—î†§ÏÅŸÖ±’îπÕï—!Ω’…Ã†¿∞Ä¿∞Ä¿∞Ä¿§ÏÅ…ï—’…∏ÅŸÖ±’îπùï—Q•µî†§ÅÙ4)ô’πç—•Ω∏Å•Õ=Ÿï…ë’î°µ•±ïÕ—ΩπîËÅA…Ω©ïç—5•±ïÕ—Ωπî§ÅÏÅ…ï—’…∏ÄÑÖµ•±ïÕ—Ωπîπë’ïÖ—îÄòòÅµ•±ïÕ—Ωπîπë’ïÖ—îÄÅÕ—Ö…—=ôQΩëÖ‰†§ÄòòÅµ•±ïÕ—ΩπîπÕ—Ö—’ÃÄÑÙÙÄùçΩµ¡±ï—ïêúÅÙ4)ô’πç—•Ω∏Åµ•±ïÕ—ΩπïMΩ…–°ÑËÅA…Ω©ïç—5•±ïÕ—Ωπî∞ÅàËÅA…Ω©ïç—5•±ïÕ—Ωπî§ÅÏ4(ÄÅçΩπÕ–ÅπΩ‹ÄÙÅÕ—Ö…—=ôQΩëÖ‰†§4(ÄÅçΩπÕ–ÅÖ=Ÿï…ë’îÄÙÄÑÖÑπë’ïÖ—îÄòòÅÑπë’ïÖ—îÄÅπΩ‹4(ÄÅçΩπÕ–Åâ=Ÿï…ë’îÄÙÄÑÖàπë’ïÖ—îÄòòÅàπë’ïÖ—îÄÅπΩ‹4(ÄÅ•òÄ°Ö=Ÿï…ë’îÄÑÙÙÅâ=Ÿï…ë’î§Å…ï—’…∏ÅÖ=Ÿï…ë’îÄ¸Ä¥ƒÄËÄƒ4(ÄÅ…ï—’…∏Ä°Ñπë’ïÖ—îÄ¸¸Å%πô•π•—‰§Ä¥Ä°àπë’ïÖ—îÄ¸¸Å%πô•π•—‰§4)Ù4)ô’πç—•Ω∏Åùï—9ï·—5•±ïÕ—Ωπî°µ•±ïÕ—ΩπïÃËÅA…Ω©ïç—5•±ïÕ—Ωπïmt§ÅÏ4(ÄÅçΩπÕ–ÅΩ¡ï∏ÄÙÅµ•±ïÕ—ΩπïÃπô•±—ï»†°¥§ÄÙ¯Å¥πÕ—Ö—’ÃÄÑÙÙÄùçΩµ¡±ï—ïêú§4(ÄÅçΩπÕ–Å—ΩëÖ‰ÄÙÅÕ—Ö…—=ôQΩëÖ‰†§4(ÄÅçΩπÕ–Å’¡çΩµ•πúÄÙÅΩ¡ï∏πô•±—ï»†°¥§ÄÙ¯Å¥πë’ïÖ—îÄòòÅ¥πë’ïÖ—îÄ¯ÙÅ—ΩëÖ‰§πÕΩ…–†°Ñ±à§ÄÙ¯ÅÑπë’ïÖ—îÑÄ¥Åàπë’ïÖ—îÑ§4(ÄÅ•òÄ°’¡çΩµ•πúπ±ïπù—†§Å…ï—’…∏Å’¡çΩµ•πùl¡t4(ÄÅçΩπÕ–ÅΩŸï…ë’îÄÙÅΩ¡ï∏πô•±—ï»†°¥§ÄÙ¯Å¥πë’ïÖ—îÄòòÅ¥πë’ïÖ—îÄÅ—ΩëÖ‰§πÕΩ…–†°Ñ±à§ÄÙ¯ÅÑπë’ïÖ—îÑÄ¥Åàπë’ïÖ—îÑ§4(ÄÅ…ï—’…∏ÅΩŸï…ë’ïl¡tÄ¸¸ÅΩ¡ï∏πô•±—ï»†°¥§ÄÙ¯ÄÖ¥πë’ïÖ—î§πÕΩ…–†°Ñ±à§ÄÙ¯ÅÑπÕΩ…—=…ëï»Ä¥ÅàπÕΩ…—=…ëï»•l¡t4)Ù4)ô’πç—•Ω∏Åµ•±ïÕ—ΩπïQ•µ•πú°µ•±ïÕ—ΩπîËÅA…Ω©ïç—5•±ïÕ—Ωπî∞ÅΩ¡ï∏ËÅπ’µâï»§ÅÏ4(ÄÅ•òÄ†Öµ•±ïÕ—Ωπîπë’ïÖ—îÅÒÅµ•±ïÕ—ΩπîπÕ—Ö—’ÃÄÙÙÙÄùçΩµ¡±ï—ïêú§Å…ï—’…∏Äúú4(ÄÅçΩπÕ–ÅëÖÂÃÄÙÅ5Ö—†πçï•∞†°µ•±ïÕ—Ωπîπë’ïÖ—îÄ¥ÅÕ—Ö…—=ôQΩëÖ‰†§§ÄºÄ‡ÿ–¿¿¿¿¿§4(ÄÅ…ï—’…∏ÅëÖÂÃÄ¯ÙÄ¿ÄòòÅëÖÂÃÄÙÄ‹ÄòòÅΩ¡ï∏Ä¯Ä¿Ä¸ÅÄÉ
+‹ÄëÌëÖÂÃÄÙÙÙÄ¿Ä¸Äù°ï’—îúÄËÅÅ•∏ÄëÌëÖÂÕÙÅQÖùïπÅÙÉ
+‹ÄëÌΩ¡ïπÙÅΩôôïπÄÄËÄúú4)Ù4(

@@ -5,6 +5,7 @@ import type { Page, Project, ProjectTask, Task } from '../db/types'
 import { createPage, toggleTask } from '../lib/actions'
 import { formatRelativeTime } from '../lib/format'
 import { getPagePropertyValue } from '../lib/propertyDefinitions'
+import { projectCustomer, projectDisplayName, projectShortName } from '../lib/projectDisplay'
 import './Dashboard.css'
 
 interface Props {
@@ -66,11 +67,11 @@ function ProjectSection({ projects, tasks, userId, onOpenProjects }: { projects:
       <div><h3>Meine Projektaufgaben</h3>{visibleTasks.length === 0 ? <p className="dashboard-empty">Keine offenen Projektaufgaben.</p> : visibleTasks.map((task) => {
         const project = projectById.get(task.projectId)
         return <button className="dashboard-project-task" key={task.id} onClick={onOpenProjects}>
-          <span className="dashboard-project-task-main">{project?.customerName && <small>[{project.customerName}]</small>}<strong>{task.title}</strong></span>
-          <span className="dashboard-project-task-meta">{project?.name || 'Unbekanntes Projekt'} · {task.dueDate ? new Date(task.dueDate).toLocaleDateString('de-DE') : 'ohne Termin'}</span>
+          <span className="dashboard-project-task-main">{project && <small>[{projectCustomer(project)}]</small>}<strong>{task.title}</strong></span>
+          <span className="dashboard-project-task-meta">{project && projectShortName(project) ? `${projectShortName(project)} · ` : ''}{task.dueDate ? new Date(task.dueDate).toLocaleDateString('de-DE') : 'ohne Termin'}</span>
         </button>
       })}</div>
-      <div><h3>Aktive Projekte</h3>{activeProjects.length === 0 ? <p className="dashboard-empty">Keine aktiven Projekte.</p> : activeProjects.slice(0, 5).map((project) => <button className="dashboard-active-project" key={project.id} onClick={onOpenProjects}><span><strong>{project.name}</strong>{project.customerName && <small>{project.customerName}</small>}</span><span>{project.status === 'waiting' ? 'Wartet' : 'Aktiv'}</span></button>)}</div>
+      <div><h3>Aktive Projekte</h3>{activeProjects.length === 0 ? <p className="dashboard-empty">Keine aktiven Projekte.</p> : activeProjects.slice(0, 5).map((project) => <button className="dashboard-active-project" key={project.id} onClick={onOpenProjects}><span><strong>{projectDisplayName(project)}</strong></span><span>{project.status === 'waiting' ? 'Wartet' : 'Aktiv'}</span></button>)}</div>
     </div>
   </DashboardSection>
 }
