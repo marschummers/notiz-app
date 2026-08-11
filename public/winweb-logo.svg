@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 82" role="img" aria-labelledby="title desc">
+  <title id="title">Winweb</title>
+  <desc id="desc">Winweb Food Software Specialists</desc>
+  <g fill="none" stroke="#213a8f" stroke-width="4">
+    <path d="M38 41 20 20M38 41 61 18M38 41 14 52M38 41 39 69M38 41 68 48"/>
+  </g>
+  <g fill="#213a8f">
+    <circle cx="38" cy="41" r="10"/><circle cx="20" cy="20" r="8"/><circle cx="61" cy="18" r="6"/>
+    <circle cx="14" cy="52" r="7"/><circle cx="39" cy="69" r="6"/><circle cx="68" cy="48" r="7"/>
+  </g>
+  <text x="82" y="49" font-family="Ubuntu, Arial, sans-serif" font-size="42" font-weight="400" fill="#213a8f">Win</text>
+  <text x="150" y="49" font-family="Ubuntu, Arial, sans-serif" font-size="42" font-weight="400" fill="#dd0b2f">web</text>
+  <text x="84" y="68" font-family="Ubuntu, Arial, sans-serif" font-size="14" fill="#aeb4c0">Food Software Specialists</text>
+</svg>
+
