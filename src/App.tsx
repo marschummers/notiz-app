@@ -4,7 +4,7 @@ import Workspace from './pages/Workspace'
 import './App.css'
 
 export default function App() {
-  const { configured, loading, session } = useAuth()
+  const { configured, loading, session, approved, refreshApproval, signOut } = useAuth()
 
   if (!configured) {
     return (
@@ -21,5 +21,25 @@ export default function App() {
 
   if (!session) return <LoginPage />
 
+  if (approved === null) return <div className="auth-loading">Prüfe Freigabe…</div>
+
+  if (!approved) {
+    return (
+      <div className="access-waiting-screen">
+        <div className="access-waiting-card">
+          <p className="access-waiting-eyebrow">Zugang beantragt</p>
+          <h1>Warte auf Freigabe</h1>
+          <p>
+            Deine Anmeldung als <strong>{session.user.email}</strong> ist eingegangen. Sobald dein Zugang freigegeben
+            wurde, kannst du die Notiz-App verwenden.
+          </p>
+          <button className="primary" onClick={refreshApproval}>Freigabe erneut prüfen</button>
+          <button className="secondary-action" onClick={signOut}>Abmelden</button>
+        </div>
+      </div>
+    )
+  }
+
   return <Workspace />
 }
+
