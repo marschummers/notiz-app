@@ -57,7 +57,22 @@ function StatusBadge({ status, label }: { status: string; label: string }) {
 }
 
 function TaskOverview({ title, tasks, projects, afns, onOpen }: { title: string; tasks: ProjectTask[]; projects: Project[]; afns: { taskId: string; afnNumber: number }[]; onOpen: (id: string) => void }) {
-  return <section className="project-section"><h2>{title}</h2>{tasks.length === 0 ? <p className="empty">Hier ist gerade nichts offen.</p> : tasks.map((task) => <button className="overview-task" key={task.id} onClick={() => onOpen(task.projectId)}><span><strong>{task.title}</strong><small>{projects.find((project) => project.id === task.projectId)?.name}</small></span><span>{task.dueDate ? formatDate(task.dueDate) : 'Ohne Termin'}{afns.filter((afn) => afn.taskId === task.id).map((afn) => <small key={afn.afnNumber}>AFN {afn.afnNumber}</small>)}</span></button>)}</section>
+  return <section className="project-section overview-task-section"><h2>{title}</h2>{tasks.length === 0 ? <p className="empty">Hier ist gerade nichts offen.</p> : <div className="overview-task-list">{tasks.map((task) => {
+    const project = projects.find((item) => item.id === task.projectId)
+    const taskAfns = afns.filter((afn) => afn.taskId === task.id)
+    return <div className="overview-task-row" key={task.id}>
+      <button className="overview-task-main" onClick={() => onOpen(task.projectId)}>
+        {project?.customerName && <span className="overview-customer">[{project.customerName}]</span>}
+        <span className="overview-project">{project?.name || 'Unbekanntes Projekt'}</span>
+        <span className="overview-task-title">{task.title}</span>
+        {taskAfns.length > 0 && <span className="overview-afns">{taskAfns.map((afn) => `AFN ${afn.afnNumber}`).join(', ')}</span>}
+      </button>
+      <label className="overview-due-date" aria-label={`Termin für ${task.title}`}>
+        <BufferedDateInput value={task.dueDate} onSave={(dueDate) => updateProjectTask(task.id, { dueDate })}/>
+      </label>
+      <StatusBadge status={task.status} label={taskStatus[task.status]}/>
+    </div>
+  })}</div>}</section>
 }
 
 function ProjectDetail({ project, tasks, afns, profiles, userId, userEmail, filter, setFilter, onBack }: { project: Project; tasks: ProjectTask[]; afns: { taskId: string; afnNumber: number }[]; profiles: UserProfile[]; userId: string; userEmail?: string; filter: TaskFilter; setFilter: (value: TaskFilter) => void; onBack: () => void }) {
