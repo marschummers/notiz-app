@@ -48,11 +48,11 @@
 .overview-task-main:hover .overview-task-title{color:var(--project-accent)}
 .overview-customer{flex-shrink:0;color:var(--project-accent);font-size:.75rem}
 .overview-project{flex-shrink:0;color:var(--project-text-secondary);font-weight:620}
-.overview-project::after{content:'·';margin-left:7px;color:var(--text-faint)}
+.overview-project::after{content:'Â·';margin-left:7px;color:var(--text-faint)}
 .overview-task-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .overview-afns{flex-shrink:0;color:var(--text-faint);font-size:.68rem}
 .overview-due-date input{display:block;width:150px;padding:0 9px;font-size:.76rem}
-.other-tasks-toggle{margin:0 0 var(--project-content-gap)}.project-detail-task-list{margin-top:14px;border-top:1px solid var(--project-border-soft)}
+.task-overview-toolbar{display:flex;justify-content:flex-end;margin:0 0 calc(var(--project-content-gap) * -0.5)}.other-tasks-toggle{width:auto}.project-detail-task-list{margin-top:14px;border-top:1px solid var(--project-border-soft)}
 
 /* Projekt-Detail */
 .back-link{display:inline-flex;margin-bottom:12px;padding:4px 0;border:0;background:transparent;color:var(--project-text-secondary)}
@@ -90,3 +90,4 @@
 @media(max-width:560px){.project-read-header{align-items:flex-start;flex-direction:column}.project-header-actions{width:100%;justify-content:flex-start}.project-meta-grid{display:grid;grid-template-columns:1fr}.dialog-form-grid{grid-template-columns:1fr}.dialog-form-field.wide{grid-column:auto}.dialog-actions{grid-template-columns:1fr 1fr}.dialog-actions>span{display:none}.danger-action{grid-column:1/-1;justify-self:start}.project-dialog>header,.project-dialog-form,.milestone-detail{padding-left:17px;padding-right:17px}.next-milestone small{display:none}}
 .customer-overview .project-read-header{margin-bottom:var(--project-section-gap)}.customer-section{margin-top:var(--project-content-gap)}.customer-list{display:flex;flex-direction:column}.customer-row{display:grid;grid-template-columns:minmax(180px,1fr) minmax(120px,auto) auto;align-items:center;gap:16px;min-height:58px;padding:9px 4px;border:0;border-top:1px solid var(--project-border-soft);background:transparent;color:var(--project-text-primary);text-align:left}.customer-row:hover{background:var(--project-surface-raised)}.customer-row>span:first-child{display:grid;min-width:0;gap:2px}.customer-row strong,.customer-row small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.customer-row small,.customer-row>span:not(:first-child){color:var(--project-text-secondary);font-size:.78rem}.customer-task-row{grid-template-columns:minmax(220px,1fr) minmax(130px,.5fr) 115px auto}.customer-row .milestone-overdue{color:var(--project-danger)}
 @media(max-width:800px){.customer-row,.customer-task-row{grid-template-columns:minmax(0,1fr) auto}.customer-row>span:not(:first-child){grid-column:2}.customer-task-row .project-status-badge{grid-column:2}}
+
