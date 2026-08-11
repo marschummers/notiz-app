@@ -5,6 +5,8 @@ import { createFolder, deleteTag } from '../lib/actions'
 import { forceUpdate } from '../lib/forceUpdate'
 import type { Selection } from '../lib/selection'
 import FolderTree from './FolderTree'
+import BrandLogo from './BrandLogo'
+import type { AppTheme } from '../lib/theme'
 import './Sidebar.css'
 
 interface Props {
@@ -27,6 +29,8 @@ interface Props {
   userEmail: string | undefined
   userDisplayName?: string
   onEditDisplayName: () => void
+  theme: AppTheme
+  onToggleTheme: () => void
   onSignOut: () => void
 }
 
@@ -50,6 +54,8 @@ export default function Sidebar({
   userEmail,
   userDisplayName,
   onEditDisplayName,
+  theme,
+  onToggleTheme,
   onSignOut,
 }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -89,6 +95,9 @@ export default function Sidebar({
       className={`sidebar${open ? '' : ' collapsed'}${resizing ? ' resizing' : ''}`}
       style={open ? { width, minWidth: width } : undefined}
     >
+      <div className="sidebar-brand">
+        <BrandLogo />
+      </div>
       <div className="sidebar-section">
         <div className={`tree-row main-nav-row${activeView === 'start' ? ' selected' : ''}`} onClick={onSelectStart}>
           <span className="tree-label">⌂ Start</span>
@@ -188,6 +197,9 @@ export default function Sidebar({
         {syncError && <p className="sidebar-error">{syncError}</p>}
         <button onClick={handleForceUpdate} disabled={updating} title="Hilft, wenn eine alte Version haengen bleibt (z.B. auf dem iPad)">
           {updating ? 'Aktualisiere…' : 'App aktualisieren'}
+        </button>
+        <button className="theme-switch" onClick={onToggleTheme}>
+          Design: {theme === 'winweb' ? 'Winweb' : 'Kupfer'} · wechseln
         </button>
         {userEmail && (
           <div className="sidebar-account">

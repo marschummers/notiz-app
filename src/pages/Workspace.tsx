@@ -3,6 +3,7 @@ import { useAuth } from '../lib/auth'
 import { ensureDefaultFolderStructure } from '../lib/actions'
 import { syncAll, updateOwnDisplayName } from '../lib/sync'
 import { db } from '../db/db'
+import { useTheme } from '../lib/theme'
 import type { Selection } from '../lib/selection'
 import Sidebar from '../components/Sidebar'
 import PageList from '../components/PageList'
@@ -18,6 +19,7 @@ export default function Workspace() {
   const DEFAULT_SIDEBAR_WIDTH = 260
   const MIN_SIDEBAR_WIDTH = 200
   const { session, signOut } = useAuth()
+  const { theme, toggleTheme } = useTheme()
   const [selection, setSelection] = useState<Selection>({ type: 'folder', id: undefined })
   const [activeView, setActiveView] = useState<'start' | 'notes' | 'projects' | 'tasks' | 'search' | 'all-notes'>('start')
   const [openPageId, setOpenPageId] = useState<string | null>(null)
@@ -146,6 +148,8 @@ export default function Workspace() {
         userEmail={session?.user.email}
         userDisplayName={profileDisplayName ?? undefined}
         onEditDisplayName={() => setEditingProfileName(true)}
+        theme={theme}
+        onToggleTheme={toggleTheme}
         onSignOut={signOut}
       />
       {sidebarOpen && (

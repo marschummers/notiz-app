@@ -25,14 +25,16 @@
   transition: none;
 }
 
+.sidebar-brand {
+  padding: max(14px, env(safe-area-inset-top)) 14px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  background: linear-gradient(135deg, var(--bg-elevated), var(--bg));
+}
+
 .sidebar-section {
   padding: 10px 0;
   padding-top: 10px;
   border-bottom: 1px solid var(--border-soft);
-}
-
-.sidebar-section:first-child {
-  padding-top: max(10px, env(safe-area-inset-top));
 }
 
 .main-nav-row {
@@ -247,6 +249,19 @@
   gap: 7px;
   font-size: 12px;
   color: var(--text-faint);
+}
+
+.sidebar-footer .theme-switch {
+  border-color: var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-dim);
+  box-shadow: none;
+}
+
+.sidebar-footer .theme-switch:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+  filter: none;
 }
 
 .sidebar-account-identity {

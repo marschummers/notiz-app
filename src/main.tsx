@@ -5,6 +5,7 @@ import { registerSW } from 'virtual:pwa-register'
 import './index.css'
 import App from './App.tsx'
 import { AuthProvider } from './lib/auth.tsx'
+import { ThemeProvider } from './lib/theme.tsx'
 import TestsIndex from './pages/TestsIndex.tsx'
 import { PointerTestPage } from './pages/PointerTestPage.tsx'
 import { TouchTestPage } from './pages/TouchTestPage.tsx'
@@ -19,8 +20,9 @@ registerSW({ immediate: true })
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <AuthProvider>
-      <HashRouter>
+    <ThemeProvider>
+      <AuthProvider>
+        <HashRouter>
         <Routes>
           <Route path="/" element={<App />} />
           <Route path="/tests" element={<TestsIndex />} />
@@ -44,7 +46,9 @@ createRoot(document.getElementById('root')!).render(
           />
           <Route path="/tests/3" element={<TouchTestPage />} />
         </Routes>
-      </HashRouter>
-    </AuthProvider>
+        </HashRouter>
+      </AuthProvider>
+    </ThemeProvider>
   </StrictMode>,
 )
+

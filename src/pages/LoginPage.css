@@ -4,13 +4,30 @@
   align-items: center;
   justify-content: center;
   height: 100dvh;
-  font-family: system-ui, sans-serif;
+  font-family: Ubuntu, system-ui, sans-serif;
   padding: 20px;
   background: var(--bg);
   color: var(--text);
 }
 
+.login-theme-switch {
+  position: fixed;
+  top: max(16px, env(safe-area-inset-top));
+  right: 16px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg-elevated);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.login-screen .brand-logo {
+  margin-bottom: 6px;
+}
+
 .login-screen h1 {
+  margin: 4px 0 20px;
   background: linear-gradient(135deg, var(--accent-strong), var(--accent));
   -webkit-background-clip: text;
   background-clip: text;
@@ -99,3 +116,4 @@
   border-color: var(--accent);
   color: var(--accent-strong);
 }
+
