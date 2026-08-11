@@ -5,6 +5,7 @@ import type { Project, ProjectMilestone, ProjectMilestoneStatus, ProjectStatus, 
 import { createProject, createProjectMilestone, createProjectTask, deleteProject, deleteProjectMilestone, deleteProjectTask, moveProjectMilestone, replaceProjectTaskAfns, updateProject, updateProjectMilestone, updateProjectTask } from '../lib/projectActions'
 import BufferedDateInput from './BufferedDateInput'
 import type { ProjectNavigation } from '../lib/projectNavigation'
+import { projectCustomer, projectDisplayName, projectShortName } from '../lib/projectDisplay'
 import './ProjectsView.css'
 
 const projectStatus: Record<ProjectStatus, string> = { active: 'Aktiv', waiting: 'Wartet', completed: 'Abgeschlossen', archived: 'Archiviert' }
@@ -53,13 +54,13 @@ export default function ProjectsView({ userId, userEmail, navigation, onNavigate
       <TaskOverview title="Wartet auf andere" tasks={sortedMine.filter((task) => task.status === 'waiting')} projects={projects} afns={afns} onOpen={(id) => onNavigate({ type: 'project', id })}/>
     </> : <>
       <div className="project-list-tools"><input className="project-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Projekte durchsuchen…" />{navigation.type !== 'status' && <button onClick={() => setShowClosed((value) => !value)}>{showClosed ? 'Nur laufende' : 'Abgeschlossene & Archiv'}</button>}</div>
-      <div className="project-list">{listProjects.filter((project) => `${project.name} ${project.customerName ?? ''}`.toLowerCase().includes(search.toLowerCase())).map((project) => <button key={project.id} className="project-card" onClick={() => onNavigate({ type: 'project', id: project.id })}><span><strong>{project.name}</strong><small>{project.customerName || 'Kein Kunde hinterlegt'}</small></span><StatusBadge status={project.status} label={projectStatus[project.status]}/></button>)}</div>
+      <div className="project-list">{listProjects.filter((project) => projectDisplayName(project).toLowerCase().includes(search.toLowerCase())).map((project) => <button key={project.id} className="project-card" onClick={() => onNavigate({ type: 'project', id: project.id })}><strong>{projectDisplayName(project)}</strong><StatusBadge status={project.status} label={projectStatus[project.status]}/></button>)}</div>
     </>}
   </div></main>
 }
 
 function CustomerOverview({ customerName, projects, tasks, milestones, afns, profiles, userId, userEmail, onOpenProject, onBack }: { customerName: string; projects: Project[]; tasks: ProjectTask[]; milestones: ProjectMilestone[]; afns: { taskId: string; afnNumber: number }[]; profiles: UserProfile[]; userId: string; userEmail?: string; onOpenProject: (id: string) => void; onBack: () => void }) {
-  const customerProjects = projects.filter((project) => project.customerName?.trim().toLocaleLowerCase('de') === customerName.trim().toLocaleLowerCase('de'))
+  const customerProjects = projects.filter((project) => projectCustomer(project).toLocaleLowerCase('de') === customerName.trim().toLocaleLowerCase('de'))
   const active = customerProjects.filter((project) => project.status === 'active' || project.status === 'waiting')
   const projectIds = new Set(customerProjects.map((project) => project.id))
   const openTasks = tasks.filter((task) => projectIds.has(task.projectId) && task.status !== 'completed').sort((a, b) => (a.dueDate ?? Infinity) - (b.dueDate ?? Infinity))
@@ -68,9 +69,9 @@ function CustomerOverview({ customerName, projects, tasks, milestones, afns, pro
   return <main className="projects-view"><div className="project-page-content customer-overview">
     <button className="back-link" onClick={onBack}>← Projekte</button>
     <header className="project-read-header"><div className="project-read-title"><p className="projects-eyebrow">Kunde</p><h1>{customerName}</h1></div></header>
-    <CustomerSection title="Projekte" empty="Keine aktiven Projekte für diesen Kunden.">{active.map((project) => <button className="customer-row" key={project.id} onClick={() => onOpenProject(project.id)}><span><strong>{project.name}</strong><small>{profileName(project.ownerUserId, profiles, userId, userEmail)}</small></span><span>{project.targetDate ? formatDate(project.targetDate) : 'Ohne Zieltermin'}</span><StatusBadge status={project.status} label={projectStatus[project.status]}/></button>)}</CustomerSection>
-    <CustomerSection title="Offene Aufgaben" empty="Keine offenen Aufgaben.">{openTasks.map((task) => { const project = customerProjects.find((item) => item.id === task.projectId); const taskAfns = afns.filter((afn) => afn.taskId === task.id); return <button className="customer-row customer-task-row" key={task.id} onClick={() => onOpenProject(task.projectId)}><span><small>{project?.name}</small><strong>{task.title}</strong>{taskAfns.length > 0 && <small>{taskAfns.map((afn) => `AFN ${afn.afnNumber}`).join(', ')}</small>}</span><span>{profileName(task.assigneeUserId, profiles, userId, userEmail)}</span><span>{task.dueDate ? formatDate(task.dueDate) : 'Ohne Termin'}</span><StatusBadge status={task.status} label={taskStatus[task.status]}/></button>})}</CustomerSection>
-    <CustomerSection title="Nächste Meilensteine" empty="Keine offenen Meilensteine mit Termin.">{upcoming.map((milestone) => { const project = customerProjects.find((item) => item.id === milestone.projectId); const assigned = tasks.filter((task) => task.milestoneId === milestone.id); const done = assigned.filter((task) => task.status === 'completed').length; return <button className="customer-row" key={milestone.id} onClick={() => onOpenProject(milestone.projectId)}><span><small>{project?.name}</small><strong>{milestone.title}</strong></span><span className={isOverdue(milestone) ? 'milestone-overdue' : ''}>{formatDate(milestone.dueDate!)}</span><span>{assigned.length ? `${done} / ${assigned.length} erledigt` : 'Noch keine Aufgaben'}</span></button>})}</CustomerSection>
+    <CustomerSection title="Projekte" empty="Keine aktiven Projekte für diesen Kunden.">{active.map((project) => <button className="customer-row" key={project.id} onClick={() => onOpenProject(project.id)}><span><strong>{projectShortName(project) || projectCustomer(project)}</strong><small>{profileName(project.ownerUserId, profiles, userId, userEmail)}</small></span><span>{project.targetDate ? formatDate(project.targetDate) : 'Ohne Zieltermin'}</span><StatusBadge status={project.status} label={projectStatus[project.status]}/></button>)}</CustomerSection>
+    <CustomerSection title="Offene Aufgaben" empty="Keine offenen Aufgaben.">{openTasks.map((task) => { const project = customerProjects.find((item) => item.id === task.projectId); const taskAfns = afns.filter((afn) => afn.taskId === task.id); return <button className="customer-row customer-task-row" key={task.id} onClick={() => onOpenProject(task.projectId)}><span><small>{project ? (projectShortName(project) || 'Allgemeines Projekt') : 'Unbekanntes Projekt'}</small><strong>{task.title}</strong>{taskAfns.length > 0 && <small>{taskAfns.map((afn) => `AFN ${afn.afnNumber}`).join(', ')}</small>}</span><span>{profileName(task.assigneeUserId, profiles, userId, userEmail)}</span><span>{task.dueDate ? formatDate(task.dueDate) : 'Ohne Termin'}</span><StatusBadge status={task.status} label={taskStatus[task.status]}/></button>})}</CustomerSection>
+    <CustomerSection title="Nächste Meilensteine" empty="Keine offenen Meilensteine mit Termin.">{upcoming.map((milestone) => { const project = customerProjects.find((item) => item.id === milestone.projectId); const assigned = tasks.filter((task) => task.milestoneId === milestone.id); const done = assigned.filter((task) => task.status === 'completed').length; return <button className="customer-row" key={milestone.id} onClick={() => onOpenProject(milestone.projectId)}><span><small>{project ? (projectShortName(project) || 'Allgemeines Projekt') : 'Unbekanntes Projekt'}</small><strong>{milestone.title}</strong></span><span className={isOverdue(milestone) ? 'milestone-overdue' : ''}>{formatDate(milestone.dueDate!)}</span><span>{assigned.length ? `${done} / ${assigned.length} erledigt` : 'Noch keine Aufgaben'}</span></button>})}</CustomerSection>
   </div></main>
 }
 
@@ -84,7 +85,7 @@ function Metric({ label, value }: { label: string; value: number }) { return <di
 function UpcomingMilestones({ milestones, tasks, projects, onOpen }: { milestones: ProjectMilestone[]; tasks: ProjectTask[]; projects: Project[]; onOpen: (id: string) => void }) {
   const rows = milestones.filter((m) => m.status !== 'completed' && m.dueDate).sort((a,b) => milestoneSort(a,b)).slice(0, 8)
   if (!rows.length) return null
-  return <section className="project-section upcoming-milestones"><h2>Nächste Meilensteine</h2>{rows.map((m) => { const project = projects.find((p) => p.id === m.projectId); const assigned = tasks.filter((t) => t.milestoneId === m.id); const done = assigned.filter((t) => t.status === 'completed').length; return <button key={m.id} onClick={() => onOpen(m.projectId)}><span className={isOverdue(m) ? 'milestone-overdue' : ''}>{formatDate(m.dueDate!)}</span><strong>{project?.name ?? 'Unbekanntes Projekt'}</strong><span>{m.title}</span><small>{assigned.length ? `${done} / ${assigned.length} erledigt` : 'Noch keine Aufgaben'}</small></button>})}</section>
+  return <section className="project-section upcoming-milestones"><h2>Nächste Meilensteine</h2>{rows.map((m) => { const project = projects.find((p) => p.id === m.projectId); const assigned = tasks.filter((t) => t.milestoneId === m.id); const done = assigned.filter((t) => t.status === 'completed').length; return <button key={m.id} onClick={() => onOpen(m.projectId)}><span className={isOverdue(m) ? 'milestone-overdue' : ''}>{formatDate(m.dueDate!)}</span><strong>{project ? projectDisplayName(project) : 'Unbekanntes Projekt'}</strong><span>{m.title}</span><small>{assigned.length ? `${done} / ${assigned.length} erledigt` : 'Noch keine Aufgaben'}</small></button>})}</section>
 }
 
 function StatusBadge({ status, label }: { status: string; label: string }) {
@@ -108,8 +109,8 @@ function TaskOverview({ title, tasks, projects, afns, onOpen }: { title: string;
     const taskAfns = afns.filter((afn) => afn.taskId === task.id)
     return <div className="overview-task-row" key={task.id}>
       <button className="overview-task-main" onClick={() => onOpen(task.projectId)}>
-        {project?.customerName && <span className="overview-customer">[{project.customerName}]</span>}
-        <span className="overview-project">{project?.name || 'Unbekanntes Projekt'}</span>
+        {project && <span className="overview-customer">[{projectCustomer(project)}]</span>}
+        {project && projectShortName(project) && <span className="overview-project">{projectShortName(project)}</span>}
         <span className="overview-task-title">{task.title}</span>
         {taskAfns.length > 0 && <span className="overview-afns">{taskAfns.map((afn) => `AFN ${afn.afnNumber}`).join(', ')}</span>}
       </button>
@@ -136,7 +137,7 @@ function ProjectDetail({ project, tasks, milestones, afns, profiles, userId, use
     <div className="project-detail-content">
       <button className="back-link" onClick={onBack}>← Projekte</button>
       <header className="project-read-header">
-        <div className="project-read-title"><h1>{project.name || 'Ohne Projektnamen'}</h1><p>{project.customerName || 'Kein Kunde hinterlegt'}</p></div>
+        <div className="project-read-title"><h1>{projectShortName(project) || projectCustomer(project)}</h1>{projectShortName(project) && <p>{projectCustomer(project)}</p>}</div>
         <StatusBadge status={project.status} label={projectStatus[project.status]}/>
       </header>
       <div className="project-meta-grid">
@@ -195,12 +196,13 @@ function DialogShell({ title, subtitle, children, onClose }: { title: string; su
 }
 
 function ProjectEditDialog({ project, profiles, userId, userEmail, onClose, onDeleted }: { project: Project; profiles: UserProfile[]; userId: string; userEmail?: string; onClose: () => void; onDeleted: () => void }) {
-  const [draft, setDraft] = useState(project)
+  const [draft, setDraft] = useState(() => ({ ...project, name: projectShortName(project) ?? '', customerName: projectCustomer(project) }))
   async function save(event: FormEvent) {
     event.preventDefault()
+    if (!draft.customerName?.trim()) return
     await updateProject(project.id, {
-      name: draft.name,
-      customerName: draft.customerName,
+      name: draft.name.trim(),
+      customerName: draft.customerName.trim(),
       ownerUserId: draft.ownerUserId,
       status: draft.status,
       startDate: draft.startDate,
@@ -209,18 +211,18 @@ function ProjectEditDialog({ project, profiles, userId, userEmail, onClose, onDe
     })
     onClose()
   }
-  return <DialogShell title="Projekt bearbeiten" subtitle={project.name} onClose={onClose}>
+  return <DialogShell title="Projekt bearbeiten" subtitle={projectDisplayName(project)} onClose={onClose}>
     <form className="project-dialog-form" onSubmit={save}>
       <div className="dialog-form-grid">
-        <FormField label="Projektname" wide><input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} autoFocus /></FormField>
-        <FormField label="Kunde" wide><input value={draft.customerName ?? ''} onChange={(event) => setDraft({ ...draft, customerName: event.target.value || undefined })} placeholder="Optional" /></FormField>
+        <FormField label="Kunde" wide><input value={draft.customerName ?? ''} onChange={(event) => setDraft({ ...draft, customerName: event.target.value })} autoFocus required /></FormField>
+        <FormField label="Projektname" wide><input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Optional, z. B. Supermarkt" /></FormField>
         <FormField label="Status"><select value={draft.status} onChange={(event) => setDraft({ ...draft, status: event.target.value as ProjectStatus })}>{Object.entries(projectStatus).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></FormField>
         <FormField label="Verantwortlich"><select value={draft.ownerUserId} onChange={(event) => setDraft({ ...draft, ownerUserId: event.target.value })}>{profileOptions(profiles, userId, userEmail)}</select></FormField>
         <FormField label="Startdatum"><BufferedDateInput value={draft.startDate} onSave={(value) => setDraft({ ...draft, startDate: value })}/></FormField>
         <FormField label="Zieltermin"><BufferedDateInput value={draft.targetDate} onSave={(value) => setDraft({ ...draft, targetDate: value })}/></FormField>
         <FormField label="Beschreibung" wide><textarea value={draft.description ?? ''} onChange={(event) => setDraft({ ...draft, description: event.target.value || undefined })} rows={4}/></FormField>
       </div>
-      <div className="dialog-actions"><button type="button" className="danger-action" onClick={async () => { if (confirm(`Projekt „${project.name}“ löschen?`)) { await deleteProject(project.id); onDeleted() } }}>Projekt löschen</button><span/><button type="button" className="secondary-action" onClick={onClose}>Abbrechen</button><button className="primary">Speichern</button></div>
+      <div className="dialog-actions"><button type="button" className="danger-action" onClick={async () => { if (confirm(`Projekt „${projectDisplayName(project)}“ löschen?`)) { await deleteProject(project.id); onDeleted() } }}>Projekt löschen</button><span/><button type="button" className="secondary-action" onClick={onClose}>Abbrechen</button><button className="primary" disabled={!draft.customerName?.trim()}>Speichern</button></div>
     </form>
   </DialogShell>
 }
