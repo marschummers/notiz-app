@@ -38,7 +38,7 @@ export default function ProjectsView({ userId, userEmail }: Props) {
       onBack={() => setProjectId(null)} />
   }
 
-  return <main className="projects-view">
+  return <main className="projects-view"><div className="project-page-content">
     <header className="projects-header"><div><p className="projects-eyebrow">Arbeitsbereich</p><h1>Projekte</h1></div><button className="primary" onClick={async () => setProjectId(await createProject({ name: 'Neues Projekt', ownerUserId: userId }))}>+ Neues Projekt</button></header>
     <nav className="project-tabs"><button className={section === 'dashboard' ? 'active' : ''} onClick={() => setSection('dashboard')}>Übersicht</button><button className={section === 'projects' ? 'active' : ''} onClick={() => setSection('projects')}>Projekte</button></nav>
     {section === 'dashboard' ? <>
@@ -50,7 +50,7 @@ export default function ProjectsView({ userId, userEmail }: Props) {
       <div className="project-list-tools"><input className="project-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Projekte durchsuchen…" /><button onClick={() => setShowClosed((value) => !value)}>{showClosed ? 'Nur laufende' : 'Abgeschlossene & Archiv'}</button></div>
       <div className="project-list">{(showClosed ? projects : activeProjects).filter((project) => `${project.name} ${project.customerName ?? ''}`.toLowerCase().includes(search.toLowerCase())).map((project) => <button key={project.id} className="project-card" onClick={() => setProjectId(project.id)}><span><strong>{project.name}</strong><small>{project.customerName || 'Kein Kunde hinterlegt'}</small></span><StatusBadge status={project.status} label={projectStatus[project.status]}/></button>)}</div>
     </>}
-  </main>
+  </div></main>
 }
 
 function Metric({ label, value }: { label: string; value: number }) { return <div className="project-metric"><strong>{value}</strong><span>{label}</span></div> }
@@ -295,4 +295,3 @@ function milestoneTiming(milestone: ProjectMilestone, open: number) {
   const days = Math.ceil((milestone.dueDate - startOfToday()) / 86400000)
   return days >= 0 && days <= 7 && open > 0 ? ` · ${days === 0 ? 'heute' : `in ${days} Tagen`} · ${open} offen` : ''
 }
-

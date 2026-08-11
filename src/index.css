@@ -95,3 +95,27 @@ body {
   background: var(--bg);
 }
 
+/* Verbindliche Layout- und Control-Tokens fuer den gesamten Projektbereich. Sie liegen hier
+   zentral, damit beide Farbthemen dieselben Proportionen verwenden. */
+:root {
+  --project-page-max: 1320px;
+  --project-page-padding: clamp(18px, 4vw, 56px);
+  --project-section-gap: 32px;
+  --project-content-gap: 16px;
+  --project-control-height: 40px;
+  --project-control-padding-x: 13px;
+  --project-radius-sm: 8px;
+  --project-radius-md: 10px;
+  --project-radius-lg: 14px;
+  --project-surface: var(--bg-elevated);
+  --project-surface-raised: var(--bg-accent-tint);
+  --project-border: var(--border);
+  --project-border-soft: var(--border-soft);
+  --project-text-primary: var(--text);
+  --project-text-secondary: var(--text-dim);
+  --project-accent: var(--accent-strong);
+  --project-accent-hover: var(--accent);
+  --project-success: var(--good);
+  --project-warning: var(--warn);
+  --project-danger: var(--bad);
+}
