@@ -15,6 +15,7 @@ import Dashboard from '../components/Dashboard'
 import ProjectsView from '../components/ProjectsView'
 import AccessRequestsView from '../components/AccessRequestsView'
 import './Workspace.css'
+import type { ProjectNavigation } from '../lib/projectNavigation'
 
 export default function Workspace() {
   const DEFAULT_SIDEBAR_WIDTH = 260
@@ -23,6 +24,7 @@ export default function Workspace() {
   const { theme, toggleTheme } = useTheme()
   const [selection, setSelection] = useState<Selection>({ type: 'folder', id: undefined })
   const [activeView, setActiveView] = useState<'start' | 'notes' | 'projects' | 'tasks' | 'search' | 'all-notes' | 'access'>('start')
+  const [projectNavigation, setProjectNavigation] = useState<ProjectNavigation>({ type: 'overview' })
   const [openPageId, setOpenPageId] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH)
@@ -127,6 +129,7 @@ export default function Workspace() {
           setOpenPageId(null)
         }}
         onSelectProjects={() => {
+          setProjectNavigation({ type: 'overview' })
           setActiveView('projects')
           setOpenPageId(null)
         }}
@@ -156,6 +159,9 @@ export default function Workspace() {
         theme={theme}
         onToggleTheme={toggleTheme}
         onSignOut={signOut}
+        userId={session?.user.id ?? ''}
+        projectNavigation={projectNavigation}
+        onProjectNavigate={(navigation) => { setProjectNavigation(navigation); setActiveView('projects'); setOpenPageId(null) }}
       />
       {sidebarOpen && (
         <div
@@ -191,11 +197,11 @@ export default function Workspace() {
           onOpenSearch={() => setActiveView('search')}
           onOpenAllNotes={() => setActiveView('all-notes')}
           onOpenTasks={() => setActiveView('tasks')}
-          onOpenProjects={() => setActiveView('projects')}
+          onOpenProjects={() => { setProjectNavigation({ type: 'overview' }); setActiveView('projects') }}
           userId={session?.user.id ?? ''}
         />
       ) : activeView === 'projects' ? (
-        <ProjectsView userId={session?.user.id ?? ''} userEmail={session?.user.email} />
+        <ProjectsView userId={session?.user.id ?? ''} userEmail={session?.user.email} navigation={projectNavigation} onNavigate={setProjectNavigation} />
       ) : activeView === 'access' && session?.user.email === ADMIN_EMAIL ? (
         <AccessRequestsView sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((value) => !value)} />
       ) : activeView === 'tasks' ? (
@@ -267,4 +273,3 @@ function ProfileNameDialog({ email, initialName, onSave, onCancel }: { email: st
     </div>
   )
 }
-
