@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
 import { createProject } from '../lib/projectActions'
 import type { ProjectNavigation } from '../lib/projectNavigation'
-import { projectCustomer, projectDisplayName } from '../lib/projectDisplay'
+import { projectCustomer, projectDisplayName, projectShortName } from '../lib/projectDisplay'
 
 export default function ProjectSidebar({ userId, navigation, onNavigate }: { userId: string; navigation: ProjectNavigation; onNavigate: (navigation: ProjectNavigation) => void }) {
   const [search, setSearch] = useState('')
@@ -17,6 +17,15 @@ export default function ProjectSidebar({ userId, navigation, onNavigate }: { use
     if (name && !customerNames.has(name.toLocaleLowerCase('de'))) customerNames.set(name.toLocaleLowerCase('de'), name)
   }
   const customers = [...customerNames.values()].sort((a, b) => a.localeCompare(b, 'de'))
+
+  function customerProject(customer: string) {
+    const matches = projects.filter((project) => projectCustomer(project).localeCompare(customer, 'de', { sensitivity: 'base' }) === 0)
+    const active = matches.filter((project) => project.status === 'active' || project.status === 'waiting')
+    return active.find((project) => !projectShortName(project))
+      ?? matches.find((project) => !projectShortName(project))
+      ?? active[0]
+      ?? matches[0]
+  }
 
   async function addProject() {
     const id = await createProject({ name: 'Neues Projekt', ownerUserId: userId })
@@ -36,7 +45,11 @@ export default function ProjectSidebar({ userId, navigation, onNavigate }: { use
     </SidebarGroup>
 
     <SidebarGroup title="Kunden" className="project-sidebar-scroll customers">
-      {customers.length ? customers.map((customer) => <SidebarLink key={customer} label={customer} active={navigation.type === 'customer' && navigation.name === customer} onClick={() => onNavigate({ type: 'customer', name: customer })}/>) : <p className="sidebar-hint">Noch keine Kunden hinterlegt.</p>}
+      {customers.length ? customers.map((customer) => {
+        const project = customerProject(customer)
+        const selectedProject = navigation.type === 'project' ? projects.find((item) => item.id === navigation.id) : undefined
+        return <SidebarLink key={customer} label={customer} active={Boolean(selectedProject && projectCustomer(selectedProject).localeCompare(customer, 'de', { sensitivity: 'base' }) === 0)} onClick={() => project && onNavigate({ type: 'project', id: project.id })}/>
+      }) : <p className="sidebar-hint">Noch keine Kunden hinterlegt.</p>}
     </SidebarGroup>
 
     <SidebarGroup title="Weitere">
