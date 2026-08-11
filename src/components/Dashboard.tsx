@@ -196,9 +196,11 @@ export default function Dashboard({
       </header>
       <QuickActions onNewPage={createNewPage} onSearch={onOpenSearch} onAllNotes={onOpenAllNotes} onTasks={onOpenTasks} onProjects={onOpenProjects} />
       <div className="dashboard-grid">
-        <div className="dashboard-wide-section">
-          <ProjectSection projects={projects} tasks={projectTasks} userId={userId} onOpenProjects={onOpenProjects} />
-        </div>
+        {projects.length > 0 && (
+          <div className="dashboard-wide-section">
+            <ProjectSection projects={projects} tasks={projectTasks} userId={userId} onOpenProjects={onOpenProjects} />
+          </div>
+        )}
         <OpenTasksSection tasks={tasks} pageById={pageById} onOpenPage={onOpenPage} onOpenTasks={onOpenTasks} />
         <RecentPagesSection pages={pages} folderById={folderById} onOpenPage={onOpenPage} />
         <div className="dashboard-wide-section">
