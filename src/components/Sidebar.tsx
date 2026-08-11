@@ -8,6 +8,8 @@ import FolderTree from './FolderTree'
 import BrandLogo from './BrandLogo'
 import type { AppTheme } from '../lib/theme'
 import { ADMIN_EMAIL } from '../lib/auth'
+import type { ProjectNavigation } from '../lib/projectNavigation'
+import ProjectSidebar from './ProjectSidebar'
 import './Sidebar.css'
 
 interface Props {
@@ -34,6 +36,9 @@ interface Props {
   theme: AppTheme
   onToggleTheme: () => void
   onSignOut: () => void
+  userId: string
+  projectNavigation: ProjectNavigation
+  onProjectNavigate: (navigation: ProjectNavigation) => void
 }
 
 export default function Sidebar({
@@ -60,6 +65,9 @@ export default function Sidebar({
   theme,
   onToggleTheme,
   onSignOut,
+  userId,
+  projectNavigation,
+  onProjectNavigate,
 }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [updating, setUpdating] = useState(false)
@@ -113,6 +121,7 @@ export default function Sidebar({
         </div>
       </div>
 
+      {activeView === 'projects' ? <ProjectSidebar userId={userId} navigation={projectNavigation} onNavigate={onProjectNavigate}/> : <>
       <div className="sidebar-section sidebar-tools-section">
         <div className={`tree-row${activeView === 'tasks' ? ' selected' : ''}`} onClick={onSelectTasks}>
           <span className="tree-label">☑ Aufgaben</span>
@@ -167,7 +176,6 @@ export default function Sidebar({
           onToggleExpand={toggleExpand}
         />
       </div>
-
       <div className="sidebar-section">
         <div className="sidebar-heading">
           <span>Tags</span>
@@ -197,6 +205,7 @@ export default function Sidebar({
           </div>
         ))}
       </div>
+      </>}
 
       <div className="sidebar-footer">
         <button onClick={onSync} disabled={syncing}>
@@ -225,4 +234,3 @@ export default function Sidebar({
     </div>
   )
 }
-
