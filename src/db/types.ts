@@ -231,6 +231,7 @@ export interface PdfBlobCache {
 
 export type ProjectStatus = 'active' | 'waiting' | 'completed' | 'archived'
 export type ProjectTaskStatus = 'open' | 'in_progress' | 'waiting' | 'completed'
+export type ProjectMilestoneStatus = 'planned' | 'in_progress' | 'completed'
 export type ProjectWaitingFor = 'Kunde' | 'Entwicklung' | 'Support' | 'Vertrieb' | 'Extern' | 'Sonstige'
 
 export interface Project {
@@ -250,12 +251,26 @@ export interface Project {
 export interface ProjectTask {
   id: string
   projectId: string
+  milestoneId?: string
   title: string
   description?: string
   assigneeUserId?: string
   status: ProjectTaskStatus
   dueDate?: number
   waitingFor?: ProjectWaitingFor
+  sortOrder: number
+  createdAt: number
+  updatedAt: number
+  deletedAt?: number
+}
+
+export interface ProjectMilestone {
+  id: string
+  projectId: string
+  title: string
+  description?: string
+  dueDate?: number
+  status: ProjectMilestoneStatus
   sortOrder: number
   createdAt: number
   updatedAt: number
