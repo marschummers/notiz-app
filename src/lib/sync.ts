@@ -1,6 +1,6 @@
 import type { EntityTable } from 'dexie'
 import { db } from '../db/db'
-import type { Folder, Page, PageBackground, PageProperties, PageType, Tag, PageTag, Task, TextBlock, Template, TemplateTextBlock, TemplateTask, Stroke, PdfPrintout, Project, ProjectTask, ProjectTaskAfn, ProjectMilestone, ProjectStatus, ProjectTaskStatus, ProjectWaitingFor, ProjectMilestoneStatus, ProjectMember, ProjectMemberRole } from '../db/types'
+import type { Folder, Page, PageBackground, PageProperties, PageType, Tag, PageTag, Task, TextBlock, Template, TemplateTextBlock, TemplateTask, Stroke, PdfPrintout, Project, ProjectTask, ProjectTaskAfn, ProjectTaskComment, ProjectMilestone, ProjectStatus, ProjectTaskStatus, ProjectWaitingFor, ProjectMilestoneStatus, ProjectMember, ProjectMemberRole } from '../db/types'
 import { supabase } from './supabaseClient'
 
 // Faengt fehlende/kaputte Zeitstempel ab, statt dass new Date(...).toISOString() mit
@@ -169,6 +169,7 @@ interface RemoteProject { id: string; user_id: string; name: string; customer_na
 interface RemoteProjectTask { id: string; user_id: string; project_id: string; milestone_id: string | null; title: string; description: string | null; assignee_user_id: string | null; status: string; due_date: string | null; waiting_for: string | null; sort_order: number; created_at: string; updated_at: string; deleted_at: string | null }
 interface RemoteProjectMilestone { id: string; user_id: string; project_id: string; title: string; description: string | null; due_date: string | null; status: string; sort_order: number; created_at: string; updated_at: string; deleted_at: string | null }
 interface RemoteProjectTaskAfn { id: string; user_id: string; task_id: string; afn_number: number; updated_at: string; deleted_at: string | null }
+interface RemoteProjectTaskComment { id: string; task_id: string; author_user_id: string; body: string; created_at: string; updated_at: string; deleted_at: string | null }
 interface RemoteProjectMember { id: string; project_id: string; user_id: string; role: string; created_at: string; updated_at: string; deleted_at: string | null }
 
 // Zieht Ordner, Seiten, Tasks, Tags, PDF-Ausdruck-Metadaten und deren Verknuepfungen mit
@@ -467,6 +468,12 @@ export async function syncAll(): Promise<void> {
     updated_at: iso(a.updatedAt), deleted_at: a.deletedAt ? iso(a.deletedAt) : null,
   }), (r) => ({ id: r.id, taskId: r.task_id, afnNumber: r.afn_number,
     updatedAt: ms(r.updated_at), deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined }))
+
+  await mergeTable<ProjectTaskComment, RemoteProjectTaskComment>(db.projectTaskComments, 'notiz_project_task_comments', (comment) => ({
+    id: comment.id, task_id: comment.taskId, author_user_id: comment.authorUserId, body: comment.body,
+    created_at: iso(comment.createdAt), updated_at: iso(comment.updatedAt), deleted_at: comment.deletedAt ? iso(comment.deletedAt) : null,
+  }), (r) => ({ id: r.id, taskId: r.task_id, authorUserId: r.author_user_id, body: r.body,
+    createdAt: ms(r.created_at), updatedAt: ms(r.updated_at), deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined }))
 }
 
 export async function updateOwnDisplayName(displayName: string): Promise<void> {

@@ -1,11 +1,12 @@
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
-import type { Project, ProjectMember, ProjectMilestone, ProjectMilestoneStatus, ProjectStatus, ProjectTask, ProjectTaskStatus, ProjectWaitingFor, UserProfile } from '../db/types'
-import { createProject, createProjectMilestone, createProjectTask, deleteProject, deleteProjectMilestone, deleteProjectTask, moveProjectMilestone, replaceProjectTaskAfns, setProjectTeam, updateProject, updateProjectMilestone, updateProjectTask } from '../lib/projectActions'
+import type { Project, ProjectMember, ProjectMilestone, ProjectMilestoneStatus, ProjectStatus, ProjectTask, ProjectTaskComment, ProjectTaskStatus, ProjectWaitingFor, UserProfile } from '../db/types'
+import { createProject, createProjectMilestone, createProjectTask, createProjectTaskComment, deleteProject, deleteProjectMilestone, deleteProjectTask, moveProjectMilestone, replaceProjectTaskAfns, setProjectTeam, updateProject, updateProjectMilestone, updateProjectTask } from '../lib/projectActions'
 import BufferedDateInput from './BufferedDateInput'
 import type { ProjectNavigation } from '../lib/projectNavigation'
 import { projectCustomer, projectDisplayName, projectShortName } from '../lib/projectDisplay'
+import { syncAll } from '../lib/sync'
 import './ProjectsView.css'
 
 const projectStatus: Record<ProjectStatus, string> = { active: 'Aktiv', waiting: 'Wartet', completed: 'Abgeschlossen', archived: 'Archiviert' }
@@ -24,12 +25,14 @@ export default function ProjectsView({ userId, userEmail, navigation, onNavigate
   const afns = useLiveQuery(() => db.projectTaskAfns.filter((afn) => !afn.deletedAt).toArray(), []) ?? []
   const profiles = useLiveQuery(() => db.userProfiles.toArray(), []) ?? []
   const members = useLiveQuery(() => db.projectMembers.filter((member) => !member.deletedAt).toArray(), []) ?? []
+  const comments = useLiveQuery(() => db.projectTaskComments.filter((comment) => !comment.deletedAt).toArray(), []) ?? []
   const [section, setSection] = useState<'dashboard' | 'projects'>('dashboard')
   const [search, setSearch] = useState('')
   const [showClosed, setShowClosed] = useState(false)
   const [taskFilter, setTaskFilter] = useState<TaskFilter>('all')
   const [showOtherDueTasks, setShowOtherDueTasks] = useState(false)
   const selected = navigation.type === 'project' ? projects.find((project) => project.id === navigation.id) : undefined
+  const selectedTaskId = navigation.type === 'project' ? navigation.taskId : undefined
   const activeProjects = projects.filter((project) => project.status === 'active' || project.status === 'waiting')
   const mine = tasks.filter((task) => task.assigneeUserId === userId && task.status !== 'completed')
   const today = new Date(); today.setHours(0, 0, 0, 0)
@@ -40,9 +43,9 @@ export default function ProjectsView({ userId, userEmail, navigation, onNavigate
   const otherDueTasks = sortedMine.filter((task) => task.dueDate && (task.dueDate < today.getTime() || task.dueDate >= tomorrow))
 
   if (selected) {
-    return <ProjectDetail project={selected} tasks={tasks.filter((task) => task.projectId === selected.id)} milestones={milestones.filter((milestone) => milestone.projectId === selected.id)} afns={afns}
+    return <ProjectDetail key={`${selected.id}:${selectedTaskId ?? ''}`} project={selected} tasks={tasks.filter((task) => task.projectId === selected.id)} milestones={milestones.filter((milestone) => milestone.projectId === selected.id)} afns={afns} comments={comments}
       profiles={profiles} members={members.filter((member) => member.projectId === selected.id)} userId={userId} userEmail={userEmail} filter={taskFilter} setFilter={setTaskFilter}
-      onBack={() => onNavigate({ type: 'overview' })} />
+      initialTaskId={selectedTaskId} onBack={() => onNavigate({ type: 'overview' })} />
   }
 
   if (navigation.type === 'customer') return <CustomerOverview customerName={navigation.name} projects={projects} tasks={tasks} milestones={milestones} afns={afns} profiles={profiles} userId={userId} userEmail={userEmail} onOpenProject={(id) => onNavigate({ type: 'project', id })} onBack={() => onNavigate({ type: 'overview' })}/>
@@ -55,11 +58,11 @@ export default function ProjectsView({ userId, userEmail, navigation, onNavigate
     <nav className="project-tabs"><button className={effectiveSection === 'dashboard' ? 'active' : ''} onClick={() => { setSection('dashboard'); onNavigate({ type: 'overview' }) }}>Übersicht</button><button className={effectiveSection === 'projects' ? 'active' : ''} onClick={() => { setSection('projects'); onNavigate({ type: 'overview' }) }}>Projekte</button></nav>
     {effectiveSection === 'dashboard' ? <>
       <div className="project-metrics"><Metric label="Aktive Projekte" value={activeProjects.length}/><Metric label="Meine offenen Aufgaben" value={mine.length}/><Metric label="Wartet auf andere" value={mine.filter((task) => task.status === 'waiting').length}/><Metric label="Meilensteine in 30 Tagen" value={milestones.filter((m) => m.status !== 'completed' && m.dueDate && m.dueDate >= today.getTime() && m.dueDate <= today.getTime() + 30 * 86400000).length}/></div>
-      <UpcomingMilestones milestones={milestones} tasks={tasks} projects={projects} onOpen={(id) => onNavigate({ type: 'project', id })}/>
-      <TaskOverview title="Heute fällig" tasks={dueToday} projects={projects} afns={afns} onOpen={(id) => onNavigate({ type: 'project', id })}/>
-      <TaskOverview title="Ohne Fälligkeitsdatum" tasks={withoutDueDate} projects={projects} afns={afns} onOpen={(id) => onNavigate({ type: 'project', id })}/>
+      <UpcomingMilestones milestones={milestones} tasks={tasks} projects={projects} onOpen={(projectId, taskId) => onNavigate({ type: 'project', id: projectId, taskId })}/>
+      <TaskOverview title="Heute fällig" tasks={dueToday} projects={projects} afns={afns} onOpen={(projectId, taskId) => onNavigate({ type: 'project', id: projectId, taskId })}/>
+      <TaskOverview title="Ohne Fälligkeitsdatum" tasks={withoutDueDate} projects={projects} afns={afns} onOpen={(projectId, taskId) => onNavigate({ type: 'project', id: projectId, taskId })}/>
       {otherDueTasks.length > 0 && <div className="task-overview-toolbar"><button className="secondary-action other-tasks-toggle" onClick={() => setShowOtherDueTasks((value) => !value)}>{showOtherDueTasks ? 'Andere Termine ausblenden' : `Andere Termine anzeigen (${otherDueTasks.length})`}</button></div>}
-      {showOtherDueTasks && <TaskOverview title="Andere Termine" tasks={otherDueTasks} projects={projects} afns={afns} onOpen={(id) => onNavigate({ type: 'project', id })}/>}
+      {showOtherDueTasks && <TaskOverview title="Andere Termine" tasks={otherDueTasks} projects={projects} afns={afns} onOpen={(projectId, taskId) => onNavigate({ type: 'project', id: projectId, taskId })}/>}
     </> : <>
       <div className="project-list-tools"><input className="project-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Projekte durchsuchen…" />{navigation.type !== 'status' && <button onClick={() => setShowClosed((value) => !value)}>{showClosed ? 'Nur laufende' : 'Abgeschlossene & Archiv'}</button>}</div>
       <div className="project-list">{listProjects.filter((project) => projectDisplayName(project).toLowerCase().includes(search.toLowerCase())).map((project) => <button key={project.id} className="project-card" onClick={() => onNavigate({ type: 'project', id: project.id })}><strong>{projectDisplayName(project)}</strong><StatusBadge status={project.status} label={projectStatus[project.status]}/></button>)}</div>
@@ -111,11 +114,11 @@ function MilestoneRow({ milestone, tasks, onOpen, onEdit, onMove, canUp, canDown
   return <div className="milestone-row"><button className="milestone-main" onClick={onOpen}><span><strong>{milestone.title}</strong><small>{milestone.dueDate ? formatDate(milestone.dueDate) : 'Ohne Termin'}{isOverdue(milestone) ? ' · Überfällig' : milestoneTiming(milestone, tasks.length - done)}</small></span><span>{tasks.length ? `${done} / ${tasks.length} Aufgaben erledigt` : 'Noch keine Aufgaben'}</span></button><StatusBadge status={milestone.status} label={milestoneStatus[milestone.status]}/><div className="milestone-actions"><button disabled={!canUp} onClick={() => onMove(-1)} aria-label="Nach oben">↑</button><button disabled={!canDown} onClick={() => onMove(1)} aria-label="Nach unten">↓</button><button onClick={onEdit}>Bearbeiten</button></div></div>
 }
 
-function TaskOverview({ title, tasks, projects, afns, onOpen }: { title: string; tasks: ProjectTask[]; projects: Project[]; afns: { taskId: string; afnNumber: number }[]; onOpen: (id: string) => void }) {
+function TaskOverview({ title, tasks, projects, afns, onOpen }: { title: string; tasks: ProjectTask[]; projects: Project[]; afns: { taskId: string; afnNumber: number }[]; onOpen: (projectId: string, taskId: string) => void }) {
   return <section className="project-section overview-task-section"><h2>{title}</h2>{tasks.length === 0 ? <p className="empty">Hier ist gerade nichts offen.</p> : <div className="overview-task-list">{tasks.map((task) => {
     const project = projects.find((item) => item.id === task.projectId)
     const taskAfns = afns.filter((afn) => afn.taskId === task.id)
-    return <ProjectTaskRow key={task.id} task={task} project={project} afns={taskAfns.map((afn) => afn.afnNumber)} onOpen={() => onOpen(task.projectId)}/>
+    return <ProjectTaskRow key={task.id} task={task} project={project} afns={taskAfns.map((afn) => afn.afnNumber)} onOpen={() => onOpen(task.projectId, task.id)}/>
   })}</div>}</section>
 }
 
@@ -132,9 +135,9 @@ function ProjectTaskRow({ task, project, afns, onOpen }: { task: ProjectTask; pr
   </div>
 }
 
-function ProjectDetail({ project, tasks, milestones, afns, profiles, members, userId, userEmail, filter, setFilter, onBack }: { project: Project; tasks: ProjectTask[]; milestones: ProjectMilestone[]; afns: { taskId: string; afnNumber: number }[]; profiles: UserProfile[]; members: ProjectMember[]; userId: string; userEmail?: string; filter: TaskFilter; setFilter: (value: TaskFilter) => void; onBack: () => void }) {
+function ProjectDetail({ project, tasks, milestones, afns, comments, profiles, members, userId, userEmail, filter, setFilter, initialTaskId, onBack }: { project: Project; tasks: ProjectTask[]; milestones: ProjectMilestone[]; afns: { taskId: string; afnNumber: number }[]; comments: ProjectTaskComment[]; profiles: UserProfile[]; members: ProjectMember[]; userId: string; userEmail?: string; filter: TaskFilter; setFilter: (value: TaskFilter) => void; initialTaskId?: string; onBack: () => void }) {
   const [editingProject, setEditingProject] = useState(false)
-  const [editingTask, setEditingTask] = useState<ProjectTask | 'new' | null>(null)
+  const [editingTask, setEditingTask] = useState<ProjectTask | 'new' | null>(() => tasks.find((task) => task.id === initialTaskId) ?? null)
   const [editingMilestone, setEditingMilestone] = useState<ProjectMilestone | 'new' | null>(null)
   const [openedMilestoneId, setOpenedMilestoneId] = useState<string | null>(null)
   const [taskMilestonePreset, setTaskMilestonePreset] = useState<string | undefined>()
@@ -179,6 +182,7 @@ function ProjectDetail({ project, tasks, milestones, afns, profiles, members, us
       <TaskEditDialog projectId={project.id} task={editingTask === 'new' ? undefined : editingTask} milestones={milestones} milestonePreset={taskMilestonePreset}
         profiles={profiles} memberIds={teamIds} userId={userId} userEmail={userEmail}
         afns={editingTask === 'new' ? [] : afns.filter((afn) => afn.taskId === editingTask.id).map((afn) => afn.afnNumber)}
+        comments={editingTask === 'new' ? [] : comments.filter((comment) => comment.taskId === editingTask.id)}
         onClose={() => setEditingTask(null)}/>
     )}
     {editingMilestone && <MilestoneEditDialog projectId={project.id} milestone={editingMilestone === 'new' ? undefined : editingMilestone} onClose={() => setEditingMilestone(null)}/>}
@@ -241,7 +245,7 @@ function MilestoneDetailDialog({ milestone, tasks, onTask, onAddTask, onClose }:
   return <DialogShell title={milestone.title} subtitle="Meilenstein" onClose={onClose}><div className="milestone-detail"><p>{milestone.description || 'Keine Beschreibung hinterlegt.'}</p><div className="milestone-detail-meta"><span>{milestone.dueDate ? formatDate(milestone.dueDate) : 'Ohne Datum'}</span><StatusBadge status={milestone.status} label={milestoneStatus[milestone.status]}/></div><strong>{tasks.length ? `${done} von ${tasks.length} Aufgaben erledigt` : 'Noch keine Aufgaben'}</strong>{tasks.length > 0 && <div className="milestone-progress"><i style={{width: `${done / tasks.length * 100}%`}}/></div>}<div className="milestone-task-list">{tasks.map((task) => <button key={task.id} onClick={() => onTask(task)}><span>{task.status === 'completed' ? '✓' : '○'}</span>{task.title}</button>)}</div><button className="primary compact" onClick={onAddTask}>+ Aufgabe</button></div></DialogShell>
 }
 
-function TaskEditDialog({ projectId, task, milestones, milestonePreset, afns, profiles, memberIds, userId, userEmail, onClose }: { projectId: string; task?: ProjectTask; milestones: ProjectMilestone[]; milestonePreset?: string; afns: number[]; profiles: UserProfile[]; memberIds: string[]; userId: string; userEmail?: string; onClose: () => void }) {
+function TaskEditDialog({ projectId, task, milestones, milestonePreset, afns, comments, profiles, memberIds, userId, userEmail, onClose }: { projectId: string; task?: ProjectTask; milestones: ProjectMilestone[]; milestonePreset?: string; afns: number[]; comments: ProjectTaskComment[]; profiles: UserProfile[]; memberIds: string[]; userId: string; userEmail?: string; onClose: () => void }) {
   const [title, setTitle] = useState(task?.title ?? '')
   const [description, setDescription] = useState(task?.description ?? '')
   const [status, setStatus] = useState<ProjectTaskStatus>(task?.status ?? 'open')
@@ -250,6 +254,9 @@ function TaskEditDialog({ projectId, task, milestones, milestonePreset, afns, pr
   const [waitingFor, setWaitingFor] = useState<ProjectWaitingFor | undefined>(task?.waitingFor)
   const [milestoneId, setMilestoneId] = useState(task?.milestoneId ?? milestonePreset ?? '')
   const [afnText, setAfnText] = useState(afns.join(', '))
+  const [commentText, setCommentText] = useState('')
+  const [commentSaving, setCommentSaving] = useState(false)
+  const [commentError, setCommentError] = useState('')
 
   async function save(event: FormEvent) {
     event.preventDefault()
@@ -258,6 +265,21 @@ function TaskEditDialog({ projectId, task, milestones, milestonePreset, afns, pr
     await updateProjectTask(id, { title: title.trim(), description: description.trim() || undefined, status, dueDate, milestoneId: milestoneId || undefined, assigneeUserId: assigneeUserId || undefined, waitingFor: status === 'waiting' ? waitingFor : undefined })
     await replaceProjectTaskAfns(id, parseAfns(afnText))
     onClose()
+  }
+
+  async function addComment() {
+    if (!task || !commentText.trim() || commentSaving) return
+    setCommentSaving(true)
+    setCommentError('')
+    try {
+      await createProjectTaskComment(task.id, userId, commentText)
+      await syncAll()
+      setCommentText('')
+    } catch (error) {
+      setCommentError(error instanceof Error ? error.message : 'Kommentar konnte nicht synchronisiert werden.')
+    } finally {
+      setCommentSaving(false)
+    }
   }
 
   return <DialogShell title={task ? 'Aufgabe bearbeiten' : 'Neue Aufgabe'} subtitle="Projektaufgabe" onClose={onClose}>
@@ -272,6 +294,15 @@ function TaskEditDialog({ projectId, task, milestones, milestonePreset, afns, pr
         {status === 'waiting' && <FormField label="Wartet auf"><select value={waitingFor ?? ''} onChange={(event) => setWaitingFor((event.target.value || undefined) as ProjectWaitingFor | undefined)}><option value="">Bitte wählen</option>{waitingOptions.map((value) => <option key={value}>{value}</option>)}</select></FormField>}
         <FormField label="AFN-Nummern" wide><input value={afnText} onChange={(event) => setAfnText(event.target.value)} inputMode="numeric" placeholder="181657, 181658"/><small>Mehrere Nummern mit Komma trennen.</small></FormField>
       </div>
+      {task && <section className="task-comments">
+        <h3>Kommentare</h3>
+        <div className="task-comment-list">{comments.length === 0 ? <p className="empty">Noch keine Kommentare.</p> : [...comments].sort((a, b) => a.createdAt - b.createdAt).map((comment) => {
+          const author = profileName(comment.authorUserId, profiles, userId, userEmail)
+          return <article key={comment.id} className="task-comment"><header><strong>{personInitials(author)}</strong><span>{author}</span><time>{formatDateTime(comment.createdAt)}</time></header><p>{comment.body}</p></article>
+        })}</div>
+        <div className="task-comment-compose"><textarea value={commentText} onChange={(event) => setCommentText(event.target.value)} rows={2} placeholder="Kommentar schreiben…"/><button type="button" className="primary" disabled={!commentText.trim() || commentSaving} onClick={addComment}>{commentSaving ? 'Wird gesendet…' : 'Abschicken'}</button></div>
+        {commentError && <p className="task-comment-error">{commentError}</p>}
+      </section>}
       <div className="dialog-actions">{task ? <button type="button" className="danger-action" onClick={async () => { if (confirm('Aufgabe löschen?')) { await deleteProjectTask(task.id); onClose() } }}>Aufgabe löschen</button> : <span/>}<span/><button type="button" className="secondary-action" onClick={onClose}>Abbrechen</button><button className="primary" disabled={!title.trim()}>Speichern</button></div>
     </form>
   </DialogShell>
@@ -326,6 +357,7 @@ function personInitials(name: string) {
 }
 
 function formatDate(value: number) { return new Date(value).toLocaleDateString('de-DE') }
+function formatDateTime(value: number) { return new Date(value).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) }
 function formatRange(start?: number, target?: number) {
   if (!start && !target) return 'Noch nicht festgelegt'
   return `${start ? formatDate(start) : 'Offen'} → ${target ? formatDate(target) : 'Offen'}`

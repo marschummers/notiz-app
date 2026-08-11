@@ -286,6 +286,16 @@ export interface ProjectTaskAfn {
   deletedAt?: number
 }
 
+export interface ProjectTaskComment {
+  id: string
+  taskId: string
+  authorUserId: string
+  body: string
+  createdAt: number
+  updatedAt: number
+  deletedAt?: number
+}
+
 export interface ProjectMember {
   id: string
   projectId: string

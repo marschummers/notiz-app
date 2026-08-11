@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie'
-import type { Folder, Page, Tag, PageTag, Task, TextBlock, Template, PdfPrintout, PdfBlobCache, Project, ProjectTask, ProjectTaskAfn, ProjectMilestone, ProjectMember, UserProfile } from './types'
+import type { Folder, Page, Tag, PageTag, Task, TextBlock, Template, PdfPrintout, PdfBlobCache, Project, ProjectTask, ProjectTaskAfn, ProjectTaskComment, ProjectMilestone, ProjectMember, UserProfile } from './types'
 
 export const db = new Dexie('notiz-app') as Dexie & {
   folders: EntityTable<Folder, 'id'>
@@ -15,6 +15,7 @@ export const db = new Dexie('notiz-app') as Dexie & {
   projectTasks: EntityTable<ProjectTask, 'id'>
   projectMilestones: EntityTable<ProjectMilestone, 'id'>
   projectTaskAfns: EntityTable<ProjectTaskAfn, 'id'>
+  projectTaskComments: EntityTable<ProjectTaskComment, 'id'>
   projectMembers: EntityTable<ProjectMember, 'id'>
   userProfiles: EntityTable<UserProfile, 'id'>
 }
@@ -67,6 +68,10 @@ db.version(7).stores({
 
 db.version(8).stores({
   projectMembers: 'id, projectId, userId, [projectId+userId], role, updatedAt',
+})
+
+db.version(9).stores({
+  projectTaskComments: 'id, taskId, authorUserId, createdAt, updatedAt',
 })
 
 export function newId(): string {
