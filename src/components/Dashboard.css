@@ -114,6 +114,107 @@
   font-size: 13px;
 }
 
+.dashboard-project-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(90px, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.dashboard-project-metrics > div {
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+}
+
+.dashboard-project-metrics strong,
+.dashboard-project-metrics span {
+  display: block;
+}
+
+.dashboard-project-metrics strong {
+  font-size: 20px;
+}
+
+.dashboard-project-metrics span {
+  margin-top: 2px;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.dashboard-project-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(240px, .75fr);
+  gap: 22px;
+}
+
+.dashboard-project-columns h3 {
+  margin: 0 0 6px;
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.dashboard-project-task,
+.dashboard-active-project {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 2px;
+  border: 0;
+  border-top: 1px solid var(--border-soft);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.dashboard-project-task-main {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.dashboard-project-task-main small {
+  flex-shrink: 0;
+  color: var(--accent-strong);
+}
+
+.dashboard-project-task-main strong,
+.dashboard-active-project strong {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-project-task-meta,
+.dashboard-active-project > span:last-child,
+.dashboard-active-project small {
+  flex-shrink: 0;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.dashboard-active-project > span:first-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.dashboard-project-task:hover strong,
+.dashboard-active-project:hover strong {
+  color: var(--accent-strong);
+}
+
 .dashboard-task-list,
 .dashboard-page-list {
   display: flex;
@@ -229,6 +330,10 @@
   .dashboard-wide-section {
     grid-column: auto;
   }
+
+  .dashboard-project-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 480px) {
@@ -245,6 +350,17 @@
     align-items: flex-start;
     flex-direction: column;
     gap: 4px;
+  }
+
+
+  .dashboard-project-metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .dashboard-project-task {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
   }
 }
 
