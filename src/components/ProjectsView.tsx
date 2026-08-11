@@ -58,11 +58,11 @@ export default function ProjectsView({ userId, userEmail, navigation, onNavigate
     <nav className="project-tabs"><button className={effectiveSection === 'dashboard' ? 'active' : ''} onClick={() => { setSection('dashboard'); onNavigate({ type: 'overview' }) }}>Übersicht</button><button className={effectiveSection === 'projects' ? 'active' : ''} onClick={() => { setSection('projects'); onNavigate({ type: 'overview' }) }}>Projekte</button></nav>
     {effectiveSection === 'dashboard' ? <>
       <div className="project-metrics"><Metric label="Aktive Projekte" value={activeProjects.length}/><Metric label="Meine offenen Aufgaben" value={mine.length}/><Metric label="Wartet auf andere" value={mine.filter((task) => task.status === 'waiting').length}/><Metric label="Meilensteine in 30 Tagen" value={milestones.filter((m) => m.status !== 'completed' && m.dueDate && m.dueDate >= today.getTime() && m.dueDate <= today.getTime() + 30 * 86400000).length}/></div>
-      <UpcomingMilestones milestones={milestones} tasks={tasks} projects={projects} onOpen={(id) => onNavigate({ type: 'project', id })}/>
+      <UpcomingMilestones milestones={milestones} tasks={tasks} projects={projects} onOpen={(projectId, taskId) => onNavigate({ type: 'project', id: projectId, taskId })}/>
       <TaskOverview title="Heute fällig" tasks={dueToday} projects={projects} afns={afns} onOpen={(projectId, taskId) => onNavigate({ type: 'project', id: projectId, taskId })}/>
       <TaskOverview title="Ohne Fälligkeitsdatum" tasks={withoutDueDate} projects={projects} afns={afns} onOpen={(projectId, taskId) => onNavigate({ type: 'project', id: projectId, taskId })}/>
       {otherDueTasks.length > 0 && <div className="task-overview-toolbar"><button className="secondary-action other-tasks-toggle" onClick={() => setShowOtherDueTasks((value) => !value)}>{showOtherDueTasks ? 'Andere Termine ausblenden' : `Andere Termine anzeigen (${otherDueTasks.length})`}</button></div>}
-      {showOtherDueTasks && <TaskOverview title="Andere Termine" tasks={otherDueTasks} projects={projects} afns={afns} onOpen={(projectId, taskId) => onNavigate({ type: 'project', id: projectId, taskId })}/>} 
+      {showOtherDueTasks && <TaskOverview title="Andere Termine" tasks={otherDueTasks} projects={projects} afns={afns} onOpen={(projectId, taskId) => onNavigate({ type: 'project', id: projectId, taskId })}/>}
     </> : <>
       <div className="project-list-tools"><input className="project-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Projekte durchsuchen…" />{navigation.type !== 'status' && <button onClick={() => setShowClosed((value) => !value)}>{showClosed ? 'Nur laufende' : 'Abgeschlossene & Archiv'}</button>}</div>
       <div className="project-list">{listProjects.filter((project) => projectDisplayName(project).toLowerCase().includes(search.toLowerCase())).map((project) => <button key={project.id} className="project-card" onClick={() => onNavigate({ type: 'project', id: project.id })}><strong>{projectDisplayName(project)}</strong><StatusBadge status={project.status} label={projectStatus[project.status]}/></button>)}</div>
@@ -158,7 +158,19 @@ function ProjectDetail({ project, tasks, milestones, afns, comments, profiles, m
           <h1><span>{projectCustomer(project)}</span>{projectShortName(project) && <><i> | </i>{projectShortName(project)}</>}</h1>
           <p><span>Verantwortlich: {personInitials(ownerName)}</span><span>Team: {teamIds.map((id) => personInitials(profileName(id, profiles, userId, userEmail))).join(', ')}</span><span>Zeitraum: {formatRange(project.startDate, project.targetDate)}</span></p>
         </div>
-        <div className="project-header-actions"><button className="secondary-action compact" onClick={() => setEditingProject(true)}>Projekt bearbeiten</button><button className="secondary-action compact" on…460 tokens truncated…Name="project-milestones-section">
+        <div className="project-header-actions"><button className="secondary-action compact" onClick={() => setEditingProject(true)}>Projekt bearbeiten</button><button className="secondary-action compact" onClick={() => setEditingTeam(true)}>Team bearbeiten</button><StatusBadge status={project.status} label={projectStatus[project.status]}/></div>
+      </header>
+
+      {nextMilestone && <NextMilestone milestone={nextMilestone} tasks={tasks} onOpen={() => setOpenedMilestoneId(nextMilestone.id)}/>}
+
+      <section className="project-tasks-section">
+        <div className="project-tasks-heading"><div><p className="projects-eyebrow">Projektarbeit</p><h2>Aufgaben</h2></div><button className="primary compact" onClick={() => { setTaskMilestonePreset(undefined); setEditingTask('new') }}>+ Aufgabe</button></div>
+        <div className="task-filter-bar" aria-label="Aufgaben filtern">{taskFilters.map((value) => <button key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}><span>{value === 'all' ? 'Alle' : taskStatus[value]}</span><strong>{counts[value]}</strong></button>)}</div>
+        <label className="assignee-filter">Verantwortlich<select value={assigneeFilter} onChange={(event) => setAssigneeFilter(event.target.value)}><option value="all">Alle</option><option value={userId}>Meine</option>{teamProfiles.filter((profile) => profile.id !== userId).map((profile) => <option key={profile.id} value={profile.id}>{profile.displayName || profile.email}</option>)}</select></label>
+        <div className="overview-task-list project-detail-task-list">{visibleTasks.length === 0 ? <div className="project-empty-state"><strong>Keine Aufgaben in diesem Filter</strong><span>Über „+ Aufgabe“ kannst du eine neue Projektaufgabe anlegen.</span></div> : visibleTasks.map((task) => <ProjectTaskRow key={task.id} project={project} task={task} afns={afns.filter((afn) => afn.taskId === task.id).map((afn) => afn.afnNumber)} onOpen={() => setEditingTask(task)}/>)}</div>
+      </section>
+
+      <section className="project-milestones-section">
         <div className="project-tasks-heading"><div><p className="projects-eyebrow">Planung</p><h2>Meilensteine</h2></div><button className="primary compact" onClick={() => setEditingMilestone('new')}>+ Meilenstein</button></div>
         <div className="milestone-list">{milestones.length === 0 ? <div className="project-empty-state"><strong>Noch keine Meilensteine</strong><span>Lege den ersten wichtigen Projekttermin an.</span></div> : [...milestones].sort((a,b) => a.sortOrder - b.sortOrder).map((milestone, index, ordered) => <MilestoneRow key={milestone.id} milestone={milestone} tasks={tasks.filter((task) => task.milestoneId === milestone.id)} onOpen={() => setOpenedMilestoneId(milestone.id)} onEdit={() => setEditingMilestone(milestone)} onMove={(direction) => moveProjectMilestone(milestone.id, direction)} canUp={index > 0} canDown={index < ordered.length - 1}/>)}</div>
       </section>
@@ -312,7 +324,6 @@ function TeamEditDialog({ project, members, profiles, userId, userEmail, onClose
     await setProjectTeam(project.id, ownerId, [...selected, ownerId])
     onClose()
   }
-
   return <DialogShell title="Team bearbeiten" subtitle={projectDisplayName(project)} onClose={onClose}><form className="project-dialog-form" onSubmit={save}>
     <div className="dialog-form-grid"><FormField label="Hauptverantwortlich" wide><select value={ownerId} onChange={(event) => { setOwnerId(event.target.value); setSelected(new Set([...selected, event.target.value])) }}>{profileOptions(values, userId, userEmail)}</select></FormField></div>
     <div className="team-member-list">{values.map((profile) => <label key={profile.id}><input type="checkbox" checked={selected.has(profile.id)} disabled={profile.id === ownerId} onChange={() => toggle(profile.id)}/><span>{profile.displayName || profile.email}</span>{profile.id === ownerId && <small>Verantwortlich</small>}</label>)}</div>
