@@ -15,8 +15,8 @@ export default defineConfig({
         name: 'Notiz App',
         short_name: 'Notiz App',
         description: 'Handschriftliche Notizen mit Apple Pencil, Ordnerstruktur und Tags',
-        theme_color: '#17140f',
-        background_color: '#17140f',
+        theme_color: '#11151f',
+        background_color: '#11151f',
         display: 'standalone',
         start_url: '/notiz-app/',
         scope: '/notiz-app/',
@@ -43,3 +43,4 @@ export default defineConfig({
     }),
   ],
 })
+
