@@ -182,17 +182,24 @@ export async function syncAll(): Promise<void> {
 
   // Minimales gemeinsames Benutzerverzeichnis fuer Verantwortliche. Auth bleibt die einzige
   // Identitaetsquelle; lokal werden nur Anzeigename/E-Mail fuer Offline-Darstellung gecacht.
-  const profileNow = new Date().toISOString()
   const metadataDisplayName = typeof userData.user.user_metadata?.full_name === 'string'
     ? userData.user.user_metadata.full_name.trim()
     : ''
-  const { error: profileError } = await client.from('notiz_profiles').upsert({
-    id: userId,
-    email: userData.user.email ?? '',
-    // Ein bestehender Anzeigename darf nicht durch leere Auth-Metadaten geloescht werden.
-    ...(metadataDisplayName ? { display_name: metadataDisplayName } : {}),
-    updated_at: profileNow,
+  let { error: profileError } = await client.rpc('notiz_update_own_profile', {
+    p_email: userData.user.email ?? '',
+    p_display_name: metadataDisplayName,
   })
+  // Sicheres Zwischenstadium, falls Frontend-Deploy und SQL-Migration nicht exakt gleichzeitig
+  // aktiv werden. Nach der Migration existiert die RPC immer und nur dieser Pfad wird genutzt.
+  if (profileError?.code === 'PGRST202') {
+    const fallback = await client.from('notiz_profiles').upsert({
+      id: userId,
+      email: userData.user.email ?? '',
+      ...(metadataDisplayName ? { display_name: metadataDisplayName } : {}),
+      updated_at: new Date().toISOString(),
+    })
+    profileError = fallback.error
+  }
   if (profileError) throw new Error(`notiz_profiles: ${profileError.message}`)
   const { data: profiles, error: profilesError } = await client.from('notiz_profiles').select('*')
   if (profilesError) throw new Error(`notiz_profiles: ${profilesError.message}`)
@@ -456,12 +463,19 @@ export async function updateOwnDisplayName(displayName: string): Promise<void> {
   if (metadataError) throw new Error(`Benutzername: ${metadataError.message}`)
 
   const updatedAt = Date.now()
-  const { error: profileError } = await supabase.from('notiz_profiles').upsert({
-    id: userData.user.id,
-    email: userData.user.email ?? '',
-    display_name: trimmed,
-    updated_at: new Date(updatedAt).toISOString(),
+  let { error: profileError } = await supabase.rpc('notiz_update_own_profile', {
+    p_email: userData.user.email ?? '',
+    p_display_name: trimmed,
   })
+  if (profileError?.code === 'PGRST202') {
+    const fallback = await supabase.from('notiz_profiles').upsert({
+      id: userData.user.id,
+      email: userData.user.email ?? '',
+      display_name: trimmed,
+      updated_at: new Date(updatedAt).toISOString(),
+    })
+    profileError = fallback.error
+  }
   if (profileError) throw new Error(`notiz_profiles: ${profileError.message}`)
 
   await db.userProfiles.put({

@@ -7,6 +7,7 @@ import type { Selection } from '../lib/selection'
 import FolderTree from './FolderTree'
 import BrandLogo from './BrandLogo'
 import type { AppTheme } from '../lib/theme'
+import { ADMIN_EMAIL } from '../lib/auth'
 import './Sidebar.css'
 
 interface Props {
@@ -14,7 +15,7 @@ interface Props {
   width: number
   resizing: boolean
   selection: Selection
-  activeView: 'start' | 'notes' | 'projects' | 'tasks' | 'search' | 'all-notes'
+  activeView: 'start' | 'notes' | 'projects' | 'tasks' | 'search' | 'all-notes' | 'access'
   onSelect: (s: Selection) => void
   onSelectStart: () => void
   onSelectNotes: () => void
@@ -22,6 +23,7 @@ interface Props {
   onSelectTasks: () => void
   onSelectSearch: () => void
   onSelectAllNotes: () => void
+  onSelectAccess: () => void
   onSelectFavorite: (pageId: string) => void
   onSync: () => void
   syncing: boolean
@@ -47,6 +49,7 @@ export default function Sidebar({
   onSelectTasks,
   onSelectSearch,
   onSelectAllNotes,
+  onSelectAccess,
   onSelectFavorite,
   onSync,
   syncing,
@@ -121,6 +124,11 @@ export default function Sidebar({
         <div className={`tree-row${activeView === 'all-notes' ? ' selected' : ''}`} onClick={onSelectAllNotes}>
           <span className="tree-label">🗂️ Alle Notizen</span>
         </div>
+        {userEmail === ADMIN_EMAIL && (
+          <div className={`tree-row${activeView === 'access' ? ' selected' : ''}`} onClick={onSelectAccess}>
+            <span className="tree-label">♙ Zugänge</span>
+          </div>
+        )}
       </div>
 
       {!!favorites?.length && (

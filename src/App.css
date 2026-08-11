@@ -10,6 +10,48 @@
   color: var(--text-dim);
 }
 
+.access-waiting-screen {
+  display: grid;
+  min-height: 100dvh;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg);
+}
+
+.access-waiting-card {
+  display: grid;
+  width: min(520px, 100%);
+  gap: 14px;
+  padding: 30px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-card);
+}
+
+.access-waiting-card h1,
+.access-waiting-card p {
+  margin: 0;
+}
+
+.access-waiting-card > p:not(.access-waiting-eyebrow) {
+  margin-bottom: 8px;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+.access-waiting-eyebrow {
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.access-waiting-card button {
+  min-height: 42px;
+}
+
 /* Wird von den Diagnose-Testseiten unter /tests global mitgenutzt (siehe src/pages/tests.css) -
    dort nicht erneut definiert, da CSS-Importe in diesem Projekt global statt komponenten-
    gescoped sind. */
@@ -25,3 +67,4 @@
   color: #7ee787;
   border-top: 1px solid #2e303a;
 }
+
