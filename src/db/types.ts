@@ -229,3 +229,52 @@ export interface PdfBlobCache {
   cachedAt: number
 }
 
+export type ProjectStatus = 'active' | 'waiting' | 'completed' | 'archived'
+export type ProjectTaskStatus = 'open' | 'in_progress' | 'waiting' | 'completed'
+export type ProjectWaitingFor = 'Kunde' | 'Entwicklung' | 'Support' | 'Vertrieb' | 'Extern' | 'Sonstige'
+
+export interface Project {
+  id: string
+  name: string
+  customerName?: string
+  ownerUserId: string
+  status: ProjectStatus
+  startDate?: number
+  targetDate?: number
+  description?: string
+  createdAt: number
+  updatedAt: number
+  deletedAt?: number
+}
+
+export interface ProjectTask {
+  id: string
+  projectId: string
+  title: string
+  description?: string
+  assigneeUserId?: string
+  status: ProjectTaskStatus
+  dueDate?: number
+  waitingFor?: ProjectWaitingFor
+  sortOrder: number
+  createdAt: number
+  updatedAt: number
+  deletedAt?: number
+}
+
+export interface ProjectTaskAfn {
+  id: string
+  taskId: string
+  afnNumber: number
+  updatedAt: number
+  deletedAt?: number
+}
+
+export interface UserProfile {
+  id: string
+  email: string
+  displayName?: string
+  updatedAt: number
+}
+
+
