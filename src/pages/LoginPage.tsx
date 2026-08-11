@@ -1,9 +1,12 @@
 import { useState } from 'react'
 import { useAuth } from '../lib/auth'
+import { useTheme } from '../lib/theme'
+import BrandLogo from '../components/BrandLogo'
 import './LoginPage.css'
 
 export default function LoginPage() {
   const { signInWithOtp, verifyOtp } = useAuth()
+  const { theme, toggleTheme } = useTheme()
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -47,6 +50,8 @@ export default function LoginPage() {
 
   return (
     <div className="login-screen">
+      <button className="login-theme-switch" onClick={toggleTheme}>Design: {theme === 'winweb' ? 'Winweb' : 'Kupfer'}</button>
+      <BrandLogo compact />
       <h1>Notiz App</h1>
       <div className="login-panel">
         {sent ? (
@@ -111,3 +116,4 @@ export default function LoginPage() {
     </div>
   )
 }
+
