@@ -12,10 +12,11 @@ interface Props {
   width: number
   resizing: boolean
   selection: Selection
-  activeView: 'start' | 'notes' | 'tasks' | 'search' | 'all-notes'
+  activeView: 'start' | 'notes' | 'projects' | 'tasks' | 'search' | 'all-notes'
   onSelect: (s: Selection) => void
   onSelectStart: () => void
   onSelectNotes: () => void
+  onSelectProjects: () => void
   onSelectTasks: () => void
   onSelectSearch: () => void
   onSelectAllNotes: () => void
@@ -36,6 +37,7 @@ export default function Sidebar({
   onSelect,
   onSelectStart,
   onSelectNotes,
+  onSelectProjects,
   onSelectTasks,
   onSelectSearch,
   onSelectAllNotes,
@@ -89,6 +91,9 @@ export default function Sidebar({
         </div>
         <div className={`tree-row main-nav-row${activeView === 'notes' ? ' selected' : ''}`} onClick={onSelectNotes}>
           <span className="tree-label">▤ Notizen</span>
+        </div>
+        <div className={`tree-row main-nav-row${activeView === 'projects' ? ' selected' : ''}`} onClick={onSelectProjects}>
+          <span className="tree-label">▦ Projekte</span>
         </div>
       </div>
 
