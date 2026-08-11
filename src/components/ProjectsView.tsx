@@ -28,11 +28,16 @@ export default function ProjectsView({ userId, userEmail, navigation, onNavigate
   const [search, setSearch] = useState('')
   const [showClosed, setShowClosed] = useState(false)
   const [taskFilter, setTaskFilter] = useState<TaskFilter>('all')
+  const [showOtherDueTasks, setShowOtherDueTasks] = useState(false)
   const selected = navigation.type === 'project' ? projects.find((project) => project.id === navigation.id) : undefined
   const activeProjects = projects.filter((project) => project.status === 'active' || project.status === 'waiting')
   const mine = tasks.filter((task) => task.assigneeUserId === userId && task.status !== 'completed')
   const today = new Date(); today.setHours(0, 0, 0, 0)
+  const tomorrow = today.getTime() + 86400000
   const sortedMine = [...mine].sort((a, b) => (a.dueDate ?? Infinity) - (b.dueDate ?? Infinity))
+  const dueToday = sortedMine.filter((task) => task.dueDate && task.dueDate >= today.getTime() && task.dueDate < tomorrow)
+  const withoutDueDate = sortedMine.filter((task) => !task.dueDate)
+  const otherDueTasks = sortedMine.filter((task) => task.dueDate && (task.dueDate < today.getTime() || task.dueDate >= tomorrow))
 
   if (selected) {
     return <ProjectDetail project={selected} tasks={tasks.filter((task) => task.projectId === selected.id)} milestones={milestones.filter((milestone) => milestone.projectId === selected.id)} afns={afns}
@@ -51,8 +56,10 @@ export default function ProjectsView({ userId, userEmail, navigation, onNavigate
     {effectiveSection === 'dashboard' ? <>
       <div className="project-metrics"><Metric label="Aktive Projekte" value={activeProjects.length}/><Metric label="Meine offenen Aufgaben" value={mine.length}/><Metric label="Wartet auf andere" value={mine.filter((task) => task.status === 'waiting').length}/><Metric label="Meilensteine in 30 Tagen" value={milestones.filter((m) => m.status !== 'completed' && m.dueDate && m.dueDate >= today.getTime() && m.dueDate <= today.getTime() + 30 * 86400000).length}/></div>
       <UpcomingMilestones milestones={milestones} tasks={tasks} projects={projects} onOpen={(id) => onNavigate({ type: 'project', id })}/>
-      <TaskOverview title="Meine offenen Aufgaben" tasks={sortedMine} projects={projects} afns={afns} onOpen={(id) => onNavigate({ type: 'project', id })}/>
-      <TaskOverview title="Wartet auf andere" tasks={sortedMine.filter((task) => task.status === 'waiting')} projects={projects} afns={afns} onOpen={(id) => onNavigate({ type: 'project', id })}/>
+      <TaskOverview title="Heute fällig" tasks={dueToday} projects={projects} afns={afns} onOpen={(id) => onNavigate({ type: 'project', id })}/>
+      <TaskOverview title="Ohne Fälligkeitsdatum" tasks={withoutDueDate} projects={projects} afns={afns} onOpen={(id) => onNavigate({ type: 'project', id })}/>
+      <button className="secondary-action other-tasks-toggle" onClick={() => setShowOtherDueTasks((value) => !value)}>{showOtherDueTasks ? 'Andere Termine ausblenden' : `Andere Termine anzeigen (${otherDueTasks.length})`}</button>
+      {showOtherDueTasks && <TaskOverview title="Andere Termine" tasks={otherDueTasks} projects={projects} afns={afns} onOpen={(id) => onNavigate({ type: 'project', id })}/>}
     </> : <>
       <div className="project-list-tools"><input className="project-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Projekte durchsuchen…" />{navigation.type !== 'status' && <button onClick={() => setShowClosed((value) => !value)}>{showClosed ? 'Nur laufende' : 'Abgeschlossene & Archiv'}</button>}</div>
       <div className="project-list">{listProjects.filter((project) => projectDisplayName(project).toLowerCase().includes(search.toLowerCase())).map((project) => <button key={project.id} className="project-card" onClick={() => onNavigate({ type: 'project', id: project.id })}><strong>{projectDisplayName(project)}</strong><StatusBadge status={project.status} label={projectStatus[project.status]}/></button>)}</div>
@@ -108,19 +115,21 @@ function TaskOverview({ title, tasks, projects, afns, onOpen }: { title: string;
   return <section className="project-section overview-task-section"><h2>{title}</h2>{tasks.length === 0 ? <p className="empty">Hier ist gerade nichts offen.</p> : <div className="overview-task-list">{tasks.map((task) => {
     const project = projects.find((item) => item.id === task.projectId)
     const taskAfns = afns.filter((afn) => afn.taskId === task.id)
-    return <div className="overview-task-row" key={task.id}>
-      <button className="overview-task-main" onClick={() => onOpen(task.projectId)}>
-        {project && <span className="overview-customer">[{projectCustomer(project)}]</span>}
-        {project && projectShortName(project) && <span className="overview-project">{projectShortName(project)}</span>}
-        <span className="overview-task-title">{task.title}</span>
-        {taskAfns.length > 0 && <span className="overview-afns">{taskAfns.map((afn) => `AFN ${afn.afnNumber}`).join(', ')}</span>}
-      </button>
-      <label className="overview-due-date" aria-label={`Termin für ${task.title}`}>
-        <BufferedDateInput value={task.dueDate} onSave={(dueDate) => updateProjectTask(task.id, { dueDate })}/>
-      </label>
-      <StatusBadge status={task.status} label={taskStatus[task.status]}/>
-    </div>
+    return <ProjectTaskRow key={task.id} task={task} project={project} afns={taskAfns.map((afn) => afn.afnNumber)} onOpen={() => onOpen(task.projectId)}/>
   })}</div>}</section>
+}
+
+function ProjectTaskRow({ task, project, afns, onOpen }: { task: ProjectTask; project?: Project; afns: number[]; onOpen: () => void }) {
+  return <div className="overview-task-row">
+    <button className="overview-task-main" onClick={onOpen}>
+      {project && <span className="overview-customer">[{projectCustomer(project)}]</span>}
+      {project && projectShortName(project) && <span className="overview-project">{projectShortName(project)}</span>}
+      <span className="overview-task-title">{task.title}</span>
+      {afns.length > 0 && <span className="overview-afns">{afns.map((afn) => `AFN ${afn}`).join(', ')}</span>}
+    </button>
+    <label className="overview-due-date" aria-label={`Termin für ${task.title}`}><BufferedDateInput value={task.dueDate} onSave={(dueDate) => updateProjectTask(task.id, { dueDate })}/></label>
+    <StatusBadge status={task.status} label={taskStatus[task.status]}/>
+  </div>
 }
 
 function ProjectDetail({ project, tasks, milestones, afns, profiles, members, userId, userEmail, filter, setFilter, onBack }: { project: Project; tasks: ProjectTask[]; milestones: ProjectMilestone[]; afns: { taskId: string; afnNumber: number }[]; profiles: UserProfile[]; members: ProjectMember[]; userId: string; userEmail?: string; filter: TaskFilter; setFilter: (value: TaskFilter) => void; onBack: () => void }) {
@@ -155,7 +164,7 @@ function ProjectDetail({ project, tasks, milestones, afns, profiles, members, us
         <div className="project-tasks-heading"><div><p className="projects-eyebrow">Projektarbeit</p><h2>Aufgaben</h2></div><button className="primary compact" onClick={() => { setTaskMilestonePreset(undefined); setEditingTask('new') }}>+ Aufgabe</button></div>
         <div className="task-filter-bar" aria-label="Aufgaben filtern">{taskFilters.map((value) => <button key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}><span>{value === 'all' ? 'Alle' : taskStatus[value]}</span><strong>{counts[value]}</strong></button>)}</div>
         <label className="assignee-filter">Verantwortlich<select value={assigneeFilter} onChange={(event) => setAssigneeFilter(event.target.value)}><option value="all">Alle</option><option value={userId}>Meine</option>{teamProfiles.filter((profile) => profile.id !== userId).map((profile) => <option key={profile.id} value={profile.id}>{profile.displayName || profile.email}</option>)}</select></label>
-        <div className="compact-task-list">{visibleTasks.length === 0 ? <div className="project-empty-state"><strong>Keine Aufgaben in diesem Filter</strong><span>Über „+ Aufgabe“ kannst du eine neue Projektaufgabe anlegen.</span></div> : visibleTasks.map((task) => <TaskRow key={task.id} project={project} task={task} profiles={profiles} userId={userId} userEmail={userEmail} afns={afns.filter((afn) => afn.taskId === task.id).map((afn) => afn.afnNumber)} onClick={() => setEditingTask(task)}/>)}</div>
+        <div className="overview-task-list project-detail-task-list">{visibleTasks.length === 0 ? <div className="project-empty-state"><strong>Keine Aufgaben in diesem Filter</strong><span>Über „+ Aufgabe“ kannst du eine neue Projektaufgabe anlegen.</span></div> : visibleTasks.map((task) => <ProjectTaskRow key={task.id} project={project} task={task} afns={afns.filter((afn) => afn.taskId === task.id).map((afn) => afn.afnNumber)} onOpen={() => setEditingTask(task)}/>)}</div>
       </section>
 
       <section className="project-milestones-section">
@@ -176,13 +185,6 @@ function ProjectDetail({ project, tasks, milestones, afns, profiles, members, us
     {editingTeam && <TeamEditDialog project={project} members={members} profiles={profiles} userId={userId} userEmail={userEmail} onClose={() => setEditingTeam(false)}/>}
     {openedMilestoneId && milestones.find((m) => m.id === openedMilestoneId) && <MilestoneDetailDialog milestone={milestones.find((m) => m.id === openedMilestoneId)!} tasks={tasks.filter((task) => task.milestoneId === openedMilestoneId)} onTask={(task) => { setOpenedMilestoneId(null); setEditingTask(task) }} onAddTask={() => { setTaskMilestonePreset(openedMilestoneId); setOpenedMilestoneId(null); setEditingTask('new') }} onClose={() => setOpenedMilestoneId(null)}/>}
   </main>
-}
-
-function TaskRow({ project, task, afns, profiles, userId, userEmail, onClick }: { project: Project; task: ProjectTask; afns: number[]; profiles: UserProfile[]; userId: string; userEmail?: string; onClick: () => void }) {
-  return <button className={`compact-task-row task-${task.status}`} onClick={onClick}>
-    <span className="task-row-customer">[{projectCustomer(project)}]</span>{projectShortName(project) && <span className="task-row-project">{projectShortName(project)}</span>}<strong className="task-row-title">{task.title || 'Ohne Titel'}</strong><span className="task-row-assignee">{personInitials(profileName(task.assigneeUserId, profiles, userId, userEmail))}</span><span className="task-row-date">{task.dueDate ? formatDate(task.dueDate) : 'Ohne Termin'}</span>{task.status === 'waiting' && task.waitingFor && <span className="waiting-copy">Wartet: {task.waitingFor}</span>}{afns.length > 0 && <span className="task-row-afns">{afns.map((afn) => `AFN ${afn}`).join(', ')}</span>}
-    <StatusBadge status={task.status} label={taskStatus[task.status]}/>
-  </button>
 }
 
 function DialogShell({ title, subtitle, children, onClose }: { title: string; subtitle: string; children: ReactNode; onClose: () => void }) {
