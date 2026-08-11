@@ -1,5 +1,5 @@
 import { db, newId } from '../db/db'
-import type { Project, ProjectTask, ProjectTaskAfn, ProjectMilestone, ProjectMember } from '../db/types'
+import type { Project, ProjectTask, ProjectTaskAfn, ProjectTaskComment, ProjectMilestone, ProjectMember } from '../db/types'
 
 export async function createProject(input: Pick<Project, 'name' | 'ownerUserId'> & Partial<Project>): Promise<string> {
   const now = Date.now()
@@ -17,11 +17,13 @@ export async function updateProject(id: string, changes: Partial<Omit<Project, '
 
 export async function deleteProject(id: string): Promise<void> {
   const now = Date.now()
-  await db.transaction('rw', db.projects, db.projectTasks, db.projectTaskAfns, db.projectMilestones, db.projectMembers, async () => {
+  await db.transaction('rw', [db.projects, db.projectTasks, db.projectTaskAfns, db.projectTaskComments, db.projectMilestones, db.projectMembers], async () => {
     const tasks = await db.projectTasks.where('projectId').equals(id).toArray()
     for (const task of tasks) {
       const afns = await db.projectTaskAfns.where('taskId').equals(task.id).toArray()
+      const comments = await db.projectTaskComments.where('taskId').equals(task.id).toArray()
       await Promise.all(afns.map((afn) => db.projectTaskAfns.update(afn.id, { deletedAt: now, updatedAt: now })))
+      await Promise.all(comments.map((comment) => db.projectTaskComments.update(comment.id, { deletedAt: now, updatedAt: now })))
       await db.projectTasks.update(task.id, { deletedAt: now, updatedAt: now })
     }
     const milestones = await db.projectMilestones.where('projectId').equals(id).toArray()
@@ -82,7 +84,9 @@ export async function updateProjectTask(id: string, changes: Partial<Omit<Projec
 export async function deleteProjectTask(id: string): Promise<void> {
   const now = Date.now()
   const afns = await db.projectTaskAfns.where('taskId').equals(id).toArray()
+  const comments = await db.projectTaskComments.where('taskId').equals(id).toArray()
   await Promise.all(afns.map((afn) => db.projectTaskAfns.update(afn.id, { deletedAt: now, updatedAt: now })))
+  await Promise.all(comments.map((comment) => db.projectTaskComments.update(comment.id, { deletedAt: now, updatedAt: now })))
   await db.projectTasks.update(id, { deletedAt: now, updatedAt: now })
 }
 
@@ -99,6 +103,15 @@ export async function replaceProjectTaskAfns(taskId: string, numbers: number[]):
       await db.projectTaskAfns.add(value)
     }
   }
+}
+
+export async function createProjectTaskComment(taskId: string, authorUserId: string, body: string): Promise<string> {
+  const text = body.trim()
+  if (!text) throw new Error('Der Kommentar darf nicht leer sein.')
+  const now = Date.now()
+  const comment: ProjectTaskComment = { id: newId(), taskId, authorUserId, body: text, createdAt: now, updatedAt: now }
+  await db.projectTaskComments.add(comment)
+  return comment.id
 }
 
 export async function setProjectTeam(projectId: string, ownerUserId: string, userIds: string[]): Promise<void> {
