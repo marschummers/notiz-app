@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Kupferfarbenes Winweb Atomium">
+  <rect width="512" height="512" fill="#e8e8e8"/>
+  <circle cx="256" cy="256" r="236" fill="#fff"/>
+  <g stroke="#b97c45" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M256 256 188 124M256 256 350 154M256 256 130 302M256 256 400 322M256 256 254 420"/>
+  </g>
+  <g fill="#b97c45">
+    <circle cx="256" cy="256" r="52"/>
+    <circle cx="188" cy="124" r="38"/>
+    <circle cx="350" cy="154" r="32"/>
+    <circle cx="130" cy="302" r="40"/>
+    <circle cx="400" cy="322" r="32"/>
+    <circle cx="254" cy="420" r="31"/>
+  </g>
+</svg>
