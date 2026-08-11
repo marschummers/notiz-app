@@ -40,14 +40,14 @@ export default function ProjectsView({ userId, userEmail }: Props) {
 
   return <main className="projects-view">
     <header className="projects-header"><div><p className="projects-eyebrow">Arbeitsbereich</p><h1>Projekte</h1></div><button className="primary" onClick={async () => setProjectId(await createProject({ name: 'Neues Projekt', ownerUserId: userId }))}>+ Neues Projekt</button></header>
-    <nav className="project-tabs"><button className={section === 'dashboard' ? 'active' : ''} onClick={() => setSection('dashboard')}>Ãœbersicht</button><button className={section === 'projects' ? 'active' : ''} onClick={() => setSection('projects')}>Projekte</button></nav>
+    <nav className="project-tabs"><button className={section === 'dashboard' ? 'active' : ''} onClick={() => setSection('dashboard')}>Übersicht</button><button className={section === 'projects' ? 'active' : ''} onClick={() => setSection('projects')}>Projekte</button></nav>
     {section === 'dashboard' ? <>
       <div className="project-metrics"><Metric label="Aktive Projekte" value={activeProjects.length}/><Metric label="Meine offenen Aufgaben" value={mine.length}/><Metric label="Wartet auf andere" value={mine.filter((task) => task.status === 'waiting').length}/><Metric label="Meilensteine in 30 Tagen" value={milestones.filter((m) => m.status !== 'completed' && m.dueDate && m.dueDate >= today.getTime() && m.dueDate <= today.getTime() + 30 * 86400000).length}/></div>
       <UpcomingMilestones milestones={milestones} tasks={tasks} projects={projects} onOpen={setProjectId}/>
       <TaskOverview title="Meine offenen Aufgaben" tasks={sortedMine} projects={projects} afns={afns} onOpen={setProjectId}/>
       <TaskOverview title="Wartet auf andere" tasks={sortedMine.filter((task) => task.status === 'waiting')} projects={projects} afns={afns} onOpen={setProjectId}/>
     </> : <>
-      <div className="project-list-tools"><input className="project-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Projekte durchsuchenâ€¦" /><button onClick={() => setShowClosed((value) => !value)}>{showClosed ? 'Nur laufende' : 'Abgeschlossene & Archiv'}</button></div>
+      <div className="project-list-tools"><input className="project-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Projekte durchsuchen…" /><button onClick={() => setShowClosed((value) => !value)}>{showClosed ? 'Nur laufende' : 'Abgeschlossene & Archiv'}</button></div>
       <div className="project-list">{(showClosed ? projects : activeProjects).filter((project) => `${project.name} ${project.customerName ?? ''}`.toLowerCase().includes(search.toLowerCase())).map((project) => <button key={project.id} className="project-card" onClick={() => setProjectId(project.id)}><span><strong>{project.name}</strong><small>{project.customerName || 'Kein Kunde hinterlegt'}</small></span><StatusBadge status={project.status} label={projectStatus[project.status]}/></button>)}</div>
     </>}
   </main>
@@ -58,7 +58,7 @@ function Metric({ label, value }: { label: string; value: number }) { return <di
 function UpcomingMilestones({ milestones, tasks, projects, onOpen }: { milestones: ProjectMilestone[]; tasks: ProjectTask[]; projects: Project[]; onOpen: (id: string) => void }) {
   const rows = milestones.filter((m) => m.status !== 'completed' && m.dueDate).sort((a,b) => milestoneSort(a,b)).slice(0, 8)
   if (!rows.length) return null
-  return <section className="project-section upcoming-milestones"><h2>NÃ¤chste Meilensteine</h2>{rows.map((m) => { const project = projects.find((p) => p.id === m.projectId); const assigned = tasks.filter((t) => t.milestoneId === m.id); const done = assigned.filter((t) => t.status === 'completed').length; return <button key={m.id} onClick={() => onOpen(m.projectId)}><span className={isOverdue(m) ? 'milestone-overdue' : ''}>{formatDate(m.dueDate!)}</span><strong>{project?.name ?? 'Unbekanntes Projekt'}</strong><span>{m.title}</span><small>{assigned.length ? `${done} / ${assigned.length} erledigt` : 'Noch keine Aufgaben'}</small></button>})}</section>
+  return <section className="project-section upcoming-milestones"><h2>Nächste Meilensteine</h2>{rows.map((m) => { const project = projects.find((p) => p.id === m.projectId); const assigned = tasks.filter((t) => t.milestoneId === m.id); const done = assigned.filter((t) => t.status === 'completed').length; return <button key={m.id} onClick={() => onOpen(m.projectId)}><span className={isOverdue(m) ? 'milestone-overdue' : ''}>{formatDate(m.dueDate!)}</span><strong>{project?.name ?? 'Unbekanntes Projekt'}</strong><span>{m.title}</span><small>{assigned.length ? `${done} / ${assigned.length} erledigt` : 'Noch keine Aufgaben'}</small></button>})}</section>
 }
 
 function StatusBadge({ status, label }: { status: string; label: string }) {
@@ -68,12 +68,12 @@ function StatusBadge({ status, label }: { status: string; label: string }) {
 function NextMilestone({ milestone, tasks, onOpen }: { milestone: ProjectMilestone; tasks: ProjectTask[]; onOpen: () => void }) {
   const assigned = tasks.filter((task) => task.milestoneId === milestone.id)
   const done = assigned.filter((task) => task.status === 'completed').length
-  return <button className="next-milestone" onClick={onOpen}><span className="projects-eyebrow">NÃ¤chster Meilenstein</span><strong>{milestone.title}</strong><span>{milestone.dueDate ? formatDate(milestone.dueDate) : 'Ohne Termin'}</span><small>{assigned.length ? `${done} von ${assigned.length} Aufgaben erledigt Â· ${assigned.length - done} offen` : 'Noch keine Aufgaben'}{isOverdue(milestone) ? ' Â· ÃœberfÃ¤llig' : milestoneTiming(milestone, assigned.length - done)}</small>{assigned.length > 0 && <i style={{width: `${done / assigned.length * 100}%`}}/>}</button>
+  return <button className="next-milestone" onClick={onOpen}><span className="projects-eyebrow">Nächster Meilenstein</span><strong>{milestone.title}</strong><span>{milestone.dueDate ? formatDate(milestone.dueDate) : 'Ohne Termin'}</span><small>{assigned.length ? `${done} von ${assigned.length} Aufgaben erledigt · ${assigned.length - done} offen` : 'Noch keine Aufgaben'}{isOverdue(milestone) ? ' · Überfällig' : milestoneTiming(milestone, assigned.length - done)}</small>{assigned.length > 0 && <i style={{width: `${done / assigned.length * 100}%`}}/>}</button>
 }
 
 function MilestoneRow({ milestone, tasks, onOpen, onEdit, onMove, canUp, canDown }: { milestone: ProjectMilestone; tasks: ProjectTask[]; onOpen: () => void; onEdit: () => void; onMove: (direction: -1 | 1) => void; canUp: boolean; canDown: boolean }) {
   const done = tasks.filter((task) => task.status === 'completed').length
-  return <div className="milestone-row"><button className="milestone-main" onClick={onOpen}><span><strong>{milestone.title}</strong><small>{milestone.dueDate ? formatDate(milestone.dueDate) : 'Ohne Termin'}{isOverdue(milestone) ? ' Â· ÃœberfÃ¤llig' : milestoneTiming(milestone, tasks.length - done)}</small></span><span>{tasks.length ? `${done} / ${tasks.length} Aufgaben erledigt` : 'Noch keine Aufgaben'}</span></button><StatusBadge status={milestone.status} label={milestoneStatus[milestone.status]}/><div className="milestone-actions"><button disabled={!canUp} onClick={() => onMove(-1)} aria-label="Nach oben">â†‘</button><button disabled={!canDown} onClick={() => onMove(1)} aria-label="Nach unten">â†“</button><button onClick={onEdit}>Bearbeiten</button></div></div>
+  return <div className="milestone-row"><button className="milestone-main" onClick={onOpen}><span><strong>{milestone.title}</strong><small>{milestone.dueDate ? formatDate(milestone.dueDate) : 'Ohne Termin'}{isOverdue(milestone) ? ' · Überfällig' : milestoneTiming(milestone, tasks.length - done)}</small></span><span>{tasks.length ? `${done} / ${tasks.length} Aufgaben erledigt` : 'Noch keine Aufgaben'}</span></button><StatusBadge status={milestone.status} label={milestoneStatus[milestone.status]}/><div className="milestone-actions"><button disabled={!canUp} onClick={() => onMove(-1)} aria-label="Nach oben">↑</button><button disabled={!canDown} onClick={() => onMove(1)} aria-label="Nach unten">↓</button><button onClick={onEdit}>Bearbeiten</button></div></div>
 }
 
 function TaskOverview({ title, tasks, projects, afns, onOpen }: { title: string; tasks: ProjectTask[]; projects: Project[]; afns: { taskId: string; afnNumber: number }[]; onOpen: (id: string) => void }) {
@@ -87,7 +87,7 @@ function TaskOverview({ title, tasks, projects, afns, onOpen }: { title: string;
         <span className="overview-task-title">{task.title}</span>
         {taskAfns.length > 0 && <span className="overview-afns">{taskAfns.map((afn) => `AFN ${afn.afnNumber}`).join(', ')}</span>}
       </button>
-      <label className="overview-due-date" aria-label={`Termin fÃ¼r ${task.title}`}>
+      <label className="overview-due-date" aria-label={`Termin für ${task.title}`}>
         <BufferedDateInput value={task.dueDate} onSave={(dueDate) => updateProjectTask(task.id, { dueDate })}/>
       </label>
       <StatusBadge status={task.status} label={taskStatus[task.status]}/>
@@ -108,7 +108,7 @@ function ProjectDetail({ project, tasks, milestones, afns, profiles, userId, use
 
   return <main className="projects-view project-detail-view">
     <div className="project-detail-content">
-      <button className="back-link" onClick={onBack}>â† Projekte</button>
+      <button className="back-link" onClick={onBack}>← Projekte</button>
       <header className="project-read-header">
         <div className="project-read-title"><h1>{project.name || 'Ohne Projektnamen'}</h1><p>{project.customerName || 'Kein Kunde hinterlegt'}</p></div>
         <StatusBadge status={project.status} label={projectStatus[project.status]}/>
@@ -130,7 +130,7 @@ function ProjectDetail({ project, tasks, milestones, afns, profiles, userId, use
       <section className="project-tasks-section">
         <div className="project-tasks-heading"><div><p className="projects-eyebrow">Projektarbeit</p><h2>Aufgaben</h2></div><button className="primary compact" onClick={() => { setTaskMilestonePreset(undefined); setEditingTask('new') }}>+ Aufgabe</button></div>
         <div className="task-filter-bar" aria-label="Aufgaben filtern">{taskFilters.map((value) => <button key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}><span>{value === 'all' ? 'Alle' : taskStatus[value]}</span><strong>{counts[value]}</strong></button>)}</div>
-        <div className="compact-task-list">{visibleTasks.length === 0 ? <div className="project-empty-state"><strong>Keine Aufgaben in diesem Filter</strong><span>Ãœber â€ž+ Aufgabeâ€œ kannst du eine neue Projektaufgabe anlegen.</span></div> : visibleTasks.map((task) => <TaskRow key={task.id} task={task} profiles={profiles} userId={userId} userEmail={userEmail} afns={afns.filter((afn) => afn.taskId === task.id).map((afn) => afn.afnNumber)} onClick={() => setEditingTask(task)}/>)}</div>
+        <div className="compact-task-list">{visibleTasks.length === 0 ? <div className="project-empty-state"><strong>Keine Aufgaben in diesem Filter</strong><span>Über „+ Aufgabe“ kannst du eine neue Projektaufgabe anlegen.</span></div> : visibleTasks.map((task) => <TaskRow key={task.id} task={task} profiles={profiles} userId={userId} userEmail={userEmail} afns={afns.filter((afn) => afn.taskId === task.id).map((afn) => afn.afnNumber)} onClick={() => setEditingTask(task)}/>)}</div>
       </section>
     </div>
     {editingProject && (
@@ -162,7 +162,7 @@ function TaskRow({ task, afns, profiles, userId, userEmail, onClick }: { task: P
 function DialogShell({ title, subtitle, children, onClose }: { title: string; subtitle: string; children: ReactNode; onClose: () => void }) {
   return <div className="project-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
     <section className="project-dialog" role="dialog" aria-modal="true" aria-label={title}>
-      <header><div><p className="projects-eyebrow">{subtitle}</p><h2>{title}</h2></div><button className="dialog-close" onClick={onClose} aria-label="Dialog schlieÃŸen">Ã—</button></header>
+      <header><div><p className="projects-eyebrow">{subtitle}</p><h2>{title}</h2></div><button className="dialog-close" onClick={onClose} aria-label="Dialog schließen">×</button></header>
       {children}
     </section>
   </div>
@@ -194,7 +194,7 @@ function ProjectEditDialog({ project, profiles, userId, userEmail, onClose, onDe
         <FormField label="Zieltermin"><BufferedDateInput value={draft.targetDate} onSave={(value) => setDraft({ ...draft, targetDate: value })}/></FormField>
         <FormField label="Beschreibung" wide><textarea value={draft.description ?? ''} onChange={(event) => setDraft({ ...draft, description: event.target.value || undefined })} rows={4}/></FormField>
       </div>
-      <div className="dialog-actions"><button type="button" className="danger-action" onClick={async () => { if (confirm(`Projekt â€ž${project.name}â€œ lÃ¶schen?`)) { await deleteProject(project.id); onDeleted() } }}>Projekt lÃ¶schen</button><span/><button type="button" className="secondary-action" onClick={onClose}>Abbrechen</button><button className="primary">Speichern</button></div>
+      <div className="dialog-actions"><button type="button" className="danger-action" onClick={async () => { if (confirm(`Projekt „${project.name}“ löschen?`)) { await deleteProject(project.id); onDeleted() } }}>Projekt löschen</button><span/><button type="button" className="secondary-action" onClick={onClose}>Abbrechen</button><button className="primary">Speichern</button></div>
     </form>
   </DialogShell>
 }
@@ -205,12 +205,12 @@ function MilestoneEditDialog({ projectId, milestone, onClose }: { projectId: str
   const [dueDate, setDueDate] = useState(milestone?.dueDate)
   const [status, setStatus] = useState<ProjectMilestoneStatus>(milestone?.status ?? 'planned')
   async function save(event: FormEvent) { event.preventDefault(); if (!title.trim()) return; const id = milestone?.id ?? await createProjectMilestone(projectId, title); await updateProjectMilestone(id, { title: title.trim(), description: description.trim() || undefined, dueDate, status }); onClose() }
-  return <DialogShell title={milestone ? 'Meilenstein bearbeiten' : 'Neuer Meilenstein'} subtitle="Projektplanung" onClose={onClose}><form className="project-dialog-form" onSubmit={save}><div className="dialog-form-grid"><FormField label="Titel" wide><input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus required/></FormField><FormField label="Beschreibung" wide><textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} placeholder="Optional"/></FormField><FormField label="Datum"><BufferedDateInput value={dueDate} onSave={setDueDate}/></FormField><FormField label="Status"><select value={status} onChange={(e) => setStatus(e.target.value as ProjectMilestoneStatus)}>{Object.entries(milestoneStatus).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></FormField></div><div className="dialog-actions">{milestone ? <button type="button" className="danger-action" onClick={async () => { if (confirm('Meilenstein lÃ¶schen? Die Aufgaben bleiben erhalten.')) { await deleteProjectMilestone(milestone.id); onClose() } }}>Meilenstein lÃ¶schen</button> : <span/>}<span/><button type="button" className="secondary-action" onClick={onClose}>Abbrechen</button><button className="primary" disabled={!title.trim()}>Speichern</button></div></form></DialogShell>
+  return <DialogShell title={milestone ? 'Meilenstein bearbeiten' : 'Neuer Meilenstein'} subtitle="Projektplanung" onClose={onClose}><form className="project-dialog-form" onSubmit={save}><div className="dialog-form-grid"><FormField label="Titel" wide><input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus required/></FormField><FormField label="Beschreibung" wide><textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} placeholder="Optional"/></FormField><FormField label="Datum"><BufferedDateInput value={dueDate} onSave={setDueDate}/></FormField><FormField label="Status"><select value={status} onChange={(e) => setStatus(e.target.value as ProjectMilestoneStatus)}>{Object.entries(milestoneStatus).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></FormField></div><div className="dialog-actions">{milestone ? <button type="button" className="danger-action" onClick={async () => { if (confirm('Meilenstein löschen? Die Aufgaben bleiben erhalten.')) { await deleteProjectMilestone(milestone.id); onClose() } }}>Meilenstein löschen</button> : <span/>}<span/><button type="button" className="secondary-action" onClick={onClose}>Abbrechen</button><button className="primary" disabled={!title.trim()}>Speichern</button></div></form></DialogShell>
 }
 
 function MilestoneDetailDialog({ milestone, tasks, onTask, onAddTask, onClose }: { milestone: ProjectMilestone; tasks: ProjectTask[]; onTask: (task: ProjectTask) => void; onAddTask: () => void; onClose: () => void }) {
   const done = tasks.filter((task) => task.status === 'completed').length
-  return <DialogShell title={milestone.title} subtitle="Meilenstein" onClose={onClose}><div className="milestone-detail"><p>{milestone.description || 'Keine Beschreibung hinterlegt.'}</p><div className="milestone-detail-meta"><span>{milestone.dueDate ? formatDate(milestone.dueDate) : 'Ohne Datum'}</span><StatusBadge status={milestone.status} label={milestoneStatus[milestone.status]}/></div><strong>{tasks.length ? `${done} von ${tasks.length} Aufgaben erledigt` : 'Noch keine Aufgaben'}</strong>{tasks.length > 0 && <div className="milestone-progress"><i style={{width: `${done / tasks.length * 100}%`}}/></div>}<div className="milestone-task-list">{tasks.map((task) => <button key={task.id} onClick={() => onTask(task)}><span>{task.status === 'completed' ? 'âœ“' : 'â—‹'}</span>{task.title}</button>)}</div><button className="primary compact" onClick={onAddTask}>+ Aufgabe</button></div></DialogShell>
+  return <DialogShell title={milestone.title} subtitle="Meilenstein" onClose={onClose}><div className="milestone-detail"><p>{milestone.description || 'Keine Beschreibung hinterlegt.'}</p><div className="milestone-detail-meta"><span>{milestone.dueDate ? formatDate(milestone.dueDate) : 'Ohne Datum'}</span><StatusBadge status={milestone.status} label={milestoneStatus[milestone.status]}/></div><strong>{tasks.length ? `${done} von ${tasks.length} Aufgaben erledigt` : 'Noch keine Aufgaben'}</strong>{tasks.length > 0 && <div className="milestone-progress"><i style={{width: `${done / tasks.length * 100}%`}}/></div>}<div className="milestone-task-list">{tasks.map((task) => <button key={task.id} onClick={() => onTask(task)}><span>{task.status === 'completed' ? '✓' : '○'}</span>{task.title}</button>)}</div><button className="primary compact" onClick={onAddTask}>+ Aufgabe</button></div></DialogShell>
 }
 
 function TaskEditDialog({ projectId, task, milestones, milestonePreset, afns, profiles, userId, userEmail, onClose }: { projectId: string; task?: ProjectTask; milestones: ProjectMilestone[]; milestonePreset?: string; afns: number[]; profiles: UserProfile[]; userId: string; userEmail?: string; onClose: () => void }) {
@@ -241,10 +241,10 @@ function TaskEditDialog({ projectId, task, milestones, milestonePreset, afns, pr
         <FormField label="Termin"><BufferedDateInput value={dueDate} onSave={setDueDate}/></FormField>
         <FormField label="Verantwortlich"><select value={assigneeUserId} onChange={(event) => setAssigneeUserId(event.target.value)}><option value="">Nicht zugewiesen</option>{profileOptions(profiles, userId, userEmail)}</select></FormField>
         <FormField label="Meilenstein"><select value={milestoneId} onChange={(event) => setMilestoneId(event.target.value)}><option value="">Kein Meilenstein</option>{milestones.filter((m) => m.status !== 'completed' || m.id === task?.milestoneId).sort((a,b) => a.sortOrder - b.sortOrder).map((m) => <option key={m.id} value={m.id}>{m.title}</option>)}</select></FormField>
-        {status === 'waiting' && <FormField label="Wartet auf"><select value={waitingFor ?? ''} onChange={(event) => setWaitingFor((event.target.value || undefined) as ProjectWaitingFor | undefined)}><option value="">Bitte wÃ¤hlen</option>{waitingOptions.map((value) => <option key={value}>{value}</option>)}</select></FormField>}
+        {status === 'waiting' && <FormField label="Wartet auf"><select value={waitingFor ?? ''} onChange={(event) => setWaitingFor((event.target.value || undefined) as ProjectWaitingFor | undefined)}><option value="">Bitte wählen</option>{waitingOptions.map((value) => <option key={value}>{value}</option>)}</select></FormField>}
         <FormField label="AFN-Nummern" wide><input value={afnText} onChange={(event) => setAfnText(event.target.value)} inputMode="numeric" placeholder="181657, 181658"/><small>Mehrere Nummern mit Komma trennen.</small></FormField>
       </div>
-      <div className="dialog-actions">{task ? <button type="button" className="danger-action" onClick={async () => { if (confirm('Aufgabe lÃ¶schen?')) { await deleteProjectTask(task.id); onClose() } }}>Aufgabe lÃ¶schen</button> : <span/>}<span/><button type="button" className="secondary-action" onClick={onClose}>Abbrechen</button><button className="primary" disabled={!title.trim()}>Speichern</button></div>
+      <div className="dialog-actions">{task ? <button type="button" className="danger-action" onClick={async () => { if (confirm('Aufgabe löschen?')) { await deleteProjectTask(task.id); onClose() } }}>Aufgabe löschen</button> : <span/>}<span/><button type="button" className="secondary-action" onClick={onClose}>Abbrechen</button><button className="primary" disabled={!title.trim()}>Speichern</button></div>
     </form>
   </DialogShell>
 }
@@ -269,7 +269,7 @@ function profileName(id: string | undefined, profiles: UserProfile[], userId: st
 function formatDate(value: number) { return new Date(value).toLocaleDateString('de-DE') }
 function formatRange(start?: number, target?: number) {
   if (!start && !target) return 'Noch nicht festgelegt'
-  return `${start ? formatDate(start) : 'Offen'} â†’ ${target ? formatDate(target) : 'Offen'}`
+  return `${start ? formatDate(start) : 'Offen'} → ${target ? formatDate(target) : 'Offen'}`
 }
 function parseAfns(value: string) { return value.split(/[,;\s]+/).map(Number).filter((number) => Number.isInteger(number) && number > 0) }
 
@@ -293,6 +293,6 @@ function getNextMilestone(milestones: ProjectMilestone[]) {
 function milestoneTiming(milestone: ProjectMilestone, open: number) {
   if (!milestone.dueDate || milestone.status === 'completed') return ''
   const days = Math.ceil((milestone.dueDate - startOfToday()) / 86400000)
-  return days >= 0 && days <= 7 && open > 0 ? ` Â· ${days === 0 ? 'heute' : `in ${days} Tagen`} Â· ${open} offen` : ''
+  return days >= 0 && days <= 7 && open > 0 ? ` · ${days === 0 ? 'heute' : `in ${days} Tagen`} · ${open} offen` : ''
 }
 
