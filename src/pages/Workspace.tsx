@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react'
-import { useAuth } from '../lib/auth'
+import { ADMIN_EMAIL, useAuth } from '../lib/auth'
 import { ensureDefaultFolderStructure } from '../lib/actions'
 import { syncAll, updateOwnDisplayName } from '../lib/sync'
 import { db } from '../db/db'
@@ -13,6 +13,7 @@ import SearchView from '../components/SearchView'
 import AllNotesView from '../components/AllNotesView'
 import Dashboard from '../components/Dashboard'
 import ProjectsView from '../components/ProjectsView'
+import AccessRequestsView from '../components/AccessRequestsView'
 import './Workspace.css'
 
 export default function Workspace() {
@@ -21,7 +22,7 @@ export default function Workspace() {
   const { session, signOut } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const [selection, setSelection] = useState<Selection>({ type: 'folder', id: undefined })
-  const [activeView, setActiveView] = useState<'start' | 'notes' | 'projects' | 'tasks' | 'search' | 'all-notes'>('start')
+  const [activeView, setActiveView] = useState<'start' | 'notes' | 'projects' | 'tasks' | 'search' | 'all-notes' | 'access'>('start')
   const [openPageId, setOpenPageId] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH)
@@ -141,6 +142,10 @@ export default function Workspace() {
           setActiveView('all-notes')
           setOpenPageId(null)
         }}
+        onSelectAccess={() => {
+          setActiveView('access')
+          setOpenPageId(null)
+        }}
         onSelectFavorite={openPage}
         onSync={handleSync}
         syncing={syncing}
@@ -191,6 +196,8 @@ export default function Workspace() {
         />
       ) : activeView === 'projects' ? (
         <ProjectsView userId={session?.user.id ?? ''} userEmail={session?.user.email} />
+      ) : activeView === 'access' && session?.user.email === ADMIN_EMAIL ? (
+        <AccessRequestsView sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((value) => !value)} />
       ) : activeView === 'tasks' ? (
         <TasksView onOpenPage={openPage} />
       ) : activeView === 'search' ? (
