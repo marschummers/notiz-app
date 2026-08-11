@@ -56,9 +56,9 @@ export default function ProjectsView({ userId, userEmail, navigation, onNavigate
     {effectiveSection === 'dashboard' ? <>
       <div className="project-metrics"><Metric label="Aktive Projekte" value={activeProjects.length}/><Metric label="Meine offenen Aufgaben" value={mine.length}/><Metric label="Wartet auf andere" value={mine.filter((task) => task.status === 'waiting').length}/><Metric label="Meilensteine in 30 Tagen" value={milestones.filter((m) => m.status !== 'completed' && m.dueDate && m.dueDate >= today.getTime() && m.dueDate <= today.getTime() + 30 * 86400000).length}/></div>
       <UpcomingMilestones milestones={milestones} tasks={tasks} projects={projects} onOpen={(id) => onNavigate({ type: 'project', id })}/>
+      {otherDueTasks.length > 0 && <div className="task-overview-toolbar"><button className="secondary-action other-tasks-toggle" onClick={() => setShowOtherDueTasks((value) => !value)}>{showOtherDueTasks ? 'Andere Termine ausblenden' : `Andere Termine anzeigen (${otherDueTasks.length})`}</button></div>}
       <TaskOverview title="Heute fällig" tasks={dueToday} projects={projects} afns={afns} onOpen={(id) => onNavigate({ type: 'project', id })}/>
       <TaskOverview title="Ohne Fälligkeitsdatum" tasks={withoutDueDate} projects={projects} afns={afns} onOpen={(id) => onNavigate({ type: 'project', id })}/>
-      <button className="secondary-action other-tasks-toggle" onClick={() => setShowOtherDueTasks((value) => !value)}>{showOtherDueTasks ? 'Andere Termine ausblenden' : `Andere Termine anzeigen (${otherDueTasks.length})`}</button>
       {showOtherDueTasks && <TaskOverview title="Andere Termine" tasks={otherDueTasks} projects={projects} afns={afns} onOpen={(id) => onNavigate({ type: 'project', id })}/>}
     </> : <>
       <div className="project-list-tools"><input className="project-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Projekte durchsuchen…" />{navigation.type !== 'status' && <button onClick={() => setShowClosed((value) => !value)}>{showClosed ? 'Nur laufende' : 'Abgeschlossene & Archiv'}</button>}</div>
