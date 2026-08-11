@@ -183,10 +183,14 @@ export async function syncAll(): Promise<void> {
   // Minimales gemeinsames Benutzerverzeichnis fuer Verantwortliche. Auth bleibt die einzige
   // Identitaetsquelle; lokal werden nur Anzeigename/E-Mail fuer Offline-Darstellung gecacht.
   const profileNow = new Date().toISOString()
+  const metadataDisplayName = typeof userData.user.user_metadata?.full_name === 'string'
+    ? userData.user.user_metadata.full_name.trim()
+    : ''
   const { error: profileError } = await client.from('notiz_profiles').upsert({
     id: userId,
     email: userData.user.email ?? '',
-    display_name: userData.user.user_metadata?.full_name ?? null,
+    // Ein bestehender Anzeigename darf nicht durch leere Auth-Metadaten geloescht werden.
+    ...(metadataDisplayName ? { display_name: metadataDisplayName } : {}),
     updated_at: profileNow,
   })
   if (profileError) throw new Error(`notiz_profiles: ${profileError.message}`)
@@ -438,6 +442,34 @@ export async function syncAll(): Promise<void> {
     updated_at: iso(a.updatedAt), deleted_at: a.deletedAt ? iso(a.deletedAt) : null,
   }), (r) => ({ id: r.id, taskId: r.task_id, afnNumber: r.afn_number,
     updatedAt: ms(r.updated_at), deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined }))
+}
+
+export async function updateOwnDisplayName(displayName: string): Promise<void> {
+  if (!supabase) throw new Error('Supabase ist nicht konfiguriert.')
+  const trimmed = displayName.trim()
+  if (!trimmed) throw new Error('Bitte einen Namen eingeben.')
+
+  const { data: userData, error: userError } = await supabase.auth.getUser()
+  if (userError || !userData.user) throw new Error('Nicht eingeloggt.')
+
+  const { error: metadataError } = await supabase.auth.updateUser({ data: { full_name: trimmed } })
+  if (metadataError) throw new Error(`Benutzername: ${metadataError.message}`)
+
+  const updatedAt = Date.now()
+  const { error: profileError } = await supabase.from('notiz_profiles').upsert({
+    id: userData.user.id,
+    email: userData.user.email ?? '',
+    display_name: trimmed,
+    updated_at: new Date(updatedAt).toISOString(),
+  })
+  if (profileError) throw new Error(`notiz_profiles: ${profileError.message}`)
+
+  await db.userProfiles.put({
+    id: userData.user.id,
+    email: userData.user.email ?? '',
+    displayName: trimmed,
+    updatedAt,
+  })
 }
 
 

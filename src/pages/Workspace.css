@@ -28,3 +28,76 @@
 .sidebar-resize-handle.active::after {
   background: var(--accent);
 }
+
+.profile-name-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(10 8 5 / 72%);
+  backdrop-filter: blur(5px);
+}
+
+.profile-name-dialog {
+  width: min(460px, 100%);
+  padding: 30px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: 0 24px 80px rgb(0 0 0 / 45%);
+}
+
+.profile-name-dialog h2 {
+  margin: 4px 0 10px;
+}
+
+.profile-name-dialog > p:not(.profile-name-eyebrow) {
+  margin: 0 0 24px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.profile-name-eyebrow {
+  margin: 0;
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.profile-name-dialog form,
+.profile-name-dialog label {
+  display: grid;
+  gap: 8px;
+}
+
+.profile-name-dialog input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 13px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--background);
+  color: var(--text);
+  font: inherit;
+}
+
+.profile-name-dialog small {
+  color: var(--text-muted);
+}
+
+.profile-name-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.profile-name-error {
+  margin: 4px 0 0;
+  color: #e36b61;
+}
+

@@ -25,6 +25,8 @@ interface Props {
   syncing: boolean
   syncError: string | null
   userEmail: string | undefined
+  userDisplayName?: string
+  onEditDisplayName: () => void
   onSignOut: () => void
 }
 
@@ -46,6 +48,8 @@ export default function Sidebar({
   syncing,
   syncError,
   userEmail,
+  userDisplayName,
+  onEditDisplayName,
   onSignOut,
 }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -187,8 +191,14 @@ export default function Sidebar({
         </button>
         {userEmail && (
           <div className="sidebar-account">
-            <span>{userEmail}</span>
-            <button onClick={onSignOut}>Abmelden</button>
+            <div className="sidebar-account-identity">
+              {userDisplayName && <strong>{userDisplayName}</strong>}
+              <span>{userEmail}</span>
+            </div>
+            <div className="sidebar-account-actions">
+              <button onClick={onEditDisplayName}>Name ändern</button>
+              <button onClick={onSignOut}>Abmelden</button>
+            </div>
           </div>
         )}
       </div>

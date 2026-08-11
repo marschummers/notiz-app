@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../lib/auth'
 import { ensureDefaultFolderStructure } from '../lib/actions'
-import { syncAll } from '../lib/sync'
+import { syncAll, updateOwnDisplayName } from '../lib/sync'
+import { db } from '../db/db'
 import type { Selection } from '../lib/selection'
 import Sidebar from '../components/Sidebar'
 import PageList from '../components/PageList'
@@ -26,6 +27,8 @@ export default function Workspace() {
   const sidebarResizeRef = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
+  const [profileDisplayName, setProfileDisplayName] = useState<string | null>()
+  const [editingProfileName, setEditingProfileName] = useState(false)
 
   async function handleSync() {
     setSyncing(true)
@@ -37,6 +40,8 @@ export default function Workspace() {
       // Neu angelegte Vorgaben direkt ein zweites Mal synchronisieren, damit sie auch auf den
       // anderen Geraeten dieses Benutzers erscheinen.
       if (await ensureDefaultFolderStructure()) await syncAll()
+      const currentProfile = session?.user.id ? await db.userProfiles.get(session.user.id) : undefined
+      setProfileDisplayName(currentProfile?.displayName?.trim() || null)
     } catch (e) {
       setSyncError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -139,6 +144,8 @@ export default function Workspace() {
         syncing={syncing}
         syncError={syncError}
         userEmail={session?.user.email}
+        userDisplayName={profileDisplayName ?? undefined}
+        onEditDisplayName={() => setEditingProfileName(true)}
         onSignOut={signOut}
       />
       {sidebarOpen && (
@@ -193,6 +200,59 @@ export default function Workspace() {
       ) : (
         <PageList selection={selection} sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((v) => !v)} onOpenPage={openPage} />
       )}
+      {(profileDisplayName === null || editingProfileName) && session?.user.email && (
+        <ProfileNameDialog
+          email={session.user.email}
+          initialName={profileDisplayName ?? ''}
+          onCancel={profileDisplayName ? () => setEditingProfileName(false) : undefined}
+          onSave={async (name) => {
+            await updateOwnDisplayName(name)
+            setProfileDisplayName(name.trim())
+            setEditingProfileName(false)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function ProfileNameDialog({ email, initialName, onSave, onCancel }: { email: string; initialName: string; onSave: (name: string) => Promise<void>; onCancel?: () => void }) {
+  const [name, setName] = useState(initialName)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    if (!name.trim()) return
+    setSaving(true)
+    setError(null)
+    try {
+      await onSave(name)
+    } catch (value) {
+      setError(value instanceof Error ? value.message : String(value))
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="profile-name-backdrop">
+      <section className="profile-name-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-name-title">
+        <p className="profile-name-eyebrow">Dein Profil</p>
+        <h2 id="profile-name-title">Wie sollen andere dich sehen?</h2>
+        <p>Dieser Name wird bei Projekten und Aufgaben statt deiner E-Mail-Adresse angezeigt.</p>
+        <form onSubmit={submit}>
+          <label>
+            <span>Name</span>
+            <input value={name} onChange={(event) => setName(event.target.value)} placeholder="z. B. Martin Kreißl" autoFocus autoComplete="name" />
+          </label>
+          <small>{email}</small>
+          {error && <p className="profile-name-error">{error}</p>}
+          <div className="profile-name-actions">
+            {onCancel && <button type="button" className="secondary" onClick={onCancel} disabled={saving}>Abbrechen</button>}
+            <button className="primary" disabled={!name.trim() || saving}>{saving ? 'Wird gespeichert …' : 'Namen speichern'}</button>
+          </div>
+        </form>
+      </section>
     </div>
   )
 }
