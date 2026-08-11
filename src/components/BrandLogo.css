@@ -1,0 +1,31 @@
+.brand-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.brand-logo img {
+  display: block;
+  width: 158px;
+  max-width: 100%;
+  height: auto;
+}
+
+.brand-logo > span {
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+  color: var(--text-faint);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.brand-logo.compact img {
+  width: 180px;
+}
+
+[data-theme='copper'] .brand-logo img {
+  opacity: 0.82;
+  filter: saturate(0.7);
+}
+
