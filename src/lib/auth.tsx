@@ -2,11 +2,15 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabaseClient'
 
+export const ADMIN_EMAIL = 'marschummers@googlemail.com'
+
 interface AuthState {
   session: Session | null
   loading: boolean
   // false, wenn Supabase nicht konfiguriert ist (fehlende Umgebungsvariablen).
   configured: boolean
+  approved: boolean | null
+  refreshApproval: () => Promise<void>
   signInWithOtp: (email: string) => Promise<{ error: string | null }>
   // Bestaetigt den 6-stelligen Code aus derselben Mail wie der Login-Link. Wichtig fuer als
   // Home-Bildschirm-App installierte Nutzung auf iOS: die bekommt einen eigenen, von Safari
@@ -21,6 +25,7 @@ const AuthContext = createContext<AuthState | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
+  const [approved, setApproved] = useState<boolean | null>(null)
 
   useEffect(() => {
     if (!supabase) {
@@ -36,6 +41,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
     return () => subscription.subscription.unsubscribe()
   }, [])
+
+  async function refreshApproval() {
+    if (!supabase || !session) {
+      setApproved(null)
+      return
+    }
+    const { data, error } = await supabase
+      .from('notiz_profiles')
+      .select('approved')
+      .eq('id', session.user.id)
+      .maybeSingle()
+    // Rueckwaertskompatibel waehrend des Deployments: Wird die App kurz vor der Migration
+    // geladen, darf die noch fehlende Spalte nicht alle bestehenden Benutzer aussperren.
+    const approvalSchemaMissing = !!error && (error.code === '42703' || error.code === 'PGRST204' || error.message.includes('approved'))
+    setApproved(approvalSchemaMissing ? true : error ? false : (data?.approved ?? false))
+  }
+
+  useEffect(() => {
+    refreshApproval()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user.id])
 
   async function signInWithOtp(email: string) {
     if (!supabase) return { error: 'Supabase ist nicht konfiguriert.' }
@@ -57,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ session, loading, configured: !!supabase, signInWithOtp, verifyOtp, signOut }}>
+    <AuthContext.Provider value={{ session, loading, configured: !!supabase, approved, refreshApproval, signInWithOtp, verifyOtp, signOut }}>
       {children}
     </AuthContext.Provider>
   )
@@ -68,3 +94,4 @@ export function useAuth(): AuthState {
   if (!ctx) throw new Error('useAuth muss innerhalb von AuthProvider verwendet werden')
   return ctx
 }
+
