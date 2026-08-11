@@ -16,27 +16,13 @@ import {
   RECOMMENDED_PROPERTIES_BY_TYPE,
 } from '../lib/propertyDefinitions'
 import { InfoIcon } from './icons'
+import BufferedDateInput from './BufferedDateInput'
 import './PageProperties.css'
 
 function isValidAfnInput(value: string): boolean {
   if (!/^\d+$/.test(value)) return false
   const n = Number(value)
   return n >= 1 && n <= 999999
-}
-
-function dateToInputValue(value: PagePropertyValue | undefined): string {
-  if (typeof value !== 'number' || !value) return ''
-  const d = new Date(value)
-  const yyyy = d.getFullYear()
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  const dd = String(d.getDate()).padStart(2, '0')
-  return `${yyyy}-${mm}-${dd}`
-}
-
-function inputValueToDate(value: string): number | undefined {
-  if (!value) return undefined
-  const [y, m, d] = value.split('-').map(Number)
-  return new Date(y, m - 1, d).getTime()
 }
 
 function PropertyTextInput({ value, onSave }: { value: string; onSave: (value: string) => void }) {
@@ -152,7 +138,7 @@ export default function PageProperties({ page }: { page: Page }) {
       return (
         <label className="properties-field" key={key}>
           <span className="properties-label-row"><span className="properties-label">{definition.label}</span>{removeButton}</span>
-          <input type="date" value={dateToInputValue(value)} onChange={(e) => updatePageProperty(page.id, key, inputValueToDate(e.target.value) ?? '')} />
+          <BufferedDateInput value={typeof value === 'number' ? value : undefined} onSave={(next) => updatePageProperty(page.id, key, next)} />
         </label>
       )
     }
@@ -221,4 +207,5 @@ export default function PageProperties({ page }: { page: Page }) {
     </div>
   )
 }
+
 
