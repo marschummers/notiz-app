@@ -35,6 +35,17 @@
   padding-top: max(10px, env(safe-area-inset-top));
 }
 
+.main-nav-row {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  font-weight: 650;
+}
+
+.sidebar-tools-section {
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
 .sidebar-heading {
   display: flex;
   align-items: center;
@@ -263,3 +274,4 @@
   border-color: var(--accent);
   color: var(--accent-strong);
 }
+
