@@ -255,6 +255,8 @@ export interface Project {
   startDate?: number
   targetDate?: number
   description?: string
+  customField1Label?: string
+  customField2Label?: string
   createdAt: number
   updatedAt: number
   deletedAt?: number
@@ -271,6 +273,8 @@ export interface ProjectTask {
   status: ProjectTaskStatus
   dueDate?: number
   waitingFor?: ProjectWaitingFor
+  customField1Value?: string
+  customField2Value?: string
   sortOrder: number
   createdAt: number
   updatedAt: number

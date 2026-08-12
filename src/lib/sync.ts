@@ -175,8 +175,8 @@ interface RemotePdfPrintout {
   deleted_at: string | null
 }
 
-interface RemoteProject { id: string; user_id: string; name: string; customer_name: string | null; owner_user_id: string; status: string; start_date: string | null; target_date: string | null; description: string | null; created_at: string; updated_at: string; deleted_at: string | null }
-interface RemoteProjectTask { id: string; user_id: string; project_id: string; milestone_id: string | null; section_id: string | null; title: string; description: string | null; assignee_user_id: string | null; status: string; due_date: string | null; waiting_for: string | null; sort_order: number; created_at: string; updated_at: string; deleted_at: string | null }
+interface RemoteProject { id: string; user_id: string; name: string; customer_name: string | null; owner_user_id: string; status: string; start_date: string | null; target_date: string | null; description: string | null; custom_field_1_label: string | null; custom_field_2_label: string | null; created_at: string; updated_at: string; deleted_at: string | null }
+interface RemoteProjectTask { id: string; user_id: string; project_id: string; milestone_id: string | null; section_id: string | null; title: string; description: string | null; assignee_user_id: string | null; status: string; due_date: string | null; waiting_for: string | null; custom_field_1_value: string | null; custom_field_2_value: string | null; sort_order: number; created_at: string; updated_at: string; deleted_at: string | null }
 interface RemoteProjectMilestone { id: string; user_id: string; project_id: string; title: string; description: string | null; due_date: string | null; status: string; sort_order: number; created_at: string; updated_at: string; deleted_at: string | null }
 interface RemoteProjectSection { id: string; user_id: string; project_id: string; milestone_id: string; title: string; sort_order: number; created_at: string; updated_at: string; deleted_at: string | null }
 interface RemoteProjectTaskAfn { id: string; user_id: string; task_id: string; afn_number: number; updated_at: string; deleted_at: string | null }
@@ -507,10 +507,12 @@ export async function syncAll(): Promise<void> {
     id: p.id, user_id: userId, name: p.name, customer_name: p.customerName ?? null,
     owner_user_id: p.ownerUserId, status: p.status, start_date: p.startDate ? iso(p.startDate) : null,
     target_date: p.targetDate ? iso(p.targetDate) : null, description: p.description ?? null,
+    custom_field_1_label: p.customField1Label ?? null, custom_field_2_label: p.customField2Label ?? null,
     created_at: iso(p.createdAt), updated_at: iso(p.updatedAt), deleted_at: p.deletedAt ? iso(p.deletedAt) : null,
   }), (r) => ({ id: r.id, name: r.name, customerName: r.customer_name ?? undefined, ownerUserId: r.owner_user_id,
     status: r.status as ProjectStatus, startDate: r.start_date ? ms(r.start_date) : undefined,
     targetDate: r.target_date ? ms(r.target_date) : undefined, description: r.description ?? undefined,
+    customField1Label: r.custom_field_1_label ?? undefined, customField2Label: r.custom_field_2_label ?? undefined,
     createdAt: ms(r.created_at), updatedAt: ms(r.updated_at), deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined }))
 
   await mergeTable<ProjectMember, RemoteProjectMember>(db.projectMembers, 'notiz_project_members', (m) => ({
@@ -542,11 +544,13 @@ export async function syncAll(): Promise<void> {
   await mergeTable<ProjectTask, RemoteProjectTask>(db.projectTasks, 'notiz_project_tasks', (t) => ({
     id: t.id, user_id: userId, project_id: t.projectId, milestone_id: t.milestoneId ?? null, section_id: t.sectionId ?? null, title: t.title, description: t.description ?? null,
     assignee_user_id: t.assigneeUserId ?? null, status: t.status, due_date: t.dueDate ? iso(t.dueDate) : null,
-    waiting_for: t.waitingFor ?? null, sort_order: t.sortOrder, created_at: iso(t.createdAt),
+    waiting_for: t.waitingFor ?? null, custom_field_1_value: t.customField1Value ?? null, custom_field_2_value: t.customField2Value ?? null,
+    sort_order: t.sortOrder, created_at: iso(t.createdAt),
     updated_at: iso(t.updatedAt), deleted_at: t.deletedAt ? iso(t.deletedAt) : null,
   }), (r) => ({ id: r.id, projectId: r.project_id, milestoneId: r.milestone_id ?? undefined, sectionId: r.section_id ?? undefined, title: r.title, description: r.description ?? undefined,
     assigneeUserId: r.assignee_user_id ?? undefined, status: r.status as ProjectTaskStatus,
     dueDate: r.due_date ? ms(r.due_date) : undefined, waitingFor: (r.waiting_for as ProjectWaitingFor) || undefined,
+    customField1Value: r.custom_field_1_value ?? undefined, customField2Value: r.custom_field_2_value ?? undefined,
     sortOrder: r.sort_order, createdAt: ms(r.created_at), updatedAt: ms(r.updated_at), deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined }))
 
   await mergeTable<ProjectTaskAfn, RemoteProjectTaskAfn>(db.projectTaskAfns, 'notiz_project_task_afns', (a) => ({
