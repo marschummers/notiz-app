@@ -72,7 +72,13 @@ export default function Sidebar({
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [updating, setUpdating] = useState(false)
   const tags = useLiveQuery(() => db.tags.filter((t) => !t.deletedAt).sortBy('name'), [])
-  const openTaskCount = useLiveQuery(() => db.tasks.filter((t) => !t.deletedAt && !t.completed).count(), [])
+  const openTaskCount = useLiveQuery(async () => {
+    const [pageTasks, quickTasks] = await Promise.all([
+      db.tasks.filter((t) => !t.deletedAt && !t.completed).count(),
+      db.quickTasks.filter((t) => !t.deletedAt && !t.completed).count(),
+    ])
+    return pageTasks + quickTasks
+  }, [])
   // Zuletzt favorisiert zuerst - favoritedAt liefert Status und Sortierung in einem Feld
   // (siehe db/types.ts Page), keine separate Sortierlogik noetig. Sortierung ueber eine Kopie
   // statt .sort()/.reverse() direkt auf dem useLiveQuery-Ergebnis: das kann ueber mehrere

@@ -145,6 +145,17 @@ export interface Task {
   deletedAt?: number
 }
 
+// Eine schnelle, seitenunabhängige Aufgabe aus der zentralen Aufgabenansicht. Sie bleibt
+// bewusst getrennt von Task, weil notiz_tasks eine pageId und Canvas-Koordinaten benötigt.
+export interface QuickTask {
+  id: string
+  text: string
+  completed: boolean
+  createdAt: number
+  updatedAt: number
+  deletedAt?: number
+}
+
 // Ein frei platziertes Textfeld auf einer Seite (per Tastatur beschrieben, kein Handschrift-
 // Strich) - gleiche Platzierungs-/Koordinatenlogik wie Task (x/y, siehe lib/actions.ts), aber
 // ohne Checkbox-Semantik. `text` kann Seitenverlinkungen im Format "[[pageId:Titel]]" enthalten

@@ -1,6 +1,6 @@
 import type { EntityTable } from 'dexie'
 import { db } from '../db/db'
-import type { Folder, Page, PageBackground, PageProperties, PageType, Tag, PageTag, Task, TextBlock, Template, TemplateTextBlock, TemplateTask, Stroke, PdfPrintout, Project, ProjectTask, ProjectTaskAfn, ProjectTaskComment, ProjectMilestone, ProjectStatus, ProjectTaskStatus, ProjectWaitingFor, ProjectMilestoneStatus, ProjectMember, ProjectMemberRole } from '../db/types'
+import type { Folder, Page, PageBackground, PageProperties, PageType, Tag, PageTag, Task, QuickTask, TextBlock, Template, TemplateTextBlock, TemplateTask, Stroke, PdfPrintout, Project, ProjectTask, ProjectTaskAfn, ProjectTaskComment, ProjectMilestone, ProjectStatus, ProjectTaskStatus, ProjectWaitingFor, ProjectMilestoneStatus, ProjectMember, ProjectMemberRole } from '../db/types'
 import { supabase } from './supabaseClient'
 
 // Faengt fehlende/kaputte Zeitstempel ab, statt dass new Date(...).toISOString() mit
@@ -119,6 +119,16 @@ interface RemoteTask {
   completed: boolean
   x: number
   y: number
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+}
+
+interface RemoteQuickTask {
+  id: string
+  user_id: string
+  text: string
+  completed: boolean
   created_at: string
   updated_at: string
   deleted_at: string | null
@@ -325,6 +335,28 @@ export async function syncAll(): Promise<void> {
       createdAt: ms(r.created_at),
       updatedAt: ms(r.updated_at),
       deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined,
+    }),
+  )
+
+  await mergeTable<QuickTask, RemoteQuickTask>(
+    db.quickTasks,
+    'notiz_quick_tasks',
+    (task) => ({
+      id: task.id,
+      user_id: userId,
+      text: task.text,
+      completed: task.completed,
+      created_at: iso(task.createdAt),
+      updated_at: iso(task.updatedAt),
+      deleted_at: task.deletedAt ? iso(task.deletedAt) : null,
+    }),
+    (remote) => ({
+      id: remote.id,
+      text: remote.text,
+      completed: remote.completed,
+      createdAt: ms(remote.created_at),
+      updatedAt: ms(remote.updated_at),
+      deletedAt: remote.deleted_at ? ms(remote.deleted_at) : undefined,
     }),
   )
 
