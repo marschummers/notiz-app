@@ -487,10 +487,13 @@
   flex: 1;
   min-width: 160px;
   position: relative;
+  resize: horizontal;
+  overflow: auto;
 }
 
 .text-block-input {
   width: 100%;
+  min-height: 58px;
   box-sizing: border-box;
   border: none;
   background: transparent;
@@ -499,12 +502,96 @@
   outline: 1px solid var(--accent);
   border-radius: 4px;
   padding: 2px 4px;
-  /* Hoehe passt sich beim Tippen automatisch an den Inhalt an (siehe useLayoutEffect in
-     TextBlockItem) - nur die Breite bleibt manuell ziehbar, damit lange Texte bei Bedarf breit
-     statt hoch werden koennen (siehe DrawingCanvas.tsx onResizeWidth). Kein eigenes overflow
-     noetig, der Browser-Standard fuer <textarea> (auto) reicht fuer den Ziehgriff.
-  */
-  resize: horizontal;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.text-block-input:empty::before {
+  content: attr(data-placeholder);
+  color: #8a7f6a;
+  pointer-events: none;
+}
+
+.text-format-trigger {
+  flex-shrink: 0;
+  align-self: flex-start;
+  border: 1px solid currentColor;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.55;
+  font: 600 11px/1 system-ui, sans-serif;
+  padding: 4px;
+  cursor: pointer;
+}
+
+.text-format-trigger:hover,
+.text-format-trigger.active {
+  opacity: 1;
+  color: var(--accent-strong);
+}
+
+.text-format-toolbar {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+  transform: translate(-50%, -100%);
+  touch-action: manipulation;
+}
+
+.text-format-toolbar.below {
+  transform: translate(-50%, 0);
+}
+
+.text-format-toolbar button,
+.text-format-toolbar select,
+.text-format-color {
+  height: 30px;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.text-format-toolbar button {
+  min-width: 30px;
+  padding: 4px 7px;
+  cursor: pointer;
+}
+
+.text-format-size {
+  width: 54px;
+  padding: 2px 4px;
+}
+
+.text-format-color {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  font-weight: 700;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.text-format-color input {
+  position: absolute;
+  inset: auto 3px 2px;
+  width: 28px;
+  height: 4px;
+  padding: 0;
+  border: 0;
+  opacity: 0.9;
+  cursor: pointer;
 }
 
 /* Seitenlink innerhalb eines Textfelds - deutlich als anklickbares internes Ziel abgesetzt
@@ -619,3 +706,4 @@
 .dark-paper .link-autocomplete-row {
   color: #f3ead8;
 }
+

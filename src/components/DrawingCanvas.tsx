@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import type { PageBackground, Point, Stroke } from '../db/types'
 import { formatRelativeTime } from '../lib/format'
-import { parseLinkedText } from '../lib/pageLinks'
+import { richTextToDisplayHtml, richTextToEditorHtml, richTextToPlainText, serializeRichText } from '../lib/richText'
 import type { RenderedPdfPage } from '../lib/pdfRender'
 import { loadPdfBlob } from '../lib/pdfStorage'
 import { BroomIcon, EraserIcon, PdfIcon, PenIcon, TrashIcon, UndoIcon } from './icons'
@@ -693,6 +693,49 @@ interface TextBlockAlignmentGuide {
   height: number
 }
 
+function getCaretTextOffset(root: HTMLElement): number {
+  const selection = window.getSelection()
+  if (!selection || selection.rangeCount === 0) return root.textContent?.length ?? 0
+  const range = selection.getRangeAt(0)
+  if (!root.contains(range.endContainer)) return root.textContent?.length ?? 0
+  const prefix = range.cloneRange()
+  prefix.selectNodeContents(root)
+  prefix.setEnd(range.endContainer, range.endOffset)
+  return prefix.toString().length
+}
+
+function rangeForTextOffsets(root: HTMLElement, start: number, end: number): Range | null {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  let offset = 0
+  let startNode: Text | null = null
+  let endNode: Text | null = null
+  let startOffset = 0
+  let endOffset = 0
+  while (walker.nextNode()) {
+    const node = walker.currentNode as Text
+    const nextOffset = offset + node.data.length
+    if (!startNode && start <= nextOffset) {
+      startNode = node
+      startOffset = Math.max(0, start - offset)
+    }
+    if (end <= nextOffset) {
+      endNode = node
+      endOffset = Math.max(0, end - offset)
+      break
+    }
+    offset = nextOffset
+  }
+  if (!startNode) return null
+  if (!endNode) {
+    endNode = startNode
+    endOffset = startNode.data.length
+  }
+  const range = document.createRange()
+  range.setStart(startNode, Math.min(startOffset, startNode.data.length))
+  range.setEnd(endNode, Math.min(endOffset, endNode.data.length))
+  return range
+}
+
 function TextBlockItem({
   block,
   editing,
@@ -722,25 +765,25 @@ function TextBlockItem({
   const [linkTrigger, setLinkTrigger] = useState<{ start: number; query: string } | null>(null)
   const [linkActiveIndex, setLinkActiveIndex] = useState(0)
   const [liveWidth, setLiveWidth] = useState<number | null>(null)
+  const [formatToolbarOpen, setFormatToolbarOpen] = useState(false)
+  const [formatToolbarPosition, setFormatToolbarPosition] = useState<{ left: number; top: number; below: boolean } | null>(null)
   const textBlockRef = useRef<HTMLDivElement>(null)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const editorRef = useRef<HTMLDivElement>(null)
+  const formatButtonRef = useRef<HTMLButtonElement>(null)
+  const savedSelectionRef = useRef<Range | null>(null)
   const resizeChromeWidthRef = useRef(0)
 
-  // Waehrend der Bearbeitung waechst die Hoehe automatisch mit dem Inhalt mit (siehe
-  // Anforderung "gesamten Text lesen koennen") - reine CSS-Loesung reicht dafuer nicht,
-  // <textarea> passt seine Hoehe nie von selbst an den Inhalt an.
   useLayoutEffect(() => {
-    const el = textareaRef.current
+    const el = editorRef.current
     if (!editing || !el) return
-    el.style.height = 'auto'
-    el.style.height = `${el.scrollHeight}px`
-  }, [editing, draft])
+    el.innerHTML = richTextToEditorHtml(block.text)
+    el.focus()
+  }, [editing, block.id, block.text])
 
-  // Das native CSS-Resize veraendert zunaechst nur die <textarea>. Ein ResizeObserver zieht die
-  // aeussere Karte sofort mit, damit Hintergrund, Rahmen und Loeschen-Button waehrend des Ziehens
-  // dieselbe Breite behalten. Die Differenz umfasst Griff, Abstand und Padding der Karte.
+  // Der Resize-Griff sitzt am Bearbeitungs-Wrapper. Ein ResizeObserver zieht die aeussere Karte
+  // sofort mit, damit Hintergrund, Rahmen und Bedienelemente dieselbe Breite behalten.
   useLayoutEffect(() => {
-    const input = textareaRef.current
+    const input = editorRef.current?.parentElement
     const card = textBlockRef.current
     if (!editing || !input || !card) return
 
@@ -768,8 +811,28 @@ function TextBlockItem({
       setDraft(block.text)
       setLinkTrigger(null)
       setLiveWidth(null)
+      setFormatToolbarOpen(false)
+      setFormatToolbarPosition(null)
+      savedSelectionRef.current = null
     }
   }, [editing, block.text])
+
+  useEffect(() => {
+    if (!editing) return
+    const updateSelectionToolbar = () => {
+      const editor = editorRef.current
+      const selection = window.getSelection()
+      if (!editor || !selection || selection.rangeCount === 0) return
+      const range = selection.getRangeAt(0)
+      if (!editor.contains(range.commonAncestorContainer)) return
+      savedSelectionRef.current = range.cloneRange()
+      if (selection.isCollapsed) return
+      positionFormatToolbar(range.getBoundingClientRect())
+      setFormatToolbarOpen(true)
+    }
+    document.addEventListener('selectionchange', updateSelectionToolbar)
+    return () => document.removeEventListener('selectionchange', updateSelectionToolbar)
+  }, [editing])
 
   useEffect(() => {
     return () => {
@@ -945,41 +1008,109 @@ function TextBlockItem({
     window.addEventListener('mouseup', onUp)
   }
 
+  function positionFormatToolbar(rect: DOMRect) {
+    const halfToolbarWidth = 155
+    const left = Math.min(window.innerWidth - halfToolbarWidth - 8, Math.max(halfToolbarWidth + 8, rect.left + rect.width / 2))
+    const below = rect.top < 64
+    setFormatToolbarPosition({ left, top: below ? rect.bottom + 8 : rect.top - 8, below })
+  }
+
+  function rememberCurrentSelection() {
+    const editor = editorRef.current
+    const selection = window.getSelection()
+    if (!editor || !selection || selection.rangeCount === 0) return
+    const range = selection.getRangeAt(0)
+    if (editor.contains(range.commonAncestorContainer)) savedSelectionRef.current = range.cloneRange()
+  }
+
+  function restoreEditorSelection() {
+    const editor = editorRef.current
+    const range = savedSelectionRef.current
+    if (!editor || !range) return false
+    editor.focus()
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+    return true
+  }
+
+  function currentRichTextValue() {
+    return editorRef.current ? serializeRichText(editorRef.current.innerHTML) : draft
+  }
+
+  function updateDraftFromEditor() {
+    const editor = editorRef.current
+    if (!editor) return
+    const value = serializeRichText(editor.innerHTML)
+    setDraft(value)
+    const plainText = richTextToPlainText(value)
+    const cursor = getCaretTextOffset(editor)
+    setLinkTrigger(findActiveLinkTrigger(plainText, cursor))
+    setLinkActiveIndex(0)
+    rememberCurrentSelection()
+  }
+
+  function applyFormat(command: 'bold' | 'italic' | 'underline' | 'foreColor', value?: string) {
+    if (!restoreEditorSelection()) return
+    document.execCommand('styleWithCSS', false, 'true')
+    document.execCommand(command, false, value)
+    updateDraftFromEditor()
+    rememberCurrentSelection()
+  }
+
+  function applyFontSize(size: number) {
+    const editor = editorRef.current
+    if (!editor || !restoreEditorSelection()) return
+    document.execCommand('styleWithCSS', false, 'false')
+    document.execCommand('fontSize', false, '7')
+    for (const font of Array.from(editor.querySelectorAll('font[size="7"]'))) {
+      const span = document.createElement('span')
+      span.style.fontSize = `${size}px`
+      while (font.firstChild) span.appendChild(font.firstChild)
+      font.replaceWith(span)
+    }
+    updateDraftFromEditor()
+    rememberCurrentSelection()
+  }
+
+  function toggleFormatToolbar() {
+    const button = formatButtonRef.current
+    rememberCurrentSelection()
+    if (!formatToolbarOpen && button) positionFormatToolbar(button.getBoundingClientRect())
+    setFormatToolbarOpen((open) => !open)
+  }
+
   const matchedPages = linkTrigger
     ? pageLinkCandidates.filter((p) => p.title.toLowerCase().includes(linkTrigger.query.toLowerCase())).slice(0, 6)
     : []
 
-  function handleDraftChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
-    const value = e.target.value
-    setDraft(value)
-    const cursor = e.target.selectionStart ?? value.length
-    setLinkTrigger(findActiveLinkTrigger(value, cursor))
-    setLinkActiveIndex(0)
-  }
-
   function saveCurrentWidth() {
-    const input = textareaRef.current
+    const input = editorRef.current?.parentElement
     const width = input ? input.offsetWidth + resizeChromeWidthRef.current : textBlockRef.current?.offsetWidth
     if (width && width > 0 && width !== block.width) onResizeWidth(width)
   }
 
   function insertLink(page: { id: string; title: string }) {
-    if (!linkTrigger) return
-    const cursor = textareaRef.current?.selectionStart ?? draft.length
-    const before = draft.slice(0, linkTrigger.start)
-    const after = draft.slice(cursor)
+    const editor = editorRef.current
+    if (!linkTrigger || !editor) return
+    editor.focus()
+    const cursor = getCaretTextOffset(editor)
+    const replacementRange = rangeForTextOffsets(editor, linkTrigger.start, cursor)
+    if (!replacementRange) return
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(replacementRange)
     const inserted = `[[${page.id}:${page.title}]]`
-    const next = before + inserted + after
-    setDraft(next)
+    document.execCommand('insertText', false, inserted)
+    updateDraftFromEditor()
     setLinkTrigger(null)
     requestAnimationFrame(() => {
-      const pos = before.length + inserted.length
-      textareaRef.current?.setSelectionRange(pos, pos)
-      textareaRef.current?.focus()
+      editorRef.current?.focus()
+      rememberCurrentSelection()
     })
   }
 
-  function handleDraftKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+  function handleDraftKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     if (linkTrigger && matchedPages.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault()
@@ -1007,12 +1138,21 @@ function TextBlockItem({
       // darf im Gegensatz zum einzeiligen Task-Text mehrzeilig sein.
       e.preventDefault()
       saveCurrentWidth()
-      onSaveText(draft)
+      onSaveText(currentRichTextValue())
     }
   }
 
+  function handleEditorBlur(e: React.FocusEvent<HTMLDivElement>) {
+    const nextTarget = e.relatedTarget
+    if (nextTarget instanceof Element && nextTarget.closest('.text-format-toolbar')) return
+    saveCurrentWidth()
+    onSaveText(currentRichTextValue())
+  }
+
   const pos = dragPos ?? { x: block.x, y: block.y }
-  const segments = block.text ? parseLinkedText(block.text) : []
+  const displayHtml = block.text
+    ? richTextToDisplayHtml(block.text, (pageId, fallback) => pageLinkCandidates.find((p) => p.id === pageId)?.title ?? fallback)
+    : ''
 
   return (
     <div
@@ -1041,19 +1181,17 @@ function TextBlockItem({
       </div>
       {editing ? (
         <div className="text-block-edit-wrap">
-          <textarea
-            ref={textareaRef}
+          <div
+            ref={editorRef}
             className="text-block-input"
-            value={draft}
-            autoFocus
-            rows={3}
-            placeholder="Text eingeben, [[ für Seitenlink …"
-            onChange={handleDraftChange}
+            contentEditable
+            suppressContentEditableWarning
+            role="textbox"
+            aria-multiline="true"
+            data-placeholder="Text eingeben, [[ für Seitenlink …"
+            onInput={updateDraftFromEditor}
             onKeyDown={handleDraftKeyDown}
-            onBlur={() => {
-              saveCurrentWidth()
-              onSaveText(draft)
-            }}
+            onBlur={handleEditorBlur}
           />
           {linkTrigger && matchedPages.length > 0 && (
             <div className="link-autocomplete">
@@ -1075,36 +1213,67 @@ function TextBlockItem({
       ) : (
         <div
           className="text-block-content"
-          onClick={() => {
+          onClick={(event) => {
             if (justDraggedRef.current) return
+            const link = (event.target as Element).closest<HTMLElement>('[data-page-id]')
+            if (link?.dataset.pageId) {
+              event.stopPropagation()
+              onOpenPageLink(link.dataset.pageId)
+              return
+            }
             onStartEdit()
           }}
         >
-          {segments.length > 0 ? (
-            segments.map((seg, i) =>
-              seg.type === 'link' ? (
-                <span
-                  key={i}
-                  className="page-link"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    if (justDraggedRef.current) return
-                    onOpenPageLink(seg.pageId)
-                  }}
-                >
-                  {/* Aktuellen Titel live nachschlagen statt den beim Einfuegen gespeicherten zu
-                      zeigen, damit ein Link nach Umbenennen der Zielseite nicht nur weiter
-                      funktioniert, sondern auch den neuen Titel anzeigt. Faellt auf den
-                      gespeicherten Titel zurueck, falls die Seite zwischenzeitlich geloescht wurde. */}
-                  📄 {pageLinkCandidates.find((p) => p.id === seg.pageId)?.title ?? seg.title}
-                </span>
-              ) : (
-                <span key={i}>{seg.value}</span>
-              ),
-            )
+          {displayHtml ? (
+            <span dangerouslySetInnerHTML={{ __html: displayHtml }} />
           ) : (
             <span className="text-block-placeholder">Text eingeben …</span>
           )}
+        </div>
+      )}
+      {editing && (
+        <button
+          ref={formatButtonRef}
+          className={`text-format-trigger${formatToolbarOpen ? ' active' : ''}`}
+          type="button"
+          aria-label="Text formatieren"
+          title="Text formatieren"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={toggleFormatToolbar}
+        >
+          Aa
+        </button>
+      )}
+      {editing && formatToolbarOpen && formatToolbarPosition && (
+        <div
+          className={`text-format-toolbar${formatToolbarPosition.below ? ' below' : ''}`}
+          style={{ left: formatToolbarPosition.left, top: formatToolbarPosition.top }}
+          role="toolbar"
+          aria-label="Textformatierung"
+          onMouseDown={rememberCurrentSelection}
+          onBlur={(e) => {
+            const nextTarget = e.relatedTarget
+            if (nextTarget instanceof Node && (e.currentTarget.contains(nextTarget) || editorRef.current?.contains(nextTarget))) return
+            saveCurrentWidth()
+            onSaveText(currentRichTextValue())
+          }}
+        >
+          <select
+            className="text-format-size"
+            defaultValue="14"
+            aria-label="Schriftgröße"
+            title="Schriftgröße"
+            onChange={(e) => applyFontSize(Number(e.target.value))}
+          >
+            {[12, 14, 16, 18, 24, 32].map((size) => <option key={size} value={size}>{size}</option>)}
+          </select>
+          <label className="text-format-color" title="Schriftfarbe">
+            <span aria-hidden="true">A</span>
+            <input type="color" defaultValue="#08060d" aria-label="Schriftfarbe" onChange={(e) => applyFormat('foreColor', e.target.value)} />
+          </label>
+          <button type="button" aria-label="Fett" title="Fett" onMouseDown={(e) => { e.preventDefault(); applyFormat('bold') }}><strong>B</strong></button>
+          <button type="button" aria-label="Kursiv" title="Kursiv" onMouseDown={(e) => { e.preventDefault(); applyFormat('italic') }}><em>I</em></button>
+          <button type="button" aria-label="Unterstrichen" title="Unterstrichen" onMouseDown={(e) => { e.preventDefault(); applyFormat('underline') }}><u>U</u></button>
         </div>
       )}
       {editing && (

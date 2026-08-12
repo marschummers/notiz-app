@@ -7,11 +7,14 @@
 // Zentral in lib/ statt in DrawingCanvas.tsx, damit sowohl das Rendern/Bearbeiten von Textfeldern
 // (DrawingCanvas.tsx) als auch die Backlinks-Ermittlung (Backlinks.tsx) dieselbe Parsing-Logik
 // nutzen, statt sie zweimal (potenziell abweichend) zu implementieren.
+import { richTextToPlainText } from './richText'
+
 const LINK_PATTERN = /\[\[([^\]:]+):([^\]]+)\]\]/g
 
 export type TextSegment = { type: 'text'; value: string } | { type: 'link'; pageId: string; title: string }
 
 export function parseLinkedText(text: string): TextSegment[] {
+  text = richTextToPlainText(text)
   const segments: TextSegment[] = []
   let lastIndex = 0
   LINK_PATTERN.lastIndex = 0
@@ -28,6 +31,7 @@ export function parseLinkedText(text: string): TextSegment[] {
 // Liefert die Menge aller Seiten-IDs, auf die ein Text verlinkt (dedupliziert) - genuegt fuer die
 // Backlinks-Ermittlung, ohne den vollen Segment-Baum aufbauen zu muessen.
 export function extractLinkedPageIds(text: string): Set<string> {
+  text = richTextToPlainText(text)
   const ids = new Set<string>()
   LINK_PATTERN.lastIndex = 0
   let match: RegExpExecArray | null
@@ -36,3 +40,4 @@ export function extractLinkedPageIds(text: string): Set<string> {
   }
   return ids
 }
+
