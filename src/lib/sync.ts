@@ -459,6 +459,47 @@ export async function syncAll(): Promise<void> {
     }),
   )
 
+  // RLS liefert nur Projekte, die dem Benutzer gehoeren oder in deren aktivem Team er ist.
+  // Alte App-Versionen konnten jedoch bereits fremde Projekte in Dexie zwischenspeichern. Ohne
+  // Bereinigung wuerde mergeTable diese nicht mehr sichtbaren Zeilen als "nur lokal" einstufen
+  // und per Upsert erneut hochladen - Supabase lehnt das korrekt mit einem RLS-Fehler ab.
+  const { data: accessibleProjectRows, error: accessibleProjectsError } = await client
+    .from('notiz_projects')
+    .select('id')
+  if (accessibleProjectsError) throw new Error(`notiz_projects: ${accessibleProjectsError.message}`)
+  const accessibleProjectIds = new Set((accessibleProjectRows ?? []).map((row) => row.id as string))
+  const cachedProjects = await db.projects.toArray()
+  const inaccessibleProjectIds = new Set(
+    cachedProjects
+      .filter((project) => project.ownerUserId !== userId && !accessibleProjectIds.has(project.id))
+      .map((project) => project.id),
+  )
+
+  if (inaccessibleProjectIds.size > 0) {
+    const cachedProjectTasks = await db.projectTasks
+      .filter((task) => inaccessibleProjectIds.has(task.projectId))
+      .toArray()
+    const inaccessibleTaskIds = new Set(cachedProjectTasks.map((task) => task.id))
+    const [cachedAfns, cachedComments, cachedMilestones, cachedMembers] = await Promise.all([
+      db.projectTaskAfns.filter((afn) => inaccessibleTaskIds.has(afn.taskId)).toArray(),
+      db.projectTaskComments.filter((comment) => inaccessibleTaskIds.has(comment.taskId)).toArray(),
+      db.projectMilestones.filter((milestone) => inaccessibleProjectIds.has(milestone.projectId)).toArray(),
+      db.projectMembers.filter((member) => inaccessibleProjectIds.has(member.projectId)).toArray(),
+    ])
+    await db.transaction(
+      'rw',
+      [db.projects, db.projectTasks, db.projectTaskAfns, db.projectTaskComments, db.projectMilestones, db.projectMembers],
+      async () => {
+        await db.projectTaskAfns.bulkDelete(cachedAfns.map((row) => row.id))
+        await db.projectTaskComments.bulkDelete(cachedComments.map((row) => row.id))
+        await db.projectTasks.bulkDelete(cachedProjectTasks.map((row) => row.id))
+        await db.projectMilestones.bulkDelete(cachedMilestones.map((row) => row.id))
+        await db.projectMembers.bulkDelete(cachedMembers.map((row) => row.id))
+        await db.projects.bulkDelete([...inaccessibleProjectIds])
+      },
+    )
+  }
+
   await mergeTable<Project, RemoteProject>(db.projects, 'notiz_projects', (p) => ({
     id: p.id, user_id: userId, name: p.name, customer_name: p.customerName ?? null,
     owner_user_id: p.ownerUserId, status: p.status, start_date: p.startDate ? iso(p.startDate) : null,
