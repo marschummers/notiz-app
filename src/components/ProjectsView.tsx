@@ -254,6 +254,7 @@ function OrganizedProjectTasks({ tasks, milestones, sections, renderTask, onAddT
       return <details className="task-milestone-group" key={milestone.id} open>
         <summary><span>{milestone.title}</span><small>{done} / {milestoneTasks.length} erledigt</small></summary>
         <div className="task-group-actions"><button type="button" onClick={() => onAddSection(milestone.id)}>+ Themenbereich</button><button type="button" onClick={() => onAddTask(milestone.id)}>+ Aufgabe</button></div>
+        {(ungrouped.length > 0 || milestoneSections.length > 0) && renderTaskList(ungrouped, milestone.id)}
         {milestoneSections.map((section) => {
           const sectionTasks = milestoneTasks.filter((task) => task.sectionId === section.id)
           const sectionDone = sectionTasks.filter((task) => task.status === 'completed').length
@@ -270,11 +271,7 @@ function OrganizedProjectTasks({ tasks, milestones, sections, renderTask, onAddT
             {renderTaskList(sectionTasks, milestone.id, section.id, 'Noch keine Aufgaben. Hierher ziehen oder über „+ Aufgabe“ anlegen.')}
           </details>
         })}
-        {milestoneSections.length === 0 && milestoneTasks.length > 0 && renderTaskList(milestoneTasks, milestone.id)}
-        {milestoneSections.length > 0 && ungrouped.length > 0 && <details className="task-section-group ungrouped" open>
-          <summary><span>Ohne Themenbereich</span><small>{ungrouped.length}</small></summary>
-          {renderTaskList(ungrouped, milestone.id)}
-        </details>}
+
       </details>
     })}
   </div>
@@ -446,7 +443,7 @@ function TaskEditDialog({ projectId, task, milestones, sections, milestonePreset
         <FormField label="Termin"><BufferedDateInput value={dueDate} onSave={setDueDate}/></FormField>
         <FormField label="Verantwortlich"><select value={assigneeUserId} onChange={(event) => setAssigneeUserId(event.target.value)}><option value="">Nicht zugewiesen</option>{profileOptions(profiles, userId, userEmail, memberIds)}</select></FormField>
         <FormField label="Meilenstein"><select value={milestoneId} onChange={(event) => { setMilestoneId(event.target.value); setSectionId('') }}><option value="">Kein Meilenstein</option>{milestones.filter((m) => m.status !== 'completed' || m.id === task?.milestoneId).sort((a,b) => a.sortOrder - b.sortOrder).map((m) => <option key={m.id} value={m.id}>{m.title}</option>)}</select></FormField>
-        <FormField label="Themenbereich"><select value={sectionId} disabled={!milestoneId || availableSections.length === 0} onChange={(event) => setSectionId(event.target.value)}><option value="">{!milestoneId ? 'Zuerst Meilenstein wählen' : 'Kein Themenbereich'}</option>{availableSections.map((section) => <option key={section.id} value={section.id}>{section.title}</option>)}</select></FormField>
+        <FormField label="Themenbereich"><select value={sectionId} disabled={!milestoneId || availableSections.length === 0} onChange={(event) => setSectionId(event.target.value)}><option value="">{!milestoneId ? 'Zuerst Meilenstein wählen' : 'Nur Meilenstein (kein Themenbereich)'}</option>{availableSections.map((section) => <option key={section.id} value={section.id}>{section.title}</option>)}</select></FormField>
         {status === 'waiting' && <FormField label="Wartet auf"><select value={waitingFor ?? ''} onChange={(event) => setWaitingFor((event.target.value || undefined) as ProjectWaitingFor | undefined)}><option value="">Bitte wählen</option>{waitingOptions.map((value) => <option key={value}>{value}</option>)}</select></FormField>}
         <FormField label="AFN-Nummern" wide><input value={afnText} onChange={(event) => setAfnText(event.target.value)} inputMode="numeric" placeholder="181657, 181658"/><small>Mehrere Nummern mit Komma trennen.</small></FormField>
       </div>
