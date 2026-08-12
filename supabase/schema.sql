@@ -270,7 +270,14 @@ create policy "projects_team_select" on notiz_projects
   using (notiz_is_approved() and notiz_can_access_project(id));
 create policy "projects_owner_insert" on notiz_projects
   for insert to authenticated
-  with check (notiz_is_approved() and auth.uid() = user_id and auth.uid() = owner_user_id);
+  with check (
+    notiz_is_approved()
+    and auth.uid() = user_id
+    and (
+      auth.uid() = owner_user_id
+      or notiz_can_access_project(id)
+    )
+  );
 create policy "projects_team_update" on notiz_projects
   for update to authenticated
   using (notiz_is_approved() and notiz_can_access_project(id))
