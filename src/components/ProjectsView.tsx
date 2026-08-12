@@ -206,7 +206,6 @@ function OrganizedProjectTasks({ tasks, milestones, sections, renderTask, onAddT
         return <div
           className={`project-task-drag-item${draggedTaskId === task.id ? ' dragging' : ''}${isMarker ? ` drop-${dropTarget.edge}` : ''}`}
           key={task.id}
-          draggable
           onDragStart={(event) => {
             if (!(event.target instanceof Element) || !event.target.closest('.task-drag-handle')) {
               event.preventDefault()
@@ -233,7 +232,7 @@ function OrganizedProjectTasks({ tasks, milestones, sections, renderTask, onAddT
           }}
           onDrop={(event) => finishDrop(event, dropTarget?.groupKey === groupKey ? dropTarget.beforeTaskId : task.id)}
         >
-          <span className="task-drag-handle" title="Aufgabe verschieben" aria-hidden="true">⋮⋮</span>
+          <span className="task-drag-handle" title="Aufgabe verschieben" aria-hidden="true" draggable>⋮⋮</span>
           {renderTask(task)}
         </div>
       })}
