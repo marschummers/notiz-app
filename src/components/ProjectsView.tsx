@@ -19,13 +19,28 @@ interface Props { userId: string; userEmail?: string; navigation: ProjectNavigat
 type TaskFilter = typeof taskFilters[number]
 
 export default function ProjectsView({ userId, userEmail, navigation, onNavigate }: Props) {
-  const projects = useLiveQuery(() => db.projects.filter((project) => !project.deletedAt).toArray(), []) ?? []
-  const tasks = useLiveQuery(() => db.projectTasks.filter((task) => !task.deletedAt).toArray(), []) ?? []
-  const milestones = useLiveQuery(() => db.projectMilestones.filter((milestone) => !milestone.deletedAt).toArray(), []) ?? []
-  const afns = useLiveQuery(() => db.projectTaskAfns.filter((afn) => !afn.deletedAt).toArray(), []) ?? []
+  const allProjects = useLiveQuery(() => db.projects.filter((project) => !project.deletedAt).toArray(), []) ?? []
+  const allTasks = useLiveQuery(() => db.projectTasks.filter((task) => !task.deletedAt).toArray(), []) ?? []
+  const allMilestones = useLiveQuery(() => db.projectMilestones.filter((milestone) => !milestone.deletedAt).toArray(), []) ?? []
+  const allAfns = useLiveQuery(() => db.projectTaskAfns.filter((afn) => !afn.deletedAt).toArray(), []) ?? []
   const profiles = useLiveQuery(() => db.userProfiles.toArray(), []) ?? []
-  const members = useLiveQuery(() => db.projectMembers.filter((member) => !member.deletedAt).toArray(), []) ?? []
-  const comments = useLiveQuery(() => db.projectTaskComments.filter((comment) => !comment.deletedAt).toArray(), []) ?? []
+  const allMembers = useLiveQuery(() => db.projectMembers.filter((member) => !member.deletedAt).toArray(), []) ?? []
+  const allComments = useLiveQuery(() => db.projectTaskComments.filter((comment) => !comment.deletedAt).toArray(), []) ?? []
+  const memberProjectIds = useMemo(
+    () => new Set(allMembers.filter((member) => member.userId === userId).map((member) => member.projectId)),
+    [allMembers, userId],
+  )
+  const projects = useMemo(
+    () => allProjects.filter((project) => project.ownerUserId === userId || memberProjectIds.has(project.id)),
+    [allProjects, memberProjectIds, userId],
+  )
+  const projectIds = useMemo(() => new Set(projects.map((project) => project.id)), [projects])
+  const tasks = useMemo(() => allTasks.filter((task) => projectIds.has(task.projectId)), [allTasks, projectIds])
+  const taskIds = useMemo(() => new Set(tasks.map((task) => task.id)), [tasks])
+  const milestones = useMemo(() => allMilestones.filter((milestone) => projectIds.has(milestone.projectId)), [allMilestones, projectIds])
+  const afns = useMemo(() => allAfns.filter((afn) => taskIds.has(afn.taskId)), [allAfns, taskIds])
+  const members = useMemo(() => allMembers.filter((member) => projectIds.has(member.projectId)), [allMembers, projectIds])
+  const comments = useMemo(() => allComments.filter((comment) => taskIds.has(comment.taskId)), [allComments, taskIds])
   const [section, setSection] = useState<'dashboard' | 'projects'>('dashboard')
   const [search, setSearch] = useState('')
   const [showClosed, setShowClosed] = useState(false)
