@@ -1,8 +1,8 @@
-import { useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useMemo, useState, type DragEvent, type FormEvent, type ReactNode } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
 import type { Project, ProjectMember, ProjectMilestone, ProjectMilestoneStatus, ProjectSection, ProjectStatus, ProjectTask, ProjectTaskComment, ProjectTaskStatus, ProjectWaitingFor, UserProfile } from '../db/types'
-import { createProject, createProjectMilestone, createProjectSection, createProjectTask, createProjectTaskComment, deleteProject, deleteProjectMilestone, deleteProjectSection, deleteProjectTask, moveProjectMilestone, replaceProjectTaskAfns, setProjectTeam, updateProject, updateProjectMilestone, updateProjectSection, updateProjectTask } from '../lib/projectActions'
+import { createProject, createProjectMilestone, createProjectSection, createProjectTask, createProjectTaskComment, deleteProject, deleteProjectMilestone, deleteProjectSection, deleteProjectTask, moveProjectMilestone, moveProjectTask, replaceProjectTaskAfns, setProjectTeam, updateProject, updateProjectMilestone, updateProjectSection, updateProjectTask } from '../lib/projectActions'
 import BufferedDateInput from './BufferedDateInput'
 import type { ProjectNavigation } from '../lib/projectNavigation'
 import { projectCustomer, projectDisplayName, projectShortName } from '../lib/projectDisplay'
@@ -156,14 +156,18 @@ function ProjectTaskRow({ task, project, afns, comments, profiles, userId, userE
   </div>
 }
 
-function OrganizedProjectTasks({ tasks, milestones, sections, renderTask, onAddTask, onAddSection }: {
+function OrganizedProjectTasks({ tasks, milestones, sections, renderTask, onAddTask, onAddSection, onMoveTask }: {
   tasks: ProjectTask[]
   milestones: ProjectMilestone[]
   sections: ProjectSection[]
   renderTask: (task: ProjectTask) => ReactNode
   onAddTask: (milestoneId?: string, sectionId?: string) => void
   onAddSection: (milestoneId: string) => void
+  onMoveTask: (taskId: string, milestoneId?: string, sectionId?: string, beforeTaskId?: string) => Promise<void>
 }) {
+  const [draggedTaskId, setDraggedTaskId] = useState<string>()
+  const [dropTarget, setDropTarget] = useState<{ groupKey: string; beforeTaskId?: string; markerTaskId?: string; edge?: 'before' | 'after' }>()
+
   if (tasks.length === 0 && milestones.length === 0) {
     return <div className="project-empty-state"><strong>Keine Aufgaben in diesem Filter</strong><span>Über „+ Aufgabe“ kannst du eine neue Projektaufgabe anlegen.</span></div>
   }
@@ -174,10 +178,73 @@ function OrganizedProjectTasks({ tasks, milestones, sections, renderTask, onAddT
   const orphaned = tasks.filter((task) => task.milestoneId && !knownMilestoneIds.has(task.milestoneId))
   const standalone = [...withoutMilestone, ...orphaned]
 
+  const renderTaskList = (groupTasks: ProjectTask[], milestoneId?: string, sectionId?: string, emptyLabel?: string) => {
+    const groupKey = `${milestoneId ?? 'none'}:${sectionId ?? 'none'}`
+    const orderedTasks = [...groupTasks].sort((a, b) => a.sortOrder - b.sortOrder)
+    const finishDrop = async (event: DragEvent<HTMLDivElement>, beforeTaskId?: string) => {
+      event.preventDefault()
+      event.stopPropagation()
+      if (!draggedTaskId) return
+      const taskId = draggedTaskId
+      setDraggedTaskId(undefined)
+      setDropTarget(undefined)
+      await onMoveTask(taskId, milestoneId, sectionId, beforeTaskId)
+    }
+
+    return <div
+      className={`overview-task-list project-detail-task-list task-drop-list${dropTarget?.groupKey === groupKey && !dropTarget.markerTaskId ? ' drop-at-end' : ''}`}
+      onDragOver={(event) => {
+        if (!draggedTaskId) return
+        event.preventDefault()
+        event.dataTransfer.dropEffect = 'move'
+        setDropTarget({ groupKey })
+      }}
+      onDrop={(event) => finishDrop(event)}
+    >
+      {orderedTasks.map((task, index) => {
+        const isMarker = dropTarget?.groupKey === groupKey && dropTarget.markerTaskId === task.id
+        return <div
+          className={`project-task-drag-item${draggedTaskId === task.id ? ' dragging' : ''}${isMarker ? ` drop-${dropTarget.edge}` : ''}`}
+          key={task.id}
+          draggable
+          onDragStart={(event) => {
+            if (!(event.target instanceof Element) || !event.target.closest('.task-drag-handle')) {
+              event.preventDefault()
+              return
+            }
+            event.dataTransfer.effectAllowed = 'move'
+            event.dataTransfer.setData('text/plain', task.id)
+            setDraggedTaskId(task.id)
+          }}
+          onDragEnd={() => { setDraggedTaskId(undefined); setDropTarget(undefined) }}
+          onDragOver={(event) => {
+            if (!draggedTaskId) return
+            event.preventDefault()
+            event.stopPropagation()
+            event.dataTransfer.dropEffect = 'move'
+            const rect = event.currentTarget.getBoundingClientRect()
+            const after = event.clientY >= rect.top + rect.height / 2
+            setDropTarget({
+              groupKey,
+              beforeTaskId: after ? orderedTasks[index + 1]?.id : task.id,
+              markerTaskId: task.id,
+              edge: after ? 'after' : 'before',
+            })
+          }}
+          onDrop={(event) => finishDrop(event, dropTarget?.groupKey === groupKey ? dropTarget.beforeTaskId : task.id)}
+        >
+          <span className="task-drag-handle" title="Aufgabe verschieben" aria-hidden="true">⋮⋮</span>
+          {renderTask(task)}
+        </div>
+      })}
+      {orderedTasks.length === 0 && emptyLabel && <p className="task-section-empty">{emptyLabel}</p>}
+    </div>
+  }
+
   return <div className="organized-task-list">
     {standalone.length > 0 && <details className="task-milestone-group" open>
       <summary><span>Ohne Meilenstein</span><small>{standalone.filter((task) => task.status === 'completed').length} / {standalone.length} erledigt</small></summary>
-      <div className="overview-task-list project-detail-task-list">{standalone.map(renderTask)}</div>
+      {renderTaskList(standalone)}
     </details>}
     {orderedMilestones.map((milestone) => {
       const milestoneTasks = tasks.filter((task) => task.milestoneId === milestone.id)
@@ -201,21 +268,18 @@ function OrganizedProjectTasks({ tasks, milestones, sections, renderTask, onAddT
               <button type="button" onClick={() => onAddTask(milestone.id, section.id)}>+ Aufgabe</button>
               <button type="button" className="danger-text" onClick={async () => { if (confirm(`Themenbereich „${section.title}“ löschen? Die Aufgaben bleiben erhalten.`)) await deleteProjectSection(section.id) }}>Löschen</button>
             </div>
-            {sectionTasks.length > 0 ? <div className="overview-task-list project-detail-task-list">{sectionTasks.map(renderTask)}</div> : <p className="task-section-empty">Noch keine Aufgaben.</p>}
+            {renderTaskList(sectionTasks, milestone.id, section.id, 'Noch keine Aufgaben. Hierher ziehen oder über „+ Aufgabe“ anlegen.')}
           </details>
         })}
-        {milestoneSections.length === 0 && milestoneTasks.length > 0 && <div className="overview-task-list project-detail-task-list">
-          {milestoneTasks.map(renderTask)}
-        </div>}
+        {milestoneSections.length === 0 && milestoneTasks.length > 0 && renderTaskList(milestoneTasks, milestone.id)}
         {milestoneSections.length > 0 && ungrouped.length > 0 && <details className="task-section-group ungrouped" open>
           <summary><span>Ohne Themenbereich</span><small>{ungrouped.length}</small></summary>
-          <div className="overview-task-list project-detail-task-list">{ungrouped.map(renderTask)}</div>
+          {renderTaskList(ungrouped, milestone.id)}
         </details>}
       </details>
     })}
   </div>
 }
-
 function ProjectDetail({ project, tasks, milestones, sections, afns, comments, profiles, members, userId, userEmail, filter, setFilter, initialTaskId, onBack }: { project: Project; tasks: ProjectTask[]; milestones: ProjectMilestone[]; sections: ProjectSection[]; afns: { taskId: string; afnNumber: number }[]; comments: ProjectTaskComment[]; profiles: UserProfile[]; members: ProjectMember[]; userId: string; userEmail?: string; filter: TaskFilter; setFilter: (value: TaskFilter) => void; initialTaskId?: string; onBack: () => void }) {
   const [editingProject, setEditingProject] = useState(false)
   const [editingTask, setEditingTask] = useState<ProjectTask | 'new' | null>(() => tasks.find((task) => task.id === initialTaskId) ?? null)
@@ -256,6 +320,7 @@ function ProjectDetail({ project, tasks, milestones, sections, afns, comments, p
           renderTask={(task) => <ProjectTaskRow key={task.id} project={project} task={task} afns={afns.filter((afn) => afn.taskId === task.id).map((afn) => afn.afnNumber)} comments={comments.filter((comment) => comment.taskId === task.id)} profiles={profiles} userId={userId} userEmail={userEmail} onOpen={() => setEditingTask(task)}/>}
           onAddTask={(milestoneId, sectionId) => { setTaskMilestonePreset(milestoneId); setTaskSectionPreset(sectionId); setEditingTask('new') }}
           onAddSection={async (milestoneId) => { const title = prompt('Name des Themenbereichs'); if (title?.trim()) await createProjectSection(project.id, milestoneId, title) }}
+          onMoveTask={moveProjectTask}
         />
       </section>
 

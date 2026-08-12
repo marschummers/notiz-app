@@ -115,6 +115,35 @@ export async function updateProjectTask(id: string, changes: Partial<Omit<Projec
   await db.projectTasks.update(id, { ...normalized, updatedAt: Date.now() })
 }
 
+export async function moveProjectTask(id: string, milestoneId?: string, sectionId?: string, beforeTaskId?: string): Promise<void> {
+  if (beforeTaskId === id) return
+  const current = await db.projectTasks.get(id)
+  if (!current || current.deletedAt) return
+  const siblings = (await db.projectTasks.where('projectId').equals(current.projectId).toArray())
+    .filter((task) => task.id !== id && !task.deletedAt && task.milestoneId === milestoneId && task.sectionId === sectionId)
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+  const requestedIndex = beforeTaskId ? siblings.findIndex((task) => task.id === beforeTaskId) : siblings.length
+  const targetIndex = requestedIndex < 0 ? siblings.length : requestedIndex
+  const ordered = [...siblings]
+  ordered.splice(targetIndex, 0, current)
+  const now = Date.now()
+
+  await db.transaction('rw', db.projectTasks, async () => {
+    for (let index = 0; index < ordered.length; index += 1) {
+      const task = ordered[index]
+      const groupChanged = task.id === id && (task.milestoneId !== milestoneId || task.sectionId !== sectionId)
+      if (task.sortOrder !== index + 1 || groupChanged) {
+        await db.projectTasks.update(task.id, {
+          sortOrder: index + 1,
+          milestoneId: task.id === id ? milestoneId : task.milestoneId,
+          sectionId: task.id === id ? sectionId : task.sectionId,
+          updatedAt: now,
+        })
+      }
+    }
+  })
+}
+
 export async function deleteProjectTask(id: string): Promise<void> {
   const now = Date.now()
   const afns = await db.projectTaskAfns.where('taskId').equals(id).toArray()
