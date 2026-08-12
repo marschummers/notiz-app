@@ -204,7 +204,10 @@ function OrganizedProjectTasks({ tasks, milestones, sections, renderTask, onAddT
             {sectionTasks.length > 0 ? <div className="overview-task-list project-detail-task-list">{sectionTasks.map(renderTask)}</div> : <p className="task-section-empty">Noch keine Aufgaben.</p>}
           </details>
         })}
-        {ungrouped.length > 0 && <details className="task-section-group ungrouped" open>
+        {milestoneSections.length === 0 && milestoneTasks.length > 0 && <div className="overview-task-list project-detail-task-list">
+          {milestoneTasks.map(renderTask)}
+        </div>}
+        {milestoneSections.length > 0 && ungrouped.length > 0 && <details className="task-section-group ungrouped" open>
           <summary><span>Ohne Themenbereich</span><small>{ungrouped.length}</small></summary>
           <div className="overview-task-list project-detail-task-list">{ungrouped.map(renderTask)}</div>
         </details>}
