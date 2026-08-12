@@ -264,6 +264,7 @@ export interface ProjectTask {
   id: string
   projectId: string
   milestoneId?: string
+  sectionId?: string
   title: string
   description?: string
   assigneeUserId?: string
@@ -283,6 +284,17 @@ export interface ProjectMilestone {
   description?: string
   dueDate?: number
   status: ProjectMilestoneStatus
+  sortOrder: number
+  createdAt: number
+  updatedAt: number
+  deletedAt?: number
+}
+
+export interface ProjectSection {
+  id: string
+  projectId: string
+  milestoneId: string
+  title: string
   sortOrder: number
   createdAt: number
   updatedAt: number

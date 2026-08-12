@@ -1,8 +1,8 @@
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
-import type { Project, ProjectMember, ProjectMilestone, ProjectMilestoneStatus, ProjectStatus, ProjectTask, ProjectTaskComment, ProjectTaskStatus, ProjectWaitingFor, UserProfile } from '../db/types'
-import { createProject, createProjectMilestone, createProjectTask, createProjectTaskComment, deleteProject, deleteProjectMilestone, deleteProjectTask, moveProjectMilestone, replaceProjectTaskAfns, setProjectTeam, updateProject, updateProjectMilestone, updateProjectTask } from '../lib/projectActions'
+import type { Project, ProjectMember, ProjectMilestone, ProjectMilestoneStatus, ProjectSection, ProjectStatus, ProjectTask, ProjectTaskComment, ProjectTaskStatus, ProjectWaitingFor, UserProfile } from '../db/types'
+import { createProject, createProjectMilestone, createProjectSection, createProjectTask, createProjectTaskComment, deleteProject, deleteProjectMilestone, deleteProjectSection, deleteProjectTask, moveProjectMilestone, replaceProjectTaskAfns, setProjectTeam, updateProject, updateProjectMilestone, updateProjectSection, updateProjectTask } from '../lib/projectActions'
 import BufferedDateInput from './BufferedDateInput'
 import type { ProjectNavigation } from '../lib/projectNavigation'
 import { projectCustomer, projectDisplayName, projectShortName } from '../lib/projectDisplay'
@@ -22,6 +22,7 @@ export default function ProjectsView({ userId, userEmail, navigation, onNavigate
   const allProjects = useLiveQuery(() => db.projects.filter((project) => !project.deletedAt).toArray(), []) ?? []
   const allTasks = useLiveQuery(() => db.projectTasks.filter((task) => !task.deletedAt).toArray(), []) ?? []
   const allMilestones = useLiveQuery(() => db.projectMilestones.filter((milestone) => !milestone.deletedAt).toArray(), []) ?? []
+  const allSections = useLiveQuery(() => db.projectSections.filter((section) => !section.deletedAt).toArray(), []) ?? []
   const allAfns = useLiveQuery(() => db.projectTaskAfns.filter((afn) => !afn.deletedAt).toArray(), []) ?? []
   const profiles = useLiveQuery(() => db.userProfiles.toArray(), []) ?? []
   const allMembers = useLiveQuery(() => db.projectMembers.filter((member) => !member.deletedAt).toArray(), []) ?? []
@@ -38,6 +39,7 @@ export default function ProjectsView({ userId, userEmail, navigation, onNavigate
   const tasks = useMemo(() => allTasks.filter((task) => projectIds.has(task.projectId)), [allTasks, projectIds])
   const taskIds = useMemo(() => new Set(tasks.map((task) => task.id)), [tasks])
   const milestones = useMemo(() => allMilestones.filter((milestone) => projectIds.has(milestone.projectId)), [allMilestones, projectIds])
+  const sections = useMemo(() => allSections.filter((section) => projectIds.has(section.projectId)), [allSections, projectIds])
   const afns = useMemo(() => allAfns.filter((afn) => taskIds.has(afn.taskId)), [allAfns, taskIds])
   const members = useMemo(() => allMembers.filter((member) => projectIds.has(member.projectId)), [allMembers, projectIds])
   const comments = useMemo(() => allComments.filter((comment) => taskIds.has(comment.taskId)), [allComments, taskIds])
@@ -58,7 +60,7 @@ export default function ProjectsView({ userId, userEmail, navigation, onNavigate
   const otherDueTasks = sortedMine.filter((task) => task.dueDate && (task.dueDate < today.getTime() || task.dueDate >= tomorrow))
 
   if (selected) {
-    return <ProjectDetail key={`${selected.id}:${selectedTaskId ?? ''}`} project={selected} tasks={tasks.filter((task) => task.projectId === selected.id)} milestones={milestones.filter((milestone) => milestone.projectId === selected.id)} afns={afns} comments={comments}
+    return <ProjectDetail key={`${selected.id}:${selectedTaskId ?? ''}`} project={selected} tasks={tasks.filter((task) => task.projectId === selected.id)} milestones={milestones.filter((milestone) => milestone.projectId === selected.id)} sections={sections.filter((section) => section.projectId === selected.id)} afns={afns} comments={comments}
       profiles={profiles} members={members.filter((member) => member.projectId === selected.id)} userId={userId} userEmail={userEmail} filter={taskFilter} setFilter={setTaskFilter}
       initialTaskId={selectedTaskId} onBack={() => onNavigate({ type: 'overview' })} />
   }
@@ -154,12 +156,70 @@ function ProjectTaskRow({ task, project, afns, comments, profiles, userId, userE
   </div>
 }
 
-function ProjectDetail({ project, tasks, milestones, afns, comments, profiles, members, userId, userEmail, filter, setFilter, initialTaskId, onBack }: { project: Project; tasks: ProjectTask[]; milestones: ProjectMilestone[]; afns: { taskId: string; afnNumber: number }[]; comments: ProjectTaskComment[]; profiles: UserProfile[]; members: ProjectMember[]; userId: string; userEmail?: string; filter: TaskFilter; setFilter: (value: TaskFilter) => void; initialTaskId?: string; onBack: () => void }) {
+function OrganizedProjectTasks({ tasks, milestones, sections, renderTask, onAddTask, onAddSection }: {
+  tasks: ProjectTask[]
+  milestones: ProjectMilestone[]
+  sections: ProjectSection[]
+  renderTask: (task: ProjectTask) => ReactNode
+  onAddTask: (milestoneId?: string, sectionId?: string) => void
+  onAddSection: (milestoneId: string) => void
+}) {
+  if (tasks.length === 0 && milestones.length === 0) {
+    return <div className="project-empty-state"><strong>Keine Aufgaben in diesem Filter</strong><span>Über „+ Aufgabe“ kannst du eine neue Projektaufgabe anlegen.</span></div>
+  }
+
+  const orderedMilestones = [...milestones].sort((a, b) => a.sortOrder - b.sortOrder)
+  const withoutMilestone = tasks.filter((task) => !task.milestoneId)
+  const knownMilestoneIds = new Set(milestones.map((milestone) => milestone.id))
+  const orphaned = tasks.filter((task) => task.milestoneId && !knownMilestoneIds.has(task.milestoneId))
+  const standalone = [...withoutMilestone, ...orphaned]
+
+  return <div className="organized-task-list">
+    {standalone.length > 0 && <details className="task-milestone-group" open>
+      <summary><span>Ohne Meilenstein</span><small>{standalone.filter((task) => task.status === 'completed').length} / {standalone.length} erledigt</small></summary>
+      <div className="overview-task-list project-detail-task-list">{standalone.map(renderTask)}</div>
+    </details>}
+    {orderedMilestones.map((milestone) => {
+      const milestoneTasks = tasks.filter((task) => task.milestoneId === milestone.id)
+      const milestoneSections = sections.filter((section) => section.milestoneId === milestone.id).sort((a, b) => a.sortOrder - b.sortOrder)
+      const sectionIds = new Set(milestoneSections.map((section) => section.id))
+      const ungrouped = milestoneTasks.filter((task) => !task.sectionId || !sectionIds.has(task.sectionId))
+      const done = milestoneTasks.filter((task) => task.status === 'completed').length
+      return <details className="task-milestone-group" key={milestone.id} open>
+        <summary><span>{milestone.title}</span><small>{done} / {milestoneTasks.length} erledigt</small></summary>
+        <div className="task-group-actions"><button type="button" onClick={() => onAddSection(milestone.id)}>+ Themenbereich</button><button type="button" onClick={() => onAddTask(milestone.id)}>+ Aufgabe</button></div>
+        {milestoneSections.map((section) => {
+          const sectionTasks = milestoneTasks.filter((task) => task.sectionId === section.id)
+          const sectionDone = sectionTasks.filter((task) => task.status === 'completed').length
+          return <details className="task-section-group" key={section.id} open>
+            <summary>
+              <span>{section.title}</span>
+              <small>{sectionDone} / {sectionTasks.length}</small>
+            </summary>
+            <div className="task-section-actions">
+              <button type="button" onClick={async () => { const title = prompt('Themenbereich umbenennen', section.title); if (title?.trim()) await updateProjectSection(section.id, title) }}>Umbenennen</button>
+              <button type="button" onClick={() => onAddTask(milestone.id, section.id)}>+ Aufgabe</button>
+              <button type="button" className="danger-text" onClick={async () => { if (confirm(`Themenbereich „${section.title}“ löschen? Die Aufgaben bleiben erhalten.`)) await deleteProjectSection(section.id) }}>Löschen</button>
+            </div>
+            {sectionTasks.length > 0 ? <div className="overview-task-list project-detail-task-list">{sectionTasks.map(renderTask)}</div> : <p className="task-section-empty">Noch keine Aufgaben.</p>}
+          </details>
+        })}
+        {ungrouped.length > 0 && <details className="task-section-group ungrouped" open>
+          <summary><span>Ohne Themenbereich</span><small>{ungrouped.length}</small></summary>
+          <div className="overview-task-list project-detail-task-list">{ungrouped.map(renderTask)}</div>
+        </details>}
+      </details>
+    })}
+  </div>
+}
+
+function ProjectDetail({ project, tasks, milestones, sections, afns, comments, profiles, members, userId, userEmail, filter, setFilter, initialTaskId, onBack }: { project: Project; tasks: ProjectTask[]; milestones: ProjectMilestone[]; sections: ProjectSection[]; afns: { taskId: string; afnNumber: number }[]; comments: ProjectTaskComment[]; profiles: UserProfile[]; members: ProjectMember[]; userId: string; userEmail?: string; filter: TaskFilter; setFilter: (value: TaskFilter) => void; initialTaskId?: string; onBack: () => void }) {
   const [editingProject, setEditingProject] = useState(false)
   const [editingTask, setEditingTask] = useState<ProjectTask | 'new' | null>(() => tasks.find((task) => task.id === initialTaskId) ?? null)
   const [editingMilestone, setEditingMilestone] = useState<ProjectMilestone | 'new' | null>(null)
   const [openedMilestoneId, setOpenedMilestoneId] = useState<string | null>(null)
   const [taskMilestonePreset, setTaskMilestonePreset] = useState<string | undefined>()
+  const [taskSectionPreset, setTaskSectionPreset] = useState<string | undefined>()
   const [editingTeam, setEditingTeam] = useState(false)
   const [assigneeFilter, setAssigneeFilter] = useState('all')
   const visibleTasks = useMemo(() => [...tasks].filter((task) => (filter === 'all' || task.status === filter) && (assigneeFilter === 'all' || task.assigneeUserId === assigneeFilter)).sort((a, b) => a.sortOrder - b.sortOrder), [tasks, filter, assigneeFilter])
@@ -183,10 +243,17 @@ function ProjectDetail({ project, tasks, milestones, afns, comments, profiles, m
       {nextMilestone && <NextMilestone milestone={nextMilestone} tasks={tasks} onOpen={() => setOpenedMilestoneId(nextMilestone.id)}/>}
 
       <section className="project-tasks-section">
-        <div className="project-tasks-heading"><div><p className="projects-eyebrow">Projektarbeit</p><h2>Aufgaben</h2></div><button className="primary compact" onClick={() => { setTaskMilestonePreset(undefined); setEditingTask('new') }}>+ Aufgabe</button></div>
+        <div className="project-tasks-heading"><div><p className="projects-eyebrow">Projektarbeit</p><h2>Aufgaben</h2></div><button className="primary compact" onClick={() => { setTaskMilestonePreset(undefined); setTaskSectionPreset(undefined); setEditingTask('new') }}>+ Aufgabe</button></div>
         <div className="task-filter-bar" aria-label="Aufgaben filtern">{taskFilters.map((value) => <button key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}><span>{value === 'all' ? 'Alle' : taskStatus[value]}</span><strong>{counts[value]}</strong></button>)}</div>
         <label className="assignee-filter">Verantwortlich<select value={assigneeFilter} onChange={(event) => setAssigneeFilter(event.target.value)}><option value="all">Alle</option><option value={userId}>Meine</option>{teamProfiles.filter((profile) => profile.id !== userId).map((profile) => <option key={profile.id} value={profile.id}>{profile.displayName || profile.email}</option>)}</select></label>
-        <div className="overview-task-list project-detail-task-list">{visibleTasks.length === 0 ? <div className="project-empty-state"><strong>Keine Aufgaben in diesem Filter</strong><span>Über „+ Aufgabe“ kannst du eine neue Projektaufgabe anlegen.</span></div> : visibleTasks.map((task) => <ProjectTaskRow key={task.id} project={project} task={task} afns={afns.filter((afn) => afn.taskId === task.id).map((afn) => afn.afnNumber)} comments={comments.filter((comment) => comment.taskId === task.id)} profiles={profiles} userId={userId} userEmail={userEmail} onOpen={() => setEditingTask(task)}/>)}</div>
+        <OrganizedProjectTasks
+          tasks={visibleTasks}
+          milestones={milestones}
+          sections={sections}
+          renderTask={(task) => <ProjectTaskRow key={task.id} project={project} task={task} afns={afns.filter((afn) => afn.taskId === task.id).map((afn) => afn.afnNumber)} comments={comments.filter((comment) => comment.taskId === task.id)} profiles={profiles} userId={userId} userEmail={userEmail} onOpen={() => setEditingTask(task)}/>}
+          onAddTask={(milestoneId, sectionId) => { setTaskMilestonePreset(milestoneId); setTaskSectionPreset(sectionId); setEditingTask('new') }}
+          onAddSection={async (milestoneId) => { const title = prompt('Name des Themenbereichs'); if (title?.trim()) await createProjectSection(project.id, milestoneId, title) }}
+        />
       </section>
 
       <section className="project-milestones-section">
@@ -198,7 +265,7 @@ function ProjectDetail({ project, tasks, milestones, afns, comments, profiles, m
       <ProjectEditDialog project={project} onClose={() => setEditingProject(false)} onDeleted={onBack}/>
     )}
     {editingTask && (
-      <TaskEditDialog projectId={project.id} task={editingTask === 'new' ? undefined : editingTask} milestones={milestones} milestonePreset={taskMilestonePreset}
+      <TaskEditDialog projectId={project.id} task={editingTask === 'new' ? undefined : editingTask} milestones={milestones} sections={sections} milestonePreset={taskMilestonePreset} sectionPreset={taskSectionPreset}
         profiles={profiles} memberIds={teamIds} userId={userId} userEmail={userEmail}
         afns={editingTask === 'new' ? [] : afns.filter((afn) => afn.taskId === editingTask.id).map((afn) => afn.afnNumber)}
         comments={editingTask === 'new' ? [] : comments.filter((comment) => comment.taskId === editingTask.id)}
@@ -206,7 +273,7 @@ function ProjectDetail({ project, tasks, milestones, afns, comments, profiles, m
     )}
     {editingMilestone && <MilestoneEditDialog projectId={project.id} milestone={editingMilestone === 'new' ? undefined : editingMilestone} onClose={() => setEditingMilestone(null)}/>}
     {editingTeam && <TeamEditDialog project={project} members={members} profiles={profiles} userId={userId} userEmail={userEmail} onClose={() => setEditingTeam(false)}/>}
-    {openedMilestoneId && milestones.find((m) => m.id === openedMilestoneId) && <MilestoneDetailDialog milestone={milestones.find((m) => m.id === openedMilestoneId)!} tasks={tasks.filter((task) => task.milestoneId === openedMilestoneId)} onTask={(task) => { setOpenedMilestoneId(null); setEditingTask(task) }} onAddTask={() => { setTaskMilestonePreset(openedMilestoneId); setOpenedMilestoneId(null); setEditingTask('new') }} onClose={() => setOpenedMilestoneId(null)}/>}
+    {openedMilestoneId && milestones.find((m) => m.id === openedMilestoneId) && <MilestoneDetailDialog milestone={milestones.find((m) => m.id === openedMilestoneId)!} tasks={tasks.filter((task) => task.milestoneId === openedMilestoneId)} onTask={(task) => { setOpenedMilestoneId(null); setEditingTask(task) }} onAddTask={() => { setTaskMilestonePreset(openedMilestoneId); setTaskSectionPreset(undefined); setOpenedMilestoneId(null); setEditingTask('new') }} onClose={() => setOpenedMilestoneId(null)}/>}
   </main>
 }
 
@@ -264,7 +331,7 @@ function MilestoneDetailDialog({ milestone, tasks, onTask, onAddTask, onClose }:
   return <DialogShell title={milestone.title} subtitle="Meilenstein" onClose={onClose}><div className="milestone-detail"><p>{milestone.description || 'Keine Beschreibung hinterlegt.'}</p><div className="milestone-detail-meta"><span>{milestone.dueDate ? formatDate(milestone.dueDate) : 'Ohne Datum'}</span><StatusBadge status={milestone.status} label={milestoneStatus[milestone.status]}/></div><strong>{tasks.length ? `${done} von ${tasks.length} Aufgaben erledigt` : 'Noch keine Aufgaben'}</strong>{tasks.length > 0 && <div className="milestone-progress"><i style={{width: `${done / tasks.length * 100}%`}}/></div>}<div className="milestone-task-list">{tasks.map((task) => <button key={task.id} onClick={() => onTask(task)}><span>{task.status === 'completed' ? '✓' : '○'}</span>{task.title}</button>)}</div><button className="primary compact" onClick={onAddTask}>+ Aufgabe</button></div></DialogShell>
 }
 
-function TaskEditDialog({ projectId, task, milestones, milestonePreset, afns, comments, profiles, memberIds, userId, userEmail, onClose }: { projectId: string; task?: ProjectTask; milestones: ProjectMilestone[]; milestonePreset?: string; afns: number[]; comments: ProjectTaskComment[]; profiles: UserProfile[]; memberIds: string[]; userId: string; userEmail?: string; onClose: () => void }) {
+function TaskEditDialog({ projectId, task, milestones, sections, milestonePreset, sectionPreset, afns, comments, profiles, memberIds, userId, userEmail, onClose }: { projectId: string; task?: ProjectTask; milestones: ProjectMilestone[]; sections: ProjectSection[]; milestonePreset?: string; sectionPreset?: string; afns: number[]; comments: ProjectTaskComment[]; profiles: UserProfile[]; memberIds: string[]; userId: string; userEmail?: string; onClose: () => void }) {
   const [title, setTitle] = useState(task?.title ?? '')
   const [description, setDescription] = useState(task?.description ?? '')
   const [status, setStatus] = useState<ProjectTaskStatus>(task?.status ?? 'open')
@@ -272,6 +339,8 @@ function TaskEditDialog({ projectId, task, milestones, milestonePreset, afns, co
   const [assigneeUserId, setAssigneeUserId] = useState(task ? (task.assigneeUserId ?? '') : userId)
   const [waitingFor, setWaitingFor] = useState<ProjectWaitingFor | undefined>(task?.waitingFor)
   const [milestoneId, setMilestoneId] = useState(task?.milestoneId ?? milestonePreset ?? '')
+  const [sectionId, setSectionId] = useState(task?.sectionId ?? sectionPreset ?? '')
+  const availableSections = sections.filter((section) => section.milestoneId === milestoneId).sort((a, b) => a.sortOrder - b.sortOrder)
   const [afnText, setAfnText] = useState(afns.join(', '))
   const [commentText, setCommentText] = useState('')
   const [commentSaving, setCommentSaving] = useState(false)
@@ -281,7 +350,7 @@ function TaskEditDialog({ projectId, task, milestones, milestonePreset, afns, co
     event.preventDefault()
     if (!title.trim()) return
     const id = task?.id ?? await createProjectTask(projectId, title, assigneeUserId || undefined)
-    await updateProjectTask(id, { title: title.trim(), description: description.trim() || undefined, status, dueDate, milestoneId: milestoneId || undefined, assigneeUserId: assigneeUserId || undefined, waitingFor: status === 'waiting' ? waitingFor : undefined })
+    await updateProjectTask(id, { title: title.trim(), description: description.trim() || undefined, status, dueDate, milestoneId: milestoneId || undefined, sectionId: milestoneId && availableSections.some((section) => section.id === sectionId) ? sectionId : undefined, assigneeUserId: assigneeUserId || undefined, waitingFor: status === 'waiting' ? waitingFor : undefined })
     await replaceProjectTaskAfns(id, parseAfns(afnText))
     onClose()
   }
@@ -309,7 +378,8 @@ function TaskEditDialog({ projectId, task, milestones, milestonePreset, afns, co
         <FormField label="Status"><select value={status} onChange={(event) => setStatus(event.target.value as ProjectTaskStatus)}>{Object.entries(taskStatus).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></FormField>
         <FormField label="Termin"><BufferedDateInput value={dueDate} onSave={setDueDate}/></FormField>
         <FormField label="Verantwortlich"><select value={assigneeUserId} onChange={(event) => setAssigneeUserId(event.target.value)}><option value="">Nicht zugewiesen</option>{profileOptions(profiles, userId, userEmail, memberIds)}</select></FormField>
-        <FormField label="Meilenstein"><select value={milestoneId} onChange={(event) => setMilestoneId(event.target.value)}><option value="">Kein Meilenstein</option>{milestones.filter((m) => m.status !== 'completed' || m.id === task?.milestoneId).sort((a,b) => a.sortOrder - b.sortOrder).map((m) => <option key={m.id} value={m.id}>{m.title}</option>)}</select></FormField>
+        <FormField label="Meilenstein"><select value={milestoneId} onChange={(event) => { setMilestoneId(event.target.value); setSectionId('') }}><option value="">Kein Meilenstein</option>{milestones.filter((m) => m.status !== 'completed' || m.id === task?.milestoneId).sort((a,b) => a.sortOrder - b.sortOrder).map((m) => <option key={m.id} value={m.id}>{m.title}</option>)}</select></FormField>
+        <FormField label="Themenbereich"><select value={sectionId} disabled={!milestoneId || availableSections.length === 0} onChange={(event) => setSectionId(event.target.value)}><option value="">{!milestoneId ? 'Zuerst Meilenstein wählen' : 'Kein Themenbereich'}</option>{availableSections.map((section) => <option key={section.id} value={section.id}>{section.title}</option>)}</select></FormField>
         {status === 'waiting' && <FormField label="Wartet auf"><select value={waitingFor ?? ''} onChange={(event) => setWaitingFor((event.target.value || undefined) as ProjectWaitingFor | undefined)}><option value="">Bitte wählen</option>{waitingOptions.map((value) => <option key={value}>{value}</option>)}</select></FormField>}
         <FormField label="AFN-Nummern" wide><input value={afnText} onChange={(event) => setAfnText(event.target.value)} inputMode="numeric" placeholder="181657, 181658"/><small>Mehrere Nummern mit Komma trennen.</small></FormField>
       </div>

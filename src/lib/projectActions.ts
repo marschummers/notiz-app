@@ -1,5 +1,5 @@
 import { db, newId } from '../db/db'
-import type { Project, ProjectTask, ProjectTaskAfn, ProjectTaskComment, ProjectMilestone, ProjectMember } from '../db/types'
+import type { Project, ProjectTask, ProjectTaskAfn, ProjectTaskComment, ProjectMilestone, ProjectSection, ProjectMember } from '../db/types'
 
 export async function createProject(input: Pick<Project, 'name' | 'ownerUserId'> & Partial<Project>): Promise<string> {
   const now = Date.now()
@@ -17,7 +17,7 @@ export async function updateProject(id: string, changes: Partial<Omit<Project, '
 
 export async function deleteProject(id: string): Promise<void> {
   const now = Date.now()
-  await db.transaction('rw', [db.projects, db.projectTasks, db.projectTaskAfns, db.projectTaskComments, db.projectMilestones, db.projectMembers], async () => {
+  await db.transaction('rw', [db.projects, db.projectTasks, db.projectTaskAfns, db.projectTaskComments, db.projectMilestones, db.projectSections, db.projectMembers], async () => {
     const tasks = await db.projectTasks.where('projectId').equals(id).toArray()
     for (const task of tasks) {
       const afns = await db.projectTaskAfns.where('taskId').equals(task.id).toArray()
@@ -28,6 +28,8 @@ export async function deleteProject(id: string): Promise<void> {
     }
     const milestones = await db.projectMilestones.where('projectId').equals(id).toArray()
     await Promise.all(milestones.map((milestone) => db.projectMilestones.update(milestone.id, { deletedAt: now, updatedAt: now })))
+    const sections = await db.projectSections.where('projectId').equals(id).toArray()
+    await Promise.all(sections.map((section) => db.projectSections.update(section.id, { deletedAt: now, updatedAt: now })))
     const members = await db.projectMembers.where('projectId').equals(id).toArray()
     await Promise.all(members.map((member) => db.projectMembers.update(member.id, { deletedAt: now, updatedAt: now })))
     await db.projects.update(id, { deletedAt: now, updatedAt: now })
@@ -48,9 +50,11 @@ export async function updateProjectMilestone(id: string, changes: Partial<Omit<P
 
 export async function deleteProjectMilestone(id: string): Promise<void> {
   const now = Date.now()
-  await db.transaction('rw', db.projectMilestones, db.projectTasks, async () => {
+  await db.transaction('rw', db.projectMilestones, db.projectSections, db.projectTasks, async () => {
     const tasks = await db.projectTasks.where('milestoneId').equals(id).toArray()
-    await Promise.all(tasks.map((task) => db.projectTasks.update(task.id, { milestoneId: undefined, updatedAt: now })))
+    await Promise.all(tasks.map((task) => db.projectTasks.update(task.id, { milestoneId: undefined, sectionId: undefined, updatedAt: now })))
+    const sections = await db.projectSections.where('milestoneId').equals(id).toArray()
+    await Promise.all(sections.map((section) => db.projectSections.update(section.id, { deletedAt: now, updatedAt: now })))
     await db.projectMilestones.update(id, { deletedAt: now, updatedAt: now })
   })
 }
@@ -66,6 +70,36 @@ export async function moveProjectMilestone(id: string, direction: -1 | 1): Promi
   await db.transaction('rw', db.projectMilestones, async () => {
     await db.projectMilestones.update(current.id, { sortOrder: other.sortOrder, updatedAt: now })
     await db.projectMilestones.update(other.id, { sortOrder: current.sortOrder, updatedAt: now })
+  })
+}
+
+export async function createProjectSection(projectId: string, milestoneId: string, title: string): Promise<string> {
+  const now = Date.now()
+  const id = newId()
+  const siblings = await db.projectSections.where('milestoneId').equals(milestoneId).toArray()
+  const section: ProjectSection = {
+    id,
+    projectId,
+    milestoneId,
+    title: title.trim() || 'Neuer Themenbereich',
+    sortOrder: Math.max(0, ...siblings.map((item) => item.sortOrder)) + 1,
+    createdAt: now,
+    updatedAt: now,
+  }
+  await db.projectSections.add(section)
+  return id
+}
+
+export async function updateProjectSection(id: string, title: string): Promise<void> {
+  await db.projectSections.update(id, { title: title.trim() || 'Themenbereich', updatedAt: Date.now() })
+}
+
+export async function deleteProjectSection(id: string): Promise<void> {
+  const now = Date.now()
+  const tasks = await db.projectTasks.where('sectionId').equals(id).toArray()
+  await db.transaction('rw', db.projectSections, db.projectTasks, async () => {
+    await Promise.all(tasks.map((task) => db.projectTasks.update(task.id, { sectionId: undefined, updatedAt: now })))
+    await db.projectSections.update(id, { deletedAt: now, updatedAt: now })
   })
 }
 

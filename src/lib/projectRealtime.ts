@@ -22,9 +22,14 @@ async function applyProjectRow(table: string, row: Row) {
     dueDate: time(row.due_date), status: row.status as ProjectMilestoneStatus, sortOrder: Number(row.sort_order),
     createdAt: time(row.created_at) ?? Date.now(), updatedAt: time(row.updated_at) ?? Date.now(), deletedAt: time(row.deleted_at),
   })
+  if (table === 'notiz_project_sections') await db.projectSections.put({
+    id: String(row.id), projectId: String(row.project_id), milestoneId: String(row.milestone_id),
+    title: String(row.title ?? ''), sortOrder: Number(row.sort_order),
+    createdAt: time(row.created_at) ?? Date.now(), updatedAt: time(row.updated_at) ?? Date.now(), deletedAt: time(row.deleted_at),
+  })
   if (table === 'notiz_project_tasks') await db.projectTasks.put({
     id: String(row.id), projectId: String(row.project_id), milestoneId: row.milestone_id ? String(row.milestone_id) : undefined,
-    title: String(row.title ?? ''), description: row.description ? String(row.description) : undefined,
+    sectionId: row.section_id ? String(row.section_id) : undefined, title: String(row.title ?? ''), description: row.description ? String(row.description) : undefined,
     assigneeUserId: row.assignee_user_id ? String(row.assignee_user_id) : undefined, status: row.status as ProjectTaskStatus,
     dueDate: time(row.due_date), waitingFor: (row.waiting_for || undefined) as ProjectWaitingFor | undefined,
     sortOrder: Number(row.sort_order), createdAt: time(row.created_at) ?? Date.now(), updatedAt: time(row.updated_at) ?? Date.now(), deletedAt: time(row.deleted_at),
@@ -42,7 +47,7 @@ async function applyProjectRow(table: string, row: Row) {
 export function subscribeProjectRealtime() {
   if (!supabase) return () => undefined
   const client = supabase
-  const tables = ['notiz_projects', 'notiz_project_members', 'notiz_project_tasks', 'notiz_project_milestones', 'notiz_project_task_afns', 'notiz_project_task_comments']
+  const tables = ['notiz_projects', 'notiz_project_members', 'notiz_project_tasks', 'notiz_project_milestones', 'notiz_project_sections', 'notiz_project_task_afns', 'notiz_project_task_comments']
   let channel = client.channel('notiz-project-realtime')
   for (const table of tables) {
     channel = channel.on('postgres_changes', { event: '*', schema: 'public', table }, (payload) => {

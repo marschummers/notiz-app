@@ -1,6 +1,6 @@
 import type { EntityTable } from 'dexie'
 import { db } from '../db/db'
-import type { Folder, Page, PageBackground, PageProperties, PageType, Tag, PageTag, Task, QuickTask, TextBlock, Template, TemplateTextBlock, TemplateTask, Stroke, PdfPrintout, Project, ProjectTask, ProjectTaskAfn, ProjectTaskComment, ProjectMilestone, ProjectStatus, ProjectTaskStatus, ProjectWaitingFor, ProjectMilestoneStatus, ProjectMember, ProjectMemberRole } from '../db/types'
+import type { Folder, Page, PageBackground, PageProperties, PageType, Tag, PageTag, Task, QuickTask, TextBlock, Template, TemplateTextBlock, TemplateTask, Stroke, PdfPrintout, Project, ProjectTask, ProjectTaskAfn, ProjectTaskComment, ProjectMilestone, ProjectSection, ProjectStatus, ProjectTaskStatus, ProjectWaitingFor, ProjectMilestoneStatus, ProjectMember, ProjectMemberRole } from '../db/types'
 import { supabase } from './supabaseClient'
 
 // Faengt fehlende/kaputte Zeitstempel ab, statt dass new Date(...).toISOString() mit
@@ -176,8 +176,9 @@ interface RemotePdfPrintout {
 }
 
 interface RemoteProject { id: string; user_id: string; name: string; customer_name: string | null; owner_user_id: string; status: string; start_date: string | null; target_date: string | null; description: string | null; created_at: string; updated_at: string; deleted_at: string | null }
-interface RemoteProjectTask { id: string; user_id: string; project_id: string; milestone_id: string | null; title: string; description: string | null; assignee_user_id: string | null; status: string; due_date: string | null; waiting_for: string | null; sort_order: number; created_at: string; updated_at: string; deleted_at: string | null }
+interface RemoteProjectTask { id: string; user_id: string; project_id: string; milestone_id: string | null; section_id: string | null; title: string; description: string | null; assignee_user_id: string | null; status: string; due_date: string | null; waiting_for: string | null; sort_order: number; created_at: string; updated_at: string; deleted_at: string | null }
 interface RemoteProjectMilestone { id: string; user_id: string; project_id: string; title: string; description: string | null; due_date: string | null; status: string; sort_order: number; created_at: string; updated_at: string; deleted_at: string | null }
+interface RemoteProjectSection { id: string; user_id: string; project_id: string; milestone_id: string; title: string; sort_order: number; created_at: string; updated_at: string; deleted_at: string | null }
 interface RemoteProjectTaskAfn { id: string; user_id: string; task_id: string; afn_number: number; updated_at: string; deleted_at: string | null }
 interface RemoteProjectTaskComment { id: string; task_id: string; author_user_id: string; body: string; created_at: string; updated_at: string; deleted_at: string | null }
 interface RemoteProjectMember { id: string; project_id: string; user_id: string; role: string; created_at: string; updated_at: string; deleted_at: string | null }
@@ -480,20 +481,22 @@ export async function syncAll(): Promise<void> {
       .filter((task) => inaccessibleProjectIds.has(task.projectId))
       .toArray()
     const inaccessibleTaskIds = new Set(cachedProjectTasks.map((task) => task.id))
-    const [cachedAfns, cachedComments, cachedMilestones, cachedMembers] = await Promise.all([
+    const [cachedAfns, cachedComments, cachedMilestones, cachedSections, cachedMembers] = await Promise.all([
       db.projectTaskAfns.filter((afn) => inaccessibleTaskIds.has(afn.taskId)).toArray(),
       db.projectTaskComments.filter((comment) => inaccessibleTaskIds.has(comment.taskId)).toArray(),
       db.projectMilestones.filter((milestone) => inaccessibleProjectIds.has(milestone.projectId)).toArray(),
+      db.projectSections.filter((section) => inaccessibleProjectIds.has(section.projectId)).toArray(),
       db.projectMembers.filter((member) => inaccessibleProjectIds.has(member.projectId)).toArray(),
     ])
     await db.transaction(
       'rw',
-      [db.projects, db.projectTasks, db.projectTaskAfns, db.projectTaskComments, db.projectMilestones, db.projectMembers],
+      [db.projects, db.projectTasks, db.projectTaskAfns, db.projectTaskComments, db.projectMilestones, db.projectSections, db.projectMembers],
       async () => {
         await db.projectTaskAfns.bulkDelete(cachedAfns.map((row) => row.id))
         await db.projectTaskComments.bulkDelete(cachedComments.map((row) => row.id))
         await db.projectTasks.bulkDelete(cachedProjectTasks.map((row) => row.id))
         await db.projectMilestones.bulkDelete(cachedMilestones.map((row) => row.id))
+        await db.projectSections.bulkDelete(cachedSections.map((row) => row.id))
         await db.projectMembers.bulkDelete(cachedMembers.map((row) => row.id))
         await db.projects.bulkDelete([...inaccessibleProjectIds])
       },
@@ -526,12 +529,22 @@ export async function syncAll(): Promise<void> {
     dueDate: r.due_date ? ms(r.due_date) : undefined, status: r.status as ProjectMilestoneStatus, sortOrder: r.sort_order,
     createdAt: ms(r.created_at), updatedAt: ms(r.updated_at), deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined }))
 
+  await mergeTable<ProjectSection, RemoteProjectSection>(db.projectSections, 'notiz_project_sections', (section) => ({
+    id: section.id, user_id: userId, project_id: section.projectId, milestone_id: section.milestoneId,
+    title: section.title, sort_order: section.sortOrder, created_at: iso(section.createdAt),
+    updated_at: iso(section.updatedAt), deleted_at: section.deletedAt ? iso(section.deletedAt) : null,
+  }), (remote) => ({
+    id: remote.id, projectId: remote.project_id, milestoneId: remote.milestone_id, title: remote.title,
+    sortOrder: remote.sort_order, createdAt: ms(remote.created_at), updatedAt: ms(remote.updated_at),
+    deletedAt: remote.deleted_at ? ms(remote.deleted_at) : undefined,
+  }))
+
   await mergeTable<ProjectTask, RemoteProjectTask>(db.projectTasks, 'notiz_project_tasks', (t) => ({
-    id: t.id, user_id: userId, project_id: t.projectId, milestone_id: t.milestoneId ?? null, title: t.title, description: t.description ?? null,
+    id: t.id, user_id: userId, project_id: t.projectId, milestone_id: t.milestoneId ?? null, section_id: t.sectionId ?? null, title: t.title, description: t.description ?? null,
     assignee_user_id: t.assigneeUserId ?? null, status: t.status, due_date: t.dueDate ? iso(t.dueDate) : null,
     waiting_for: t.waitingFor ?? null, sort_order: t.sortOrder, created_at: iso(t.createdAt),
     updated_at: iso(t.updatedAt), deleted_at: t.deletedAt ? iso(t.deletedAt) : null,
-  }), (r) => ({ id: r.id, projectId: r.project_id, milestoneId: r.milestone_id ?? undefined, title: r.title, description: r.description ?? undefined,
+  }), (r) => ({ id: r.id, projectId: r.project_id, milestoneId: r.milestone_id ?? undefined, sectionId: r.section_id ?? undefined, title: r.title, description: r.description ?? undefined,
     assigneeUserId: r.assignee_user_id ?? undefined, status: r.status as ProjectTaskStatus,
     dueDate: r.due_date ? ms(r.due_date) : undefined, waitingFor: (r.waiting_for as ProjectWaitingFor) || undefined,
     sortOrder: r.sort_order, createdAt: ms(r.created_at), updatedAt: ms(r.updated_at), deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined }))

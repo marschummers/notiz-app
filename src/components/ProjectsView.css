@@ -93,3 +93,124 @@
 @media(max-width:560px){.project-read-header{align-items:flex-start;flex-direction:column}.project-header-actions{width:100%;justify-content:flex-start}.project-meta-grid{display:grid;grid-template-columns:1fr}.dialog-form-grid{grid-template-columns:1fr}.dialog-form-field.wide{grid-column:auto}.dialog-actions{grid-template-columns:1fr 1fr}.dialog-actions>span{display:none}.danger-action{grid-column:1/-1;justify-self:start}.project-dialog>header,.project-dialog-form,.milestone-detail{padding-left:17px;padding-right:17px}.next-milestone small{display:none}}
 .customer-overview .project-read-header{margin-bottom:var(--project-section-gap)}.customer-section{margin-top:var(--project-content-gap)}.customer-list{display:flex;flex-direction:column}.customer-row{display:grid;grid-template-columns:minmax(180px,1fr) minmax(120px,auto) auto;align-items:center;gap:16px;min-height:58px;padding:9px 4px;border:0;border-top:1px solid var(--project-border-soft);background:transparent;color:var(--project-text-primary);text-align:left}.customer-row:hover{background:var(--project-surface-raised)}.customer-row>span:first-child{display:grid;min-width:0;gap:2px}.customer-row strong,.customer-row small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.customer-row small,.customer-row>span:not(:first-child){color:var(--project-text-secondary);font-size:.78rem}.customer-task-row{grid-template-columns:minmax(220px,1fr) minmax(130px,.5fr) 115px auto}.customer-row .milestone-overdue{color:var(--project-danger)}
 @media(max-width:800px){.customer-row,.customer-task-row{grid-template-columns:minmax(0,1fr) auto}.customer-row>span:not(:first-child){grid-column:2}.customer-task-row .project-status-badge{grid-column:2}}
+
+/* Optionale Hierarchie Meilenstein -> Themenbereich -> Aufgabe. Native details/summary
+   bleibt per Tastatur und Touch bedienbar und benoetigt keinen zusaetzlichen Collapse-State. */
+.organized-task-list {
+  display: grid;
+  gap: 14px;
+}
+
+.task-milestone-group,
+.task-section-group {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel) 86%, transparent);
+  overflow: hidden;
+}
+
+.task-milestone-group > summary,
+.task-section-group > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.task-milestone-group > summary::-webkit-details-marker,
+.task-section-group > summary::-webkit-details-marker {
+  display: none;
+}
+
+.task-milestone-group > summary {
+  padding: 12px 14px;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.task-section-group {
+  margin: 0 12px 12px;
+  border-radius: 8px;
+}
+
+.task-section-group > summary {
+  padding: 9px 12px;
+  color: var(--text);
+  font-weight: 650;
+}
+
+.task-milestone-group > summary::before,
+.task-section-group > summary::before {
+  content: '▸';
+  color: var(--muted);
+  font-size: 11px;
+  transition: transform 120ms ease;
+}
+
+.task-milestone-group[open] > summary::before,
+.task-section-group[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.task-milestone-group > summary small,
+.task-section-group > summary small {
+  margin-left: auto;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.task-group-actions,
+.task-section-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 0 12px 9px;
+}
+
+.task-group-actions button,
+.task-section-actions button {
+  border: 0;
+  background: transparent;
+  color: var(--accent-strong);
+  padding: 3px 6px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.task-section-actions .danger-text {
+  color: var(--bad);
+}
+
+.task-section-group .project-detail-task-list {
+  padding: 0 8px 8px;
+}
+
+.task-section-group.ungrouped {
+  border-style: dashed;
+}
+
+.task-section-empty {
+  margin: 0;
+  padding: 2px 12px 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+@media (max-width: 700px) {
+  .task-milestone-group > summary {
+    padding: 10px;
+  }
+
+  .task-section-group {
+    margin-inline: 8px;
+  }
+
+  .task-group-actions,
+  .task-section-actions {
+    flex-wrap: wrap;
+  }
+}
+
