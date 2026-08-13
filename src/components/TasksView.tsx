@@ -3,26 +3,34 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
 import { toggleTask } from '../lib/actions'
 import { createQuickTask, deleteQuickTask, toggleQuickTask } from '../lib/quickTaskActions'
-import type { QuickTask, Task } from '../db/types'
+import { updateProjectTask } from '../lib/projectActions'
+import { projectDisplayName } from '../lib/projectDisplay'
+import type { ProjectTask, QuickTask, Task } from '../db/types'
 import './TasksView.css'
 
 interface Props {
   onOpenPage: (pageId: string) => void
+  onOpenProject: (projectId: string, taskId: string) => void
 }
 
-export default function TasksView({ onOpenPage }: Props) {
+export default function TasksView({ onOpenPage, onOpenProject }: Props) {
   const [draft, setDraft] = useState('')
   const tasks = useLiveQuery(() => db.tasks.filter((task) => !task.deletedAt).toArray(), [])
   const quickTasks = useLiveQuery(() => db.quickTasks.filter((task) => !task.deletedAt).toArray(), [])
+  const projectTasks = useLiveQuery(() => db.projectTasks.filter((task) => !task.deletedAt).toArray(), [])
+  const projects = useLiveQuery(() => db.projects.filter((project) => !project.deletedAt).toArray(), [])
   const pages = useLiveQuery(() => db.pages.toArray(), [])
 
   const pageTitleById = new Map((pages ?? []).map((page) => [page.id, page.title || 'Ohne Titel']))
+  const projectById = new Map((projects ?? []).map((project) => [project.id, project]))
   const allTasks = [
     ...(tasks ?? []).map((task) => ({ kind: 'page' as const, task })),
     ...(quickTasks ?? []).map((task) => ({ kind: 'quick' as const, task })),
+    ...(projectTasks ?? []).map((task) => ({ kind: 'project' as const, task })),
   ]
-  const open = allTasks.filter(({ task }) => !task.completed).sort((a, b) => b.task.updatedAt - a.task.updatedAt)
-  const done = allTasks.filter(({ task }) => task.completed).sort((a, b) => b.task.updatedAt - a.task.updatedAt)
+  const isCompleted = (item: (typeof allTasks)[number]) => item.kind === 'project' ? item.task.status === 'completed' : item.task.completed
+  const open = allTasks.filter((item) => !isCompleted(item)).sort((a, b) => b.task.updatedAt - a.task.updatedAt)
+  const done = allTasks.filter(isCompleted).sort((a, b) => b.task.updatedAt - a.task.updatedAt)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -73,8 +81,28 @@ export default function TasksView({ onOpenPage }: Props) {
     )
   }
 
+  function renderProjectTask(task: ProjectTask) {
+    const completed = task.status === 'completed'
+    const project = projectById.get(task.projectId)
+    return (
+      <div key={'project-' + task.id} className="task-row" onClick={() => onOpenProject(task.projectId, task.id)}>
+        <input
+          type="checkbox"
+          checked={completed}
+          onClick={(event) => event.stopPropagation()}
+          onChange={() => updateProjectTask(task.id, { status: completed ? 'open' : 'completed' })}
+          aria-label={completed ? 'Aufgabe wieder öffnen' : 'Aufgabe erledigen'}
+        />
+        <div className="task-row-text">
+          <div className={completed ? 'task-row-title completed' : 'task-row-title'}>{task.title}</div>
+          <div className="task-row-page">{project ? projectDisplayName(project) : 'Unbekanntes Projekt'}</div>
+        </div>
+      </div>
+    )
+  }
+
   const renderTask = ({ kind, task }: (typeof allTasks)[number]) =>
-    kind === 'page' ? renderPageTask(task) : renderQuickTask(task)
+    kind === 'page' ? renderPageTask(task) : kind === 'quick' ? renderQuickTask(task) : renderProjectTask(task)
 
   return (
     <div className="tasks-view">

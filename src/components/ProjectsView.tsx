@@ -404,8 +404,8 @@ function OrganizedProjectTasks({ tasks, milestones, sections, renderTask, onAddT
   }
 
   return <div className="organized-task-list">
-    {standalone.length > 0 && <details className="task-milestone-group" open>
-      <summary><span>Ohne Meilenstein</span><small>{standalone.filter((task) => task.status === 'completed').length} / {standalone.length} erledigt</small></summary>
+    {standalone.length > 0 && <details className="task-milestone-group general-project-tasks" open>
+      <summary><span>Allgemeine Aufgaben</span><small>{standalone.filter((task) => task.status === 'completed').length} / {standalone.length} erledigt</small></summary>
       {renderTaskList(sortTasks(standalone))}
     </details>}
     {orderedMilestones.map((milestone) => {
@@ -466,6 +466,7 @@ function ProjectDetail({ project, tasks, milestones, sections, afns, comments, p
   const [customField2Filter, setCustomField2Filter] = useState('all')
   const [sortColumn, setSortColumn] = useState<SortColumn | null>(null)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+  const [quickTaskTitle, setQuickTaskTitle] = useState('')
   function handleSort(column: SortColumn) {
     if (sortColumn === column) setSortDirection((value) => (value === 'asc' ? 'desc' : 'asc'))
     else { setSortColumn(column); setSortDirection('asc') }
@@ -503,6 +504,14 @@ function ProjectDetail({ project, tasks, milestones, sections, afns, comments, p
     onOpenPage(id)
   }
 
+  async function createGeneralTask(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const title = quickTaskTitle.trim()
+    if (!title) return
+    await createProjectTask(project.id, title, userId)
+    setQuickTaskTitle('')
+  }
+
   return <main className="projects-view project-detail-view">
     <div className="project-detail-content">
       <button className="back-link" onClick={onBack}>← Projekte</button>
@@ -518,6 +527,10 @@ function ProjectDetail({ project, tasks, milestones, sections, afns, comments, p
 
       <section className="project-tasks-section">
         <div className="project-tasks-heading"><div><p className="projects-eyebrow">Projektarbeit</p><h2>Aufgaben</h2></div><button className="primary compact" onClick={() => { setTaskMilestonePreset(undefined); setTaskSectionPreset(undefined); setEditingTask('new') }}>+ Aufgabe</button></div>
+        <form className="project-quick-task-form" onSubmit={createGeneralTask}>
+          <input value={quickTaskTitle} onChange={(event) => setQuickTaskTitle(event.target.value)} placeholder="Allgemeine Aufgabe schnell erfassen …" aria-label="Neue allgemeine Projektaufgabe" />
+          <button type="submit" disabled={!quickTaskTitle.trim()}>Hinzufügen</button>
+        </form>
         <div className="task-filter-row">
           <div className="task-filter-bar" aria-label="Aufgaben filtern">{taskFilters.map((value) => <button key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}><span>{value === 'all' ? 'Alle' : taskStatus[value]}</span><strong>{counts[value]}</strong></button>)}</div>
           <TaskFilterMenu

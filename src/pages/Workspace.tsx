@@ -208,7 +208,14 @@ export default function Workspace() {
       ) : activeView === 'access' && session?.user.email === ADMIN_EMAIL ? (
         <AccessRequestsView sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((value) => !value)} />
       ) : activeView === 'tasks' ? (
-        <TasksView onOpenPage={openPage} />
+        <TasksView
+          onOpenPage={openPage}
+          onOpenProject={(projectId, taskId) => {
+            setProjectNavigation({ type: 'project', id: projectId, taskId })
+            setActiveView('projects')
+            setOpenPageId(null)
+          }}
+        />
       ) : activeView === 'search' ? (
         <SearchView
           onOpenPage={openPage}
