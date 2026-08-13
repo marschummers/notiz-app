@@ -62,7 +62,17 @@ async function mergeTable<Local extends { id: string; updatedAt: number }, Remot
   }
   if (toPushRemote.length > 0) {
     const { error: upsertError } = await supabase.from(remoteTableName).upsert(toPushRemote)
-    if (upsertError) throw new Error(`${remoteTableName}: ${upsertError.message}`)
+    // Ein RLS-Fehler bricht den gesamten Bulk-Upsert ab, ohne zu verraten, welche Zeile
+    // schuld war (Postgres nennt aus Sicherheitsgruenden keine Row-Details) - und da syncAll()
+    // alle Tabellen sequenziell abarbeitet, blockiert ein einziger fauler Datensatz sonst
+    // stillschweigend JEDEN weiteren Sync-Versuch, auch fuer alle spaeteren Tabellen. Die
+    // betroffenen IDs (max. 5) im Fehlertext machen das Problem selbst diagnostizierbar, ohne
+    // Datenbankzugriff.
+    if (upsertError) {
+      const ids = toPushRemote.slice(0, 5).map((row) => row.id).join(', ')
+      const more = toPushRemote.length > 5 ? ` (+${toPushRemote.length - 5} weitere)` : ''
+      throw new Error(`${remoteTableName}: ${upsertError.message} [betroffene Zeilen: ${ids}${more}]`)
+    }
   }
 }
 
