@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type ReactNode } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
-import type { Project, ProjectMember, ProjectMilestone, ProjectMilestoneStatus, ProjectSection, ProjectStatus, ProjectTask, ProjectTaskComment, ProjectTaskStatus, ProjectWaitingFor, UserProfile } from '../db/types'
+import type { Project, ProjectMember, ProjectMilestone, ProjectMilestoneStatus, ProjectSection, ProjectStatus, ProjectTask, ProjectTaskComment, ProjectTaskStatus, UserProfile } from '../db/types'
 import { createProjectMilestone, createProjectSection, createProjectTask, createProjectTaskComment, deleteProject, deleteProjectMilestone, deleteProjectSection, deleteProjectTask, moveProjectMilestone, moveProjectTask, replaceProjectTaskAfns, setProjectTeam, updateProject, updateProjectMilestone, updateProjectSection, updateProjectTask } from '../lib/projectActions'
 import BufferedDateInput from './BufferedDateInput'
 import type { ProjectNavigation } from '../lib/projectNavigation'
@@ -14,7 +14,6 @@ import './ProjectsView.css'
 const projectStatus: Record<ProjectStatus, string> = { active: 'Aktiv', waiting: 'Wartet', completed: 'Abgeschlossen', archived: 'Archiviert' }
 const taskStatus: Record<ProjectTaskStatus, string> = { open: 'Offen', in_progress: 'In Arbeit', waiting: 'Wartet', completed: 'Erledigt' }
 const milestoneStatus: Record<ProjectMilestoneStatus, string> = { planned: 'Geplant', in_progress: 'In Arbeit', completed: 'Abgeschlossen' }
-const waitingOptions: ProjectWaitingFor[] = ['Kunde', 'Entwicklung', 'Support', 'Vertrieb', 'Extern', 'Sonstige']
 const taskFilters = ['all', 'open', 'in_progress', 'waiting', 'completed'] as const
 const statusRank: Record<ProjectTaskStatus, number> = { open: 0, in_progress: 1, waiting: 2, completed: 3 }
 
@@ -610,7 +609,7 @@ function TaskEditDialog({ projectId, project, tasks, task, milestones, sections,
   const [status, setStatus] = useState<ProjectTaskStatus>(task?.status ?? 'open')
   const [dueDate, setDueDate] = useState(task?.dueDate)
   const [assigneeUserId, setAssigneeUserId] = useState(task ? (task.assigneeUserId ?? '') : userId)
-  const [waitingFor, setWaitingFor] = useState<ProjectWaitingFor | undefined>(task?.waitingFor)
+  const [waitingFor, setWaitingFor] = useState(task?.waitingFor ?? '')
   const [milestoneId, setMilestoneId] = useState(task?.milestoneId ?? milestonePreset ?? '')
   const [sectionId, setSectionId] = useState(task?.sectionId ?? sectionPreset ?? '')
   const [customField1Value, setCustomField1Value] = useState(task?.customField1Value ?? '')
@@ -627,7 +626,7 @@ function TaskEditDialog({ projectId, project, tasks, task, milestones, sections,
     event.preventDefault()
     if (!title.trim()) return
     const id = task?.id ?? await createProjectTask(projectId, title, assigneeUserId || undefined)
-    await updateProjectTask(id, { title: title.trim(), description: description.trim() || undefined, status, dueDate, milestoneId: milestoneId || undefined, sectionId: milestoneId && availableSections.some((section) => section.id === sectionId) ? sectionId : undefined, assigneeUserId: assigneeUserId || undefined, waitingFor: status === 'waiting' ? waitingFor : undefined, customField1Value: project.customField1Label ? (customField1Value.trim() || undefined) : task?.customField1Value, customField2Value: project.customField2Label ? (customField2Value.trim() || undefined) : task?.customField2Value })
+    await updateProjectTask(id, { title: title.trim(), description: description.trim() || undefined, status, dueDate, milestoneId: milestoneId || undefined, sectionId: milestoneId && availableSections.some((section) => section.id === sectionId) ? sectionId : undefined, assigneeUserId: assigneeUserId || undefined, waitingFor: status === 'waiting' ? (waitingFor.trim() || undefined) : undefined, customField1Value: project.customField1Label ? (customField1Value.trim() || undefined) : task?.customField1Value, customField2Value: project.customField2Label ? (customField2Value.trim() || undefined) : task?.customField2Value })
     await replaceProjectTaskAfns(id, parseAfns(afnText))
     onClose()
   }
@@ -657,7 +656,7 @@ function TaskEditDialog({ projectId, project, tasks, task, milestones, sections,
         <FormField label="Verantwortlich"><select value={assigneeUserId} onChange={(event) => setAssigneeUserId(event.target.value)}><option value="">Nicht zugewiesen</option>{profileOptions(profiles, userId, userEmail, memberIds)}</select></FormField>
         <FormField label="Meilenstein"><select value={milestoneId} onChange={(event) => { setMilestoneId(event.target.value); setSectionId('') }}><option value="">Kein Meilenstein</option>{milestones.filter((m) => m.status !== 'completed' || m.id === task?.milestoneId).sort((a,b) => a.sortOrder - b.sortOrder).map((m) => <option key={m.id} value={m.id}>{m.title}</option>)}</select></FormField>
         <FormField label="Themenbereich"><select value={sectionId} disabled={!milestoneId || availableSections.length === 0} onChange={(event) => setSectionId(event.target.value)}><option value="">{!milestoneId ? 'Zuerst Meilenstein wählen' : 'Nur Meilenstein (kein Themenbereich)'}</option>{availableSections.map((section) => <option key={section.id} value={section.id}>{section.title}</option>)}</select></FormField>
-        {status === 'waiting' && <FormField label="Wartet auf"><select value={waitingFor ?? ''} onChange={(event) => setWaitingFor((event.target.value || undefined) as ProjectWaitingFor | undefined)}><option value="">Bitte wählen</option>{waitingOptions.map((value) => <option key={value}>{value}</option>)}</select></FormField>}
+        {status === 'waiting' && <FormField label="Wartet auf"><input value={waitingFor} onChange={(event) => setWaitingFor(event.target.value)} placeholder="z. B. Rückmeldung von Frau Müller" /></FormField>}
         {project.customField1Label && <FormField label={project.customField1Label}><input value={customField1Value} onChange={(event) => setCustomField1Value(event.target.value)} list="custom-field-1-suggestions"/><datalist id="custom-field-1-suggestions">{customField1Options.map((value) => <option key={value} value={value}/>)}</datalist></FormField>}
         {project.customField2Label && <FormField label={project.customField2Label}><input value={customField2Value} onChange={(event) => setCustomField2Value(event.target.value)} list="custom-field-2-suggestions"/><datalist id="custom-field-2-suggestions">{customField2Options.map((value) => <option key={value} value={value}/>)}</datalist></FormField>}
         <FormField label="AFN-Nummern" wide><input value={afnText} onChange={(event) => setAfnText(event.target.value)} inputMode="numeric" placeholder="181657, 181658"/><small>Mehrere Nummern mit Komma trennen.</small></FormField>

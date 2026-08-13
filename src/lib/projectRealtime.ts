@@ -1,5 +1,5 @@
 import { db } from '../db/db'
-import type { ProjectMemberRole, ProjectMilestoneStatus, ProjectStatus, ProjectTaskStatus, ProjectWaitingFor } from '../db/types'
+import type { ProjectMemberRole, ProjectMilestoneStatus, ProjectStatus, ProjectTaskStatus } from '../db/types'
 import { supabase } from './supabaseClient'
 
 type Row = Record<string, unknown>
@@ -33,7 +33,7 @@ async function applyProjectRow(table: string, row: Row) {
     id: String(row.id), projectId: String(row.project_id), milestoneId: row.milestone_id ? String(row.milestone_id) : undefined,
     sectionId: row.section_id ? String(row.section_id) : undefined, title: String(row.title ?? ''), description: row.description ? String(row.description) : undefined,
     assigneeUserId: row.assignee_user_id ? String(row.assignee_user_id) : undefined, status: row.status as ProjectTaskStatus,
-    dueDate: time(row.due_date), waitingFor: (row.waiting_for || undefined) as ProjectWaitingFor | undefined,
+    dueDate: time(row.due_date), waitingFor: row.waiting_for ? String(row.waiting_for) : undefined,
     customField1Value: row.custom_field_1_value ? String(row.custom_field_1_value) : undefined,
     customField2Value: row.custom_field_2_value ? String(row.custom_field_2_value) : undefined,
     sortOrder: Number(row.sort_order), createdAt: time(row.created_at) ?? Date.now(), updatedAt: time(row.updated_at) ?? Date.now(), deletedAt: time(row.deleted_at),

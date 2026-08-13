@@ -1,6 +1,6 @@
 import type { EntityTable } from 'dexie'
 import { db } from '../db/db'
-import type { Folder, Page, PageBackground, PageProperties, PageType, Tag, PageTag, Task, QuickTask, TextBlock, Template, TemplateTextBlock, TemplateTask, Stroke, PdfPrintout, Project, ProjectTask, ProjectTaskAfn, ProjectTaskComment, ProjectMilestone, ProjectSection, ProjectStatus, ProjectTaskStatus, ProjectWaitingFor, ProjectMilestoneStatus, ProjectMember, ProjectMemberRole, ProjectTemplate, ProjectTemplateMilestone, ProjectTemplateSection, ProjectTemplateTask, ProjectTemplateVisibility } from '../db/types'
+import type { Folder, Page, PageBackground, PageProperties, PageType, Tag, PageTag, Task, QuickTask, TextBlock, Template, TemplateTextBlock, TemplateTask, Stroke, PdfPrintout, Project, ProjectTask, ProjectTaskAfn, ProjectTaskComment, ProjectMilestone, ProjectSection, ProjectStatus, ProjectTaskStatus, ProjectMilestoneStatus, ProjectMember, ProjectMemberRole, ProjectTemplate, ProjectTemplateMilestone, ProjectTemplateSection, ProjectTemplateTask, ProjectTemplateVisibility } from '../db/types'
 import { supabase } from './supabaseClient'
 
 // Faengt fehlende/kaputte Zeitstempel ab, statt dass new Date(...).toISOString() mit
@@ -599,7 +599,7 @@ export async function syncAll(): Promise<void> {
     updated_at: iso(t.updatedAt), deleted_at: t.deletedAt ? iso(t.deletedAt) : null,
   }), (r) => ({ id: r.id, projectId: r.project_id, milestoneId: r.milestone_id ?? undefined, sectionId: r.section_id ?? undefined, title: r.title, description: r.description ?? undefined,
     assigneeUserId: r.assignee_user_id ?? undefined, status: r.status as ProjectTaskStatus,
-    dueDate: r.due_date ? ms(r.due_date) : undefined, waitingFor: (r.waiting_for as ProjectWaitingFor) || undefined,
+    dueDate: r.due_date ? ms(r.due_date) : undefined, waitingFor: r.waiting_for || undefined,
     customField1Value: r.custom_field_1_value ?? undefined, customField2Value: r.custom_field_2_value ?? undefined,
     sortOrder: r.sort_order, createdAt: ms(r.created_at), updatedAt: ms(r.updated_at), deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined }))
 

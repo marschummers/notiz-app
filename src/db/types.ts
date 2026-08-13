@@ -244,7 +244,6 @@ export type ProjectStatus = 'active' | 'waiting' | 'completed' | 'archived'
 export type ProjectTaskStatus = 'open' | 'in_progress' | 'waiting' | 'completed'
 export type ProjectMilestoneStatus = 'planned' | 'in_progress' | 'completed'
 export type ProjectMemberRole = 'owner' | 'member'
-export type ProjectWaitingFor = 'Kunde' | 'Entwicklung' | 'Support' | 'Vertrieb' | 'Extern' | 'Sonstige'
 
 export interface Project {
   id: string
@@ -272,7 +271,7 @@ export interface ProjectTask {
   assigneeUserId?: string
   status: ProjectTaskStatus
   dueDate?: number
-  waitingFor?: ProjectWaitingFor
+  waitingFor?: string
   customField1Value?: string
   customField2Value?: string
   sortOrder: number
