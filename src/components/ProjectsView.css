@@ -103,7 +103,8 @@
    zusaetzlich die Aufgabe (Klick-Bubbling) und das verschachtelte <details> in einem <button>
    verhaelt sich browserseitig unzuverlaessig (haengender Popover-Rest nach dem Schliessen). */
 .task-row-main{display:flex;min-width:0;align-items:center;gap:7px;padding-left:8px}
-.task-row-title-button{display:flex;min-width:0;align-items:center;gap:7px;padding:0;border:0;background:transparent;color:var(--project-text-primary);font:inherit;text-align:left;cursor:pointer}
+.task-row-title-button{display:flex;min-width:0;align-items:center;gap:7px;overflow:hidden;padding:0;border:0;background:transparent;color:var(--project-text-primary);font:inherit;text-align:left;cursor:pointer}
+.task-row-title-button .overview-waiting-for{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .task-row-title-button:hover .task-row-title{color:var(--project-accent)}
 /* .comment-preview-popover haengt normalerweise (ProjectTaskRow, Dashboard/Kundenuebersicht)
    rechtsbuendig ueber dem Symbol (right:0), das setzt genug Platz nach links voraus. In der
