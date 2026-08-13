@@ -3,7 +3,6 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
 import type { ProjectNavigation } from '../lib/projectNavigation'
 import { projectCustomer, projectDisplayName, projectShortName } from '../lib/projectDisplay'
-import { NewProjectMenu } from './ProjectTemplates'
 
 export default function ProjectSidebar({ userId, navigation, onNavigate }: { userId: string; navigation: ProjectNavigation; onNavigate: (navigation: ProjectNavigation) => void }) {
   const [search, setSearch] = useState('')
@@ -35,7 +34,6 @@ export default function ProjectSidebar({ userId, navigation, onNavigate }: { use
       <div className="sidebar-heading"><span>Projekte</span></div>
       <input className="project-sidebar-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Projekte durchsuchen…" aria-label="Projekte durchsuchen" />
       {query && <div className="project-sidebar-results">{results.length ? results.map((project) => <SidebarLink key={project.id} label={projectDisplayName(project)} active={navigation.type === 'project' && navigation.id === project.id} onClick={() => onNavigate({ type: 'project', id: project.id })}/>) : <p className="sidebar-hint">Keine Projekte gefunden.</p>}</div>}
-      <NewProjectMenu userId={userId} triggerClassName="project-sidebar-create" onCreated={(id) => onNavigate({ type: 'project', id })}/>
     </div>
 
     <SidebarGroup title="Meine Projekte" className="project-sidebar-scroll">

@@ -1,4 +1,4 @@
-import { useMemo, useState, type DragEvent, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type ReactNode } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
 import type { Project, ProjectMember, ProjectMilestone, ProjectMilestoneStatus, ProjectSection, ProjectStatus, ProjectTask, ProjectTaskComment, ProjectTaskStatus, ProjectWaitingFor, UserProfile } from '../db/types'
@@ -15,9 +15,38 @@ const taskStatus: Record<ProjectTaskStatus, string> = { open: 'Offen', in_progre
 const milestoneStatus: Record<ProjectMilestoneStatus, string> = { planned: 'Geplant', in_progress: 'In Arbeit', completed: 'Abgeschlossen' }
 const waitingOptions: ProjectWaitingFor[] = ['Kunde', 'Entwicklung', 'Support', 'Vertrieb', 'Extern', 'Sonstige']
 const taskFilters = ['all', 'open', 'in_progress', 'waiting', 'completed'] as const
+const statusRank: Record<ProjectTaskStatus, number> = { open: 0, in_progress: 1, waiting: 2, completed: 3 }
 
 interface Props { userId: string; userEmail?: string; navigation: ProjectNavigation; onNavigate: (navigation: ProjectNavigation) => void }
 type TaskFilter = typeof taskFilters[number]
+type SortColumn = 'title' | 'customField1' | 'customField2' | 'assignee' | 'dueDate' | 'status'
+
+// Sortiert nur innerhalb einer Meilenstein-/Themenbereich-Gruppe (siehe OrganizedProjectTasks) -
+// fehlende Werte (kein Termin, kein Verantwortlicher, kein Modul-/Prio-Wert) landen unabhaengig
+// von der Richtung immer am Ende statt die Sortierung zu verfaelschen.
+function compareProjectTasks(column: SortColumn, direction: 'asc' | 'desc', context: { profiles: UserProfile[]; userId: string; userEmail?: string }) {
+  const factor = direction === 'asc' ? 1 : -1
+  function key(task: ProjectTask): string | number | undefined {
+    switch (column) {
+      case 'title': return task.title.toLocaleLowerCase('de')
+      case 'customField1': return task.customField1Value?.toLocaleLowerCase('de')
+      case 'customField2': return task.customField2Value?.toLocaleLowerCase('de')
+      case 'assignee': return task.assigneeUserId ? profileName(task.assigneeUserId, context.profiles, context.userId, context.userEmail).toLocaleLowerCase('de') : undefined
+      case 'dueDate': return task.dueDate
+      case 'status': return statusRank[task.status]
+    }
+  }
+  return (a: ProjectTask, b: ProjectTask) => {
+    const aKey = key(a)
+    const bKey = key(b)
+    if (aKey === undefined && bKey === undefined) return 0
+    if (aKey === undefined) return 1
+    if (bKey === undefined) return -1
+    if (aKey < bKey) return -1 * factor
+    if (aKey > bKey) return 1 * factor
+    return 0
+  }
+}
 
 export default function ProjectsView({ userId, userEmail, navigation, onNavigate }: Props) {
   const allProjects = useLiveQuery(() => db.projects.filter((project) => !project.deletedAt).toArray(), []) ?? []
@@ -161,7 +190,120 @@ function ProjectTaskRow({ task, project, afns, comments, profiles, userId, userE
   </div>
 }
 
-function OrganizedProjectTasks({ tasks, milestones, sections, renderTask, onAddTask, onAddSection, onMoveTask }: {
+// Kompakte, einzeilige Aufgabenzeile NUR fuer die Projekt-Detailansicht (siehe ProjectDetail) -
+// bewusst eine eigene Komponente statt ProjectTaskRow zu aendern, damit Dashboard-Uebersicht und
+// Kundenuebersicht (nutzen weiterhin ProjectTaskRow) unveraendert bleiben. Kein Kunde-/Projekt-
+// Praefix (man ist ja schon im Projekt) - dafuer feste Spalten fuer Modul/Prio/Verantwortlich/
+// Termin/Status, ausgerichtet an .task-column-header (siehe TaskColumnHeader).
+function TaskRow({ task, afns, comments, profiles, userId, userEmail, onOpen }: { task: ProjectTask; afns: number[]; comments: ProjectTaskComment[]; profiles: UserProfile[]; userId: string; userEmail?: string; onOpen: () => void }) {
+  const assignee = task.assigneeUserId ? profileName(task.assigneeUserId, profiles, userId, userEmail) : 'Nicht zugewiesen'
+  const orderedComments = [...comments].sort((a, b) => b.createdAt - a.createdAt)
+  return <div className="task-row">
+    <button className="task-row-main task-col-title" onClick={onOpen}>
+      <span className="task-row-title">{task.title}</span>
+      {afns.length > 0 && <span className="overview-afns">{afns.map((afn) => `AFN ${afn}`).join(', ')}</span>}
+      {comments.length > 0 ? <details className="comment-preview"><summary aria-label={`${comments.length} Kommentare`} title={`${comments.length} Kommentare`}>▤ <span>{comments.length}</span></summary><div className="comment-preview-popover">{orderedComments.map((comment) => { const author = profileName(comment.authorUserId, profiles, userId, userEmail); return <article key={comment.id}><header><strong>{personInitials(author)}</strong><span>{author}</span><time>{formatDateTime(comment.createdAt)}</time></header><p>{comment.body}</p></article> })}</div></details> : null}
+    </button>
+    <span className="task-row-cell task-col-module">{task.customField1Value ?? ''}</span>
+    <span className="task-row-cell task-col-prio">{task.customField2Value ?? ''}</span>
+    <span className="task-row-cell task-col-assignee" title={assignee}>{task.assigneeUserId ? personInitials(assignee) : '–'}</span>
+    <label className="task-row-cell task-row-due task-col-due" aria-label={`Termin für ${task.title}`}><BufferedDateInput value={task.dueDate} onSave={(dueDate) => updateProjectTask(task.id, { dueDate })}/></label>
+    <span className="task-row-cell task-col-status"><StatusBadge status={task.status} label={taskStatus[task.status]}/></span>
+  </div>
+}
+
+function TaskColumnHeader({ project, sortColumn, sortDirection, onSort }: { project: Project; sortColumn: SortColumn | null; sortDirection: 'asc' | 'desc'; onSort: (column: SortColumn) => void }) {
+  function Header({ column, className, label }: { column: SortColumn; className: string; label: string }) {
+    const active = sortColumn === column
+    return <button type="button" className={`task-column-sort ${className}${active ? ' active' : ''}`} onClick={() => onSort(column)}>{label}{active ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}</button>
+  }
+  return <div className="task-column-header">
+    <Header column="title" className="task-col-title" label="Aufgabe"/>
+    <Header column="customField1" className="task-col-module" label={project.customField1Label ?? ''}/>
+    <Header column="customField2" className="task-col-prio" label={project.customField2Label ?? ''}/>
+    <Header column="assignee" className="task-col-assignee" label="Verantwortlich"/>
+    <Header column="dueDate" className="task-col-due" label="Termin"/>
+    <Header column="status" className="task-col-status" label="Status"/>
+  </div>
+}
+
+// Kleines, wiederverwendbares Popover-Menu (gleiches Muster wie NewPageMenu/NewProjectMenu -
+// outside-mousedown schliesst). preventDefault+stopPropagation im Trigger UND je Eintrag sind
+// noetig, weil der Button innerhalb eines <summary> liegt (siehe OrganizedProjectTasks) - ohne
+// das wuerde jeder Klick zusaetzlich die native <details>-Auf/Zu-Logik ausloesen.
+function KebabMenu({ label, items }: { label: string; items: { label: string; onClick: () => void; danger?: boolean }[] }) {
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    function onDocPointerDown(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDocPointerDown)
+    return () => document.removeEventListener('mousedown', onDocPointerDown)
+  }, [open])
+
+  return <div className="kebab-menu" ref={containerRef}>
+    <button type="button" className="kebab-menu-trigger" aria-label={label} onClick={(event) => { event.preventDefault(); event.stopPropagation(); setOpen((value) => !value) }}>⋯</button>
+    {open && <div className="new-page-popover kebab-menu-popover">
+      {items.map((item) => (
+        <div
+          key={item.label}
+          className={`new-page-option${item.danger ? ' danger-text' : ''}`}
+          onClick={(event) => { event.preventDefault(); event.stopPropagation(); setOpen(false); item.onClick() }}
+        >
+          <span>{item.label}</span>
+        </div>
+      ))}
+    </div>}
+  </div>
+}
+
+// Buendelt die drei bisher einzeln untereinander stehenden Zusatzfilter (Verantwortlich/Modul/
+// Prio) in ein Popover neben der Status-Chip-Leiste (siehe ProjectDetail) - Werte/States bleiben
+// unveraendert, nur die Darstellung aendert sich.
+function TaskFilterMenu({
+  assigneeFilter, setAssigneeFilter, userId, teamProfiles,
+  customField1Label, customField1Filter, setCustomField1Filter, customField1Options,
+  customField2Label, customField2Filter, setCustomField2Filter, customField2Options,
+}: {
+  assigneeFilter: string
+  setAssigneeFilter: (value: string) => void
+  userId: string
+  teamProfiles: UserProfile[]
+  customField1Label?: string
+  customField1Filter: string
+  setCustomField1Filter: (value: string) => void
+  customField1Options: string[]
+  customField2Label?: string
+  customField2Filter: string
+  setCustomField2Filter: (value: string) => void
+  customField2Options: string[]
+}) {
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const activeCount = [assigneeFilter, customField1Filter, customField2Filter].filter((value) => value !== 'all').length
+
+  useEffect(() => {
+    if (!open) return
+    function onDocPointerDown(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDocPointerDown)
+    return () => document.removeEventListener('mousedown', onDocPointerDown)
+  }, [open])
+
+  return <div className="task-filter-menu" ref={containerRef}>
+    <button type="button" className={`secondary-action compact${activeCount ? ' active' : ''}`} onClick={() => setOpen((value) => !value)}>Filter{activeCount ? ` · ${activeCount}` : ''}</button>
+    {open && <div className="new-page-popover task-filter-popover">
+      <label className="assignee-filter">Verantwortlich<select value={assigneeFilter} onChange={(event) => setAssigneeFilter(event.target.value)}><option value="all">Alle</option><option value={userId}>Meine</option>{teamProfiles.filter((profile) => profile.id !== userId).map((profile) => <option key={profile.id} value={profile.id}>{profile.displayName || profile.email}</option>)}</select></label>
+      {customField1Label && customField1Options.length > 0 && <label className="assignee-filter">{customField1Label}<select value={customField1Filter} onChange={(event) => setCustomField1Filter(event.target.value)}><option value="all">Alle</option>{customField1Options.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>}
+      {customField2Label && customField2Options.length > 0 && <label className="assignee-filter">{customField2Label}<select value={customField2Filter} onChange={(event) => setCustomField2Filter(event.target.value)}><option value="all">Alle</option>{customField2Options.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>}
+    </div>}
+  </div>
+}
+
+function OrganizedProjectTasks({ tasks, milestones, sections, renderTask, onAddTask, onAddSection, onMoveTask, onEditMilestone, sortTasks, sortActive }: {
   tasks: ProjectTask[]
   milestones: ProjectMilestone[]
   sections: ProjectSection[]
@@ -169,6 +311,9 @@ function OrganizedProjectTasks({ tasks, milestones, sections, renderTask, onAddT
   onAddTask: (milestoneId?: string, sectionId?: string) => void
   onAddSection: (milestoneId: string) => void
   onMoveTask: (taskId: string, milestoneId?: string, sectionId?: string, beforeTaskId?: string) => Promise<void>
+  onEditMilestone: (milestone: ProjectMilestone) => void
+  sortTasks: (tasks: ProjectTask[]) => ProjectTask[]
+  sortActive: boolean
 }) {
   const [draggedTaskId, setDraggedTaskId] = useState<string>()
   const [dropTarget, setDropTarget] = useState<{ groupKey: string; beforeTaskId?: string; markerTaskId?: string; edge?: 'before' | 'after' }>()
@@ -185,7 +330,10 @@ function OrganizedProjectTasks({ tasks, milestones, sections, renderTask, onAddT
 
   const renderTaskList = (groupTasks: ProjectTask[], milestoneId?: string, sectionId?: string, emptyLabel?: string) => {
     const groupKey = `${milestoneId ?? 'none'}:${sectionId ?? 'none'}`
-    const orderedTasks = [...groupTasks].sort((a, b) => a.sortOrder - b.sortOrder)
+    // Bei aktiver Spaltensortierung kommt groupTasks bereits sortiert von sortTasks() - hier
+    // NICHT zusaetzlich nach sortOrder ueberschreiben, sonst geht die Spaltensortierung wieder
+    // verloren. Ohne aktive Sortierung (sortTasks ist Identitaet) bleibt das bisherige Verhalten.
+    const orderedTasks = sortActive ? [...groupTasks] : [...groupTasks].sort((a, b) => a.sortOrder - b.sortOrder)
     const finishDrop = async (event: DragEvent<HTMLDivElement>, beforeTaskId?: string) => {
       event.preventDefault()
       event.stopPropagation()
@@ -237,7 +385,7 @@ function OrganizedProjectTasks({ tasks, milestones, sections, renderTask, onAddT
           }}
           onDrop={(event) => finishDrop(event, dropTarget?.groupKey === groupKey ? dropTarget.beforeTaskId : task.id)}
         >
-          <span className="task-drag-handle" title="Aufgabe verschieben" aria-hidden="true" draggable>⋮⋮</span>
+          {!sortActive && <span className="task-drag-handle" title="Aufgabe verschieben" aria-hidden="true" draggable>⋮⋮</span>}
           {renderTask(task)}
         </div>
       })}
@@ -248,7 +396,7 @@ function OrganizedProjectTasks({ tasks, milestones, sections, renderTask, onAddT
   return <div className="organized-task-list">
     {standalone.length > 0 && <details className="task-milestone-group" open>
       <summary><span>Ohne Meilenstein</span><small>{standalone.filter((task) => task.status === 'completed').length} / {standalone.length} erledigt</small></summary>
-      {renderTaskList(standalone)}
+      {renderTaskList(sortTasks(standalone))}
     </details>}
     {orderedMilestones.map((milestone) => {
       const milestoneTasks = tasks.filter((task) => task.milestoneId === milestone.id)
@@ -257,9 +405,19 @@ function OrganizedProjectTasks({ tasks, milestones, sections, renderTask, onAddT
       const ungrouped = milestoneTasks.filter((task) => !task.sectionId || !sectionIds.has(task.sectionId))
       const done = milestoneTasks.filter((task) => task.status === 'completed').length
       return <details className="task-milestone-group" key={milestone.id} open>
-        <summary><span>{milestone.title}</span><small>{done} / {milestoneTasks.length} erledigt</small></summary>
-        <div className="task-group-actions"><button type="button" onClick={() => onAddSection(milestone.id)}>+ Themenbereich</button><button type="button" onClick={() => onAddTask(milestone.id)}>+ Aufgabe</button></div>
-        {(ungrouped.length > 0 || milestoneSections.length > 0) && renderTaskList(ungrouped, milestone.id)}
+        <summary>
+          <span>{milestone.title}</span>
+          <small>{done} / {milestoneTasks.length} erledigt</small>
+          <KebabMenu
+            label={`Aktionen für Meilenstein ${milestone.title}`}
+            items={[
+              { label: 'Aufgabe hinzufügen', onClick: () => onAddTask(milestone.id) },
+              { label: 'Themenbereich hinzufügen', onClick: () => onAddSection(milestone.id) },
+              { label: 'Meilenstein bearbeiten', onClick: () => onEditMilestone(milestone) },
+            ]}
+          />
+        </summary>
+        {(ungrouped.length > 0 || milestoneSections.length > 0) && renderTaskList(sortTasks(ungrouped), milestone.id)}
         {milestoneSections.map((section) => {
           const sectionTasks = milestoneTasks.filter((task) => task.sectionId === section.id)
           const sectionDone = sectionTasks.filter((task) => task.status === 'completed').length
@@ -267,13 +425,16 @@ function OrganizedProjectTasks({ tasks, milestones, sections, renderTask, onAddT
             <summary>
               <span>{section.title}</span>
               <small>{sectionDone} / {sectionTasks.length}</small>
+              <KebabMenu
+                label={`Aktionen für Themenbereich ${section.title}`}
+                items={[
+                  { label: 'Aufgabe hinzufügen', onClick: () => onAddTask(milestone.id, section.id) },
+                  { label: 'Umbenennen', onClick: async () => { const title = prompt('Themenbereich umbenennen', section.title); if (title?.trim()) await updateProjectSection(section.id, title) } },
+                  { label: 'Löschen', danger: true, onClick: async () => { if (confirm(`Themenbereich „${section.title}“ löschen? Die Aufgaben bleiben erhalten.`)) await deleteProjectSection(section.id) } },
+                ]}
+              />
             </summary>
-            <div className="task-section-actions">
-              <button type="button" onClick={async () => { const title = prompt('Themenbereich umbenennen', section.title); if (title?.trim()) await updateProjectSection(section.id, title) }}>Umbenennen</button>
-              <button type="button" onClick={() => onAddTask(milestone.id, section.id)}>+ Aufgabe</button>
-              <button type="button" className="danger-text" onClick={async () => { if (confirm(`Themenbereich „${section.title}“ löschen? Die Aufgaben bleiben erhalten.`)) await deleteProjectSection(section.id) }}>Löschen</button>
-            </div>
-            {renderTaskList(sectionTasks, milestone.id, section.id, 'Noch keine Aufgaben. Hierher ziehen oder über „+ Aufgabe“ anlegen.')}
+            {renderTaskList(sortTasks(sectionTasks), milestone.id, section.id, 'Noch keine Aufgaben. Hierher ziehen oder über „+ Aufgabe“ anlegen.')}
           </details>
         })}
 
@@ -293,6 +454,17 @@ function ProjectDetail({ project, tasks, milestones, sections, afns, comments, p
   const [assigneeFilter, setAssigneeFilter] = useState('all')
   const [customField1Filter, setCustomField1Filter] = useState('all')
   const [customField2Filter, setCustomField2Filter] = useState('all')
+  const [sortColumn, setSortColumn] = useState<SortColumn | null>(null)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+  function handleSort(column: SortColumn) {
+    if (sortColumn === column) setSortDirection((value) => (value === 'asc' ? 'desc' : 'asc'))
+    else { setSortColumn(column); setSortDirection('asc') }
+  }
+  const sortTasks = useMemo(() => {
+    if (!sortColumn) return (list: ProjectTask[]) => list
+    const comparator = compareProjectTasks(sortColumn, sortDirection, { profiles, userId, userEmail })
+    return (list: ProjectTask[]) => [...list].sort(comparator)
+  }, [sortColumn, sortDirection, profiles, userId, userEmail])
   const customField1Options = useMemo(() => [...new Set(tasks.map((task) => task.customField1Value).filter((value): value is string => !!value))].sort((a, b) => a.localeCompare(b, 'de')), [tasks])
   const customField2Options = useMemo(() => [...new Set(tasks.map((task) => task.customField2Value).filter((value): value is string => !!value))].sort((a, b) => a.localeCompare(b, 'de')), [tasks])
   const visibleTasks = useMemo(() => [...tasks].filter((task) =>
@@ -322,18 +494,26 @@ function ProjectDetail({ project, tasks, milestones, sections, afns, comments, p
 
       <section className="project-tasks-section">
         <div className="project-tasks-heading"><div><p className="projects-eyebrow">Projektarbeit</p><h2>Aufgaben</h2></div><button className="primary compact" onClick={() => { setTaskMilestonePreset(undefined); setTaskSectionPreset(undefined); setEditingTask('new') }}>+ Aufgabe</button></div>
-        <div className="task-filter-bar" aria-label="Aufgaben filtern">{taskFilters.map((value) => <button key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}><span>{value === 'all' ? 'Alle' : taskStatus[value]}</span><strong>{counts[value]}</strong></button>)}</div>
-        <label className="assignee-filter">Verantwortlich<select value={assigneeFilter} onChange={(event) => setAssigneeFilter(event.target.value)}><option value="all">Alle</option><option value={userId}>Meine</option>{teamProfiles.filter((profile) => profile.id !== userId).map((profile) => <option key={profile.id} value={profile.id}>{profile.displayName || profile.email}</option>)}</select></label>
-        {project.customField1Label && customField1Options.length > 0 && <label className="assignee-filter">{project.customField1Label}<select value={customField1Filter} onChange={(event) => setCustomField1Filter(event.target.value)}><option value="all">Alle</option>{customField1Options.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>}
-        {project.customField2Label && customField2Options.length > 0 && <label className="assignee-filter">{project.customField2Label}<select value={customField2Filter} onChange={(event) => setCustomField2Filter(event.target.value)}><option value="all">Alle</option>{customField2Options.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>}
+        <div className="task-filter-row">
+          <div className="task-filter-bar" aria-label="Aufgaben filtern">{taskFilters.map((value) => <button key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}><span>{value === 'all' ? 'Alle' : taskStatus[value]}</span><strong>{counts[value]}</strong></button>)}</div>
+          <TaskFilterMenu
+            assigneeFilter={assigneeFilter} setAssigneeFilter={setAssigneeFilter} userId={userId} teamProfiles={teamProfiles}
+            customField1Label={project.customField1Label} customField1Filter={customField1Filter} setCustomField1Filter={setCustomField1Filter} customField1Options={customField1Options}
+            customField2Label={project.customField2Label} customField2Filter={customField2Filter} setCustomField2Filter={setCustomField2Filter} customField2Options={customField2Options}
+          />
+        </div>
+        <TaskColumnHeader project={project} sortColumn={sortColumn} sortDirection={sortDirection} onSort={handleSort}/>
         <OrganizedProjectTasks
           tasks={visibleTasks}
           milestones={milestones}
           sections={sections}
-          renderTask={(task) => <ProjectTaskRow key={task.id} project={project} task={task} afns={afns.filter((afn) => afn.taskId === task.id).map((afn) => afn.afnNumber)} comments={comments.filter((comment) => comment.taskId === task.id)} profiles={profiles} userId={userId} userEmail={userEmail} onOpen={() => setEditingTask(task)}/>}
+          renderTask={(task) => <TaskRow key={task.id} task={task} afns={afns.filter((afn) => afn.taskId === task.id).map((afn) => afn.afnNumber)} comments={comments.filter((comment) => comment.taskId === task.id)} profiles={profiles} userId={userId} userEmail={userEmail} onOpen={() => setEditingTask(task)}/>}
           onAddTask={(milestoneId, sectionId) => { setTaskMilestonePreset(milestoneId); setTaskSectionPreset(sectionId); setEditingTask('new') }}
           onAddSection={async (milestoneId) => { const title = prompt('Name des Themenbereichs'); if (title?.trim()) await createProjectSection(project.id, milestoneId, title) }}
           onMoveTask={moveProjectTask}
+          onEditMilestone={(milestone) => setEditingMilestone(milestone)}
+          sortTasks={sortTasks}
+          sortActive={sortColumn !== null}
         />
       </section>
 
