@@ -86,9 +86,11 @@ export default function ProjectsView({ userId, userEmail, navigation, onNavigate
   const today = new Date(); today.setHours(0, 0, 0, 0)
   const tomorrow = today.getTime() + 86400000
   const sortedMine = [...mine].sort((a, b) => (a.dueDate ?? Infinity) - (b.dueDate ?? Infinity))
-  const dueToday = sortedMine.filter((task) => task.dueDate && task.dueDate >= today.getTime() && task.dueDate < tomorrow)
-  const withoutDueDate = sortedMine.filter((task) => !task.dueDate)
-  const otherDueTasks = sortedMine.filter((task) => task.dueDate && (task.dueDate < today.getTime() || task.dueDate >= tomorrow))
+  const waitingTasks = sortedMine.filter((task) => task.status === 'waiting')
+  const actionableTasks = sortedMine.filter((task) => task.status !== 'waiting')
+  const dueToday = actionableTasks.filter((task) => task.dueDate && task.dueDate >= today.getTime() && task.dueDate < tomorrow)
+  const withoutDueDate = actionableTasks.filter((task) => !task.dueDate)
+  const otherDueTasks = actionableTasks.filter((task) => task.dueDate && (task.dueDate < today.getTime() || task.dueDate >= tomorrow))
 
   if (selected) {
     return <ProjectDetail key={`${selected.id}:${selectedTaskId ?? ''}`} project={selected} tasks={tasks.filter((task) => task.projectId === selected.id)} milestones={milestones.filter((milestone) => milestone.projectId === selected.id)} sections={sections.filter((section) => section.projectId === selected.id)} afns={afns} comments={comments}
@@ -107,10 +109,11 @@ export default function ProjectsView({ userId, userEmail, navigation, onNavigate
     <header className="projects-header"><div><p className="projects-eyebrow">Arbeitsbereich</p><h1>{navigation.type === 'status' ? projectStatus[navigation.status] : 'Projekte'}</h1></div><NewProjectMenu userId={userId} onCreated={(id) => onNavigate({ type: 'project', id })}/></header>
     <nav className="project-tabs"><button className={effectiveSection === 'dashboard' ? 'active' : ''} onClick={() => { setSection('dashboard'); onNavigate({ type: 'overview' }) }}>Übersicht</button><button className={effectiveSection === 'projects' ? 'active' : ''} onClick={() => { setSection('projects'); onNavigate({ type: 'overview' }) }}>Projekte</button></nav>
     {effectiveSection === 'dashboard' ? <>
-      <div className="project-metrics"><Metric label="Aktive Projekte" value={activeProjects.length}/><Metric label="Meine offenen Aufgaben" value={mine.length}/><Metric label="Wartet auf andere" value={mine.filter((task) => task.status === 'waiting').length}/><Metric label="Meilensteine in 30 Tagen" value={milestones.filter((m) => m.status !== 'completed' && m.dueDate && m.dueDate >= today.getTime() && m.dueDate <= today.getTime() + 30 * 86400000).length}/></div>
+      <div className="project-metrics"><Metric label="Aktive Projekte" value={activeProjects.length}/><Metric label="Meine offenen Aufgaben" value={mine.length}/><Metric label="Wartet auf andere" value={waitingTasks.length}/><Metric label="Meilensteine in 30 Tagen" value={milestones.filter((m) => m.status !== 'completed' && m.dueDate && m.dueDate >= today.getTime() && m.dueDate <= today.getTime() + 30 * 86400000).length}/></div>
       <UpcomingMilestones milestones={milestones} tasks={tasks} projects={projects} onOpen={(id) => onNavigate({ type: 'project', id })}/>
       <TaskOverview title="Heute fällig" tasks={dueToday} projects={projects} afns={afns} comments={comments} profiles={profiles} userId={userId} userEmail={userEmail} onOpen={(projectId, taskId) => onNavigate({ type: 'project', id: projectId, taskId })}/>
       <TaskOverview title="Ohne Fälligkeitsdatum" tasks={withoutDueDate} projects={projects} afns={afns} comments={comments} profiles={profiles} userId={userId} userEmail={userEmail} onOpen={(projectId, taskId) => onNavigate({ type: 'project', id: projectId, taskId })}/>
+      <TaskOverview title="Wartet auf andere" tasks={waitingTasks} projects={projects} afns={afns} comments={comments} profiles={profiles} userId={userId} userEmail={userEmail} onOpen={(projectId, taskId) => onNavigate({ type: 'project', id: projectId, taskId })}/>
       {otherDueTasks.length > 0 && <div className="task-overview-toolbar"><button className="secondary-action other-tasks-toggle" onClick={() => setShowOtherDueTasks((value) => !value)}>{showOtherDueTasks ? 'Andere Termine ausblenden' : `Andere Termine anzeigen (${otherDueTasks.length})`}</button></div>}
       {showOtherDueTasks && <TaskOverview title="Andere Termine" tasks={otherDueTasks} projects={projects} afns={afns} comments={comments} profiles={profiles} userId={userId} userEmail={userEmail} onOpen={(projectId, taskId) => onNavigate({ type: 'project', id: projectId, taskId })}/>}
     </> : <>
@@ -183,6 +186,7 @@ function ProjectTaskRow({ task, project, afns, comments, profiles, userId, userE
       {afns.length > 0 && <span className="overview-afns">{afns.map((afn) => `AFN ${afn}`).join(', ')}</span>}
       {project?.customField1Label && task.customField1Value && <span className="overview-custom-field" title={project.customField1Label}>{task.customField1Value}</span>}
       {project?.customField2Label && task.customField2Value && <span className="overview-custom-field" title={project.customField2Label}>{task.customField2Value}</span>}
+      {task.status === 'waiting' && <span className="overview-waiting-for">Wartet auf: {task.waitingFor ?? 'nicht angegeben'}</span>}
     </button>
     <span className="overview-assignee" title={assignee}>{task.assigneeUserId ? personInitials(assignee) : '–'}</span>
     {comments.length > 0 ? <details className="comment-preview"><summary aria-label={`${comments.length} Kommentare`} title={`${comments.length} Kommentare`}>▤ <span>{comments.length}</span></summary><div className="comment-preview-popover">{orderedComments.map((comment) => { const author = profileName(comment.authorUserId, profiles, userId, userEmail); return <article key={comment.id}><header><strong>{personInitials(author)}</strong><span>{author}</span><time>{formatDateTime(comment.createdAt)}</time></header><p>{comment.body}</p></article> })}</div></details> : <span className="comment-preview-empty" aria-label="Keine Kommentare">▤</span>}
