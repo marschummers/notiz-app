@@ -28,7 +28,7 @@ function isValidAfnInput(value: string): boolean {
   return n >= 1 && n <= 999999
 }
 
-function PropertyTextInput({ value, onSave, list }: { value: string; onSave: (value: string) => void; list?: string }) {
+function PropertyTextInput({ value, onSave, list }: { value: string; onSave: (value: string) => void | Promise<void>; list?: string }) {
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])
   return (
@@ -102,7 +102,11 @@ export default function PageProperties({ page }: { page: Page }) {
       <button
         type="button"
         className="properties-remove"
-        onClick={() => updatePageProperty(page.id, key, undefined)}
+        onClick={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          void updatePageProperty(page.id, key, undefined)
+        }}
         aria-label={`${definition.label} entfernen`}
         title="Property entfernen"
       >
@@ -124,34 +128,34 @@ export default function PageProperties({ page }: { page: Page }) {
     if (key === 'type') {
       const legacyType = !PAGE_TYPE_OPTIONS.includes(currentType as PageType) ? currentType : null
       return (
-        <label className="properties-field" key={key}>
+        <div className="properties-field" key={key}>
           <span className="properties-label">Typ</span>
           <select value={currentType} onChange={(e) => updatePageType(page.id, e.target.value as PageType)}>
             {legacyType && <option value={legacyType}>{legacyType} (bisheriger Wert)</option>}
             {PAGE_TYPE_OPTIONS.map((type) => <option key={type} value={type}>{type}</option>)}
           </select>
-        </label>
+        </div>
       )
     }
 
     if (definition.kind === 'select') {
       return (
-        <label className="properties-field" key={key}>
+        <div className="properties-field" key={key}>
           <span className="properties-label-row"><span className="properties-label">{definition.label}</span>{removeButton}</span>
           <select value={typeof value === 'string' ? value : ''} onChange={(e) => updatePageProperty(page.id, key, e.target.value)}>
             <option value="">Auswählen …</option>
             {definition.options?.map((option) => <option key={option} value={option}>{option}</option>)}
           </select>
-        </label>
+        </div>
       )
     }
 
     if (definition.kind === 'date') {
       return (
-        <label className="properties-field" key={key}>
+        <div className="properties-field" key={key}>
           <span className="properties-label-row"><span className="properties-label">{definition.label}</span>{removeButton}</span>
           <BufferedDateInput value={typeof value === 'number' ? value : undefined} onSave={(next) => updatePageProperty(page.id, key, next)} />
-        </label>
+        </div>
       )
     }
 
@@ -176,30 +180,30 @@ export default function PageProperties({ page }: { page: Page }) {
       const listId = `${key}-suggestions-${page.id}`
       const suggestions = key === 'customer' ? customerSuggestions : projectSuggestions.map((item) => item.value)
       return (
-        <label className="properties-field" key={key}>
+        <div className="properties-field" key={key}>
           <span className="properties-label-row"><span className="properties-label">{definition.label}</span>{removeButton}</span>
           <PropertyTextInput
             value={typeof value === 'string' ? value : ''}
             list={listId}
-            onSave={(next) => {
+            onSave={async (next) => {
               const trimmed = next.trim()
-              updatePageProperty(page.id, key, trimmed)
+              await updatePageProperty(page.id, key, trimmed)
               if (key === 'project') {
                 const match = projectSuggestions.find((item) => item.value.localeCompare(trimmed, 'de', { sensitivity: 'base' }) === 0)
-                if (match) updatePageProperty(page.id, 'customer', projectCustomer(match.project))
+                if (match) await updatePageProperty(page.id, 'customer', projectCustomer(match.project))
               }
             }}
           />
           <datalist id={listId}>{suggestions.map((suggestion) => <option key={suggestion} value={suggestion} />)}</datalist>
-        </label>
+        </div>
       )
     }
 
     return (
-      <label className="properties-field" key={key}>
+      <div className="properties-field" key={key}>
         <span className="properties-label-row"><span className="properties-label">{definition.label}</span>{removeButton}</span>
         <PropertyTextInput value={typeof value === 'string' ? value : ''} onSave={(next) => updatePageProperty(page.id, key, next)} />
-      </label>
+      </div>
     )
   }
 
