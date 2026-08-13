@@ -105,6 +105,12 @@
 .task-row-main{display:flex;min-width:0;align-items:center;gap:7px}
 .task-row-title-button{display:flex;min-width:0;align-items:center;gap:7px;padding:0;border:0;background:transparent;color:var(--project-text-primary);font:inherit;text-align:left;cursor:pointer}
 .task-row-title-button:hover .task-row-title{color:var(--project-accent)}
+/* .comment-preview-popover haengt normalerweise (ProjectTaskRow, Dashboard/Kundenuebersicht)
+   rechtsbuendig ueber dem Symbol (right:0), das setzt genug Platz nach links voraus. In der
+   dichten TaskRow sitzt das Symbol direkt hinter dem Aufgabentitel, also nahe am linken Rand der
+   Zeile - rechtsbuendig wuerde das Popover dann ueber den Seitenrand hinaus nach links schieben.
+   Hier stattdessen linksbuendig oeffnen, dort ist immer genug Platz nach rechts. */
+.task-row .comment-preview-popover{right:auto;left:0}
 .task-row-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .task-row-cell{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--project-text-secondary);font-size:.78rem}
 .task-row-due input{display:block;width:100%;height:30px;padding:0 8px;border:1px solid var(--project-border);border-radius:var(--project-radius-sm);background:var(--bg);color:var(--project-text-primary);font-size:.76rem}
