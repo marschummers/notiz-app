@@ -1,0 +1,21 @@
+.project-task-status {
+  cursor: pointer;
+  transition: border-color 120ms ease, filter 120ms ease, transform 120ms ease;
+}
+
+.project-task-status:hover,
+.project-task-status:focus-visible {
+  border-color: var(--project-accent);
+  filter: brightness(1.15);
+  outline: none;
+}
+
+.project-task-status:active {
+  transform: translateY(1px);
+}
+
+.project-task-status.compact {
+  min-height: 24px;
+  padding: 2px 7px;
+  font-size: .65rem;
+}

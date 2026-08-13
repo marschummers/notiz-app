@@ -7,6 +7,7 @@ import BufferedDateInput from './BufferedDateInput'
 import type { ProjectNavigation } from '../lib/projectNavigation'
 import { projectCustomer, projectDisplayName, projectShortName } from '../lib/projectDisplay'
 import { syncAll } from '../lib/sync'
+import ProjectTaskStatusControl from './ProjectTaskStatus'
 import { NewProjectMenu, SaveAsTemplateDialog, TemplateListView } from './ProjectTemplates'
 import './ProjectsView.css'
 
@@ -130,7 +131,7 @@ function CustomerOverview({ customerName, projects, tasks, milestones, afns, pro
     <button className="back-link" onClick={onBack}>← Projekte</button>
     <header className="project-read-header"><div className="project-read-title"><p className="projects-eyebrow">Kunde</p><h1>{customerName}</h1></div></header>
     <CustomerSection title="Projekte" empty="Keine aktiven Projekte für diesen Kunden.">{active.map((project) => <button className="customer-row" key={project.id} onClick={() => onOpenProject(project.id)}><span><strong>{projectShortName(project) || projectCustomer(project)}</strong><small>{profileName(project.ownerUserId, profiles, userId, userEmail)}</small></span><span>{project.targetDate ? formatDate(project.targetDate) : 'Ohne Zieltermin'}</span><StatusBadge status={project.status} label={projectStatus[project.status]}/></button>)}</CustomerSection>
-    <CustomerSection title="Offene Aufgaben" empty="Keine offenen Aufgaben.">{openTasks.map((task) => { const project = customerProjects.find((item) => item.id === task.projectId); const taskAfns = afns.filter((afn) => afn.taskId === task.id); return <button className="customer-row customer-task-row" key={task.id} onClick={() => onOpenProject(task.projectId)}><span><small>{project ? (projectShortName(project) || 'Allgemeines Projekt') : 'Unbekanntes Projekt'}</small><strong>{task.title}</strong>{taskAfns.length > 0 && <small>{taskAfns.map((afn) => `AFN ${afn.afnNumber}`).join(', ')}</small>}</span><span>{profileName(task.assigneeUserId, profiles, userId, userEmail)}</span><span>{task.dueDate ? formatDate(task.dueDate) : 'Ohne Termin'}</span><StatusBadge status={task.status} label={taskStatus[task.status]}/></button>})}</CustomerSection>
+    <CustomerSection title="Offene Aufgaben" empty="Keine offenen Aufgaben.">{openTasks.map((task) => { const project = customerProjects.find((item) => item.id === task.projectId); const taskAfns = afns.filter((afn) => afn.taskId === task.id); return <button className="customer-row customer-task-row" key={task.id} onClick={() => onOpenProject(task.projectId)}><span><small>{project ? (projectShortName(project) || 'Allgemeines Projekt') : 'Unbekanntes Projekt'}</small><strong>{task.title}</strong>{taskAfns.length > 0 && <small>{taskAfns.map((afn) => `AFN ${afn.afnNumber}`).join(', ')}</small>}</span><span>{profileName(task.assigneeUserId, profiles, userId, userEmail)}</span><span>{task.dueDate ? formatDate(task.dueDate) : 'Ohne Termin'}</span><ProjectTaskStatusControl task={task}/></button>})}</CustomerSection>
     <CustomerSection title="Nächste Meilensteine" empty="Keine offenen Meilensteine mit Termin.">{upcoming.map((milestone) => { const project = customerProjects.find((item) => item.id === milestone.projectId); const assigned = tasks.filter((task) => task.milestoneId === milestone.id); const done = assigned.filter((task) => task.status === 'completed').length; return <button className="customer-row" key={milestone.id} onClick={() => onOpenProject(milestone.projectId)}><span><small>{project ? (projectShortName(project) || 'Allgemeines Projekt') : 'Unbekanntes Projekt'}</small><strong>{milestone.title}</strong></span><span className={isOverdue(milestone) ? 'milestone-overdue' : ''}>{formatDate(milestone.dueDate!)}</span><span>{assigned.length ? `${done} / ${assigned.length} erledigt` : 'Noch keine Aufgaben'}</span></button>})}</CustomerSection>
   </div></main>
 }
@@ -186,7 +187,7 @@ function ProjectTaskRow({ task, project, afns, comments, profiles, userId, userE
     <span className="overview-assignee" title={assignee}>{task.assigneeUserId ? personInitials(assignee) : '–'}</span>
     {comments.length > 0 ? <details className="comment-preview"><summary aria-label={`${comments.length} Kommentare`} title={`${comments.length} Kommentare`}>▤ <span>{comments.length}</span></summary><div className="comment-preview-popover">{orderedComments.map((comment) => { const author = profileName(comment.authorUserId, profiles, userId, userEmail); return <article key={comment.id}><header><strong>{personInitials(author)}</strong><span>{author}</span><time>{formatDateTime(comment.createdAt)}</time></header><p>{comment.body}</p></article> })}</div></details> : <span className="comment-preview-empty" aria-label="Keine Kommentare">▤</span>}
     <label className="overview-due-date" aria-label={`Termin für ${task.title}`}><BufferedDateInput value={task.dueDate} onSave={(dueDate) => updateProjectTask(task.id, { dueDate })}/></label>
-    <StatusBadge status={task.status} label={taskStatus[task.status]}/>
+    <ProjectTaskStatusControl task={task}/>
   </div>
 }
 
@@ -210,7 +211,7 @@ function TaskRow({ task, afns, comments, profiles, userId, userEmail, onOpen }: 
     <span className="task-row-cell task-col-prio">{task.customField2Value ?? ''}</span>
     <span className="task-row-cell task-col-assignee" title={assignee}>{task.assigneeUserId ? personInitials(assignee) : '–'}</span>
     <label className="task-row-cell task-row-due task-col-due" aria-label={`Termin für ${task.title}`}><BufferedDateInput value={task.dueDate} onSave={(dueDate) => updateProjectTask(task.id, { dueDate })}/></label>
-    <span className="task-row-cell task-col-status"><StatusBadge status={task.status} label={taskStatus[task.status]}/></span>
+    <span className="task-row-cell task-col-status"><ProjectTaskStatusControl task={task}/></span>
   </div>
 }
 
@@ -596,7 +597,7 @@ function MilestoneEditDialog({ projectId, milestone, onClose }: { projectId: str
 
 function MilestoneDetailDialog({ milestone, tasks, onTask, onAddTask, onClose }: { milestone: ProjectMilestone; tasks: ProjectTask[]; onTask: (task: ProjectTask) => void; onAddTask: () => void; onClose: () => void }) {
   const done = tasks.filter((task) => task.status === 'completed').length
-  return <DialogShell title={milestone.title} subtitle="Meilenstein" onClose={onClose}><div className="milestone-detail"><p>{milestone.description || 'Keine Beschreibung hinterlegt.'}</p><div className="milestone-detail-meta"><span>{milestone.dueDate ? formatDate(milestone.dueDate) : 'Ohne Datum'}</span><StatusBadge status={milestone.status} label={milestoneStatus[milestone.status]}/></div><strong>{tasks.length ? `${done} von ${tasks.length} Aufgaben erledigt` : 'Noch keine Aufgaben'}</strong>{tasks.length > 0 && <div className="milestone-progress"><i style={{width: `${done / tasks.length * 100}%`}}/></div>}<div className="milestone-task-list">{tasks.map((task) => <button key={task.id} onClick={() => onTask(task)}><span>{task.status === 'completed' ? '✓' : '○'}</span>{task.title}</button>)}</div><button className="primary compact" onClick={onAddTask}>+ Aufgabe</button></div></DialogShell>
+  return <DialogShell title={milestone.title} subtitle="Meilenstein" onClose={onClose}><div className="milestone-detail"><p>{milestone.description || 'Keine Beschreibung hinterlegt.'}</p><div className="milestone-detail-meta"><span>{milestone.dueDate ? formatDate(milestone.dueDate) : 'Ohne Datum'}</span><StatusBadge status={milestone.status} label={milestoneStatus[milestone.status]}/></div><strong>{tasks.length ? `${done} von ${tasks.length} Aufgaben erledigt` : 'Noch keine Aufgaben'}</strong>{tasks.length > 0 && <div className="milestone-progress"><i style={{width: `${done / tasks.length * 100}%`}}/></div>}<div className="milestone-task-list">{tasks.map((task) => <button key={task.id} onClick={() => onTask(task)}><ProjectTaskStatusControl task={task} compact/>{task.title}</button>)}</div><button className="primary compact" onClick={onAddTask}>+ Aufgabe</button></div></DialogShell>
 }
 
 function TaskEditDialog({ projectId, project, tasks, task, milestones, sections, milestonePreset, sectionPreset, afns, comments, profiles, memberIds, userId, userEmail, onClose }: { projectId: string; project: Project; tasks: ProjectTask[]; task?: ProjectTask; milestones: ProjectMilestone[]; sections: ProjectSection[]; milestonePreset?: string; sectionPreset?: string; afns: number[]; comments: ProjectTaskComment[]; profiles: UserProfile[]; memberIds: string[]; userId: string; userEmail?: string; onClose: () => void }) {
