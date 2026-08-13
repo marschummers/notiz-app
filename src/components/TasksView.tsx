@@ -17,7 +17,7 @@ export default function TasksView({ onOpenPage, onOpenProject }: Props) {
   const [draft, setDraft] = useState('')
   const tasks = useLiveQuery(() => db.tasks.filter((task) => !task.deletedAt).toArray(), [])
   const quickTasks = useLiveQuery(() => db.quickTasks.filter((task) => !task.deletedAt).toArray(), [])
-  const projectTasks = useLiveQuery(() => db.projectTasks.filter((task) => !task.deletedAt).toArray(), [])
+  const projectTasks = useLiveQuery(() => db.projectTasks.filter((task) => !task.deletedAt && !task.milestoneId).toArray(), [])
   const projects = useLiveQuery(() => db.projects.filter((project) => !project.deletedAt).toArray(), [])
   const pages = useLiveQuery(() => db.pages.toArray(), [])
 
@@ -39,7 +39,7 @@ export default function TasksView({ onOpenPage, onOpenProject }: Props) {
 
   function renderPageTask(task: Task) {
     return (
-      <div key={'page-' + task.id} className="task-row" onClick={() => onOpenPage(task.pageId)}>
+      <div key={'page-' + task.id} className="central-task-row" onClick={() => onOpenPage(task.pageId)}>
         <input
           type="checkbox"
           checked={task.completed}
@@ -47,9 +47,9 @@ export default function TasksView({ onOpenPage, onOpenProject }: Props) {
           onChange={() => toggleTask(task.id, !task.completed)}
           aria-label={task.completed ? 'Aufgabe wieder öffnen' : 'Aufgabe erledigen'}
         />
-        <div className="task-row-text">
-          <div className={task.completed ? 'task-row-title completed' : 'task-row-title'}>{task.text || 'Ohne Text'}</div>
-          <div className="task-row-page">{pageTitleById.get(task.pageId) ?? '…'}</div>
+        <div className="central-task-text">
+          <div className={task.completed ? 'central-task-title completed' : 'central-task-title'}>{task.text || 'Ohne Text'}</div>
+          <div className="central-task-source">Notiz · {pageTitleById.get(task.pageId) ?? '…'}</div>
         </div>
       </div>
     )
@@ -57,16 +57,16 @@ export default function TasksView({ onOpenPage, onOpenProject }: Props) {
 
   function renderQuickTask(task: QuickTask) {
     return (
-      <div key={'quick-' + task.id} className="task-row quick-task-row">
+      <div key={'quick-' + task.id} className="central-task-row quick-task-row">
         <input
           type="checkbox"
           checked={task.completed}
           onChange={() => toggleQuickTask(task.id, !task.completed)}
           aria-label={task.completed ? 'Aufgabe wieder öffnen' : 'Aufgabe erledigen'}
         />
-        <div className="task-row-text">
-          <div className={task.completed ? 'task-row-title completed' : 'task-row-title'}>{task.text}</div>
-          <div className="task-row-page">Spontan</div>
+        <div className="central-task-text">
+          <div className={task.completed ? 'central-task-title completed' : 'central-task-title'}>{task.text}</div>
+          <div className="central-task-source">Spontan</div>
         </div>
         <button
           type="button"
@@ -85,7 +85,7 @@ export default function TasksView({ onOpenPage, onOpenProject }: Props) {
     const completed = task.status === 'completed'
     const project = projectById.get(task.projectId)
     return (
-      <div key={'project-' + task.id} className="task-row" onClick={() => onOpenProject(task.projectId, task.id)}>
+      <div key={'project-' + task.id} className="central-task-row" onClick={() => onOpenProject(task.projectId, task.id)}>
         <input
           type="checkbox"
           checked={completed}
@@ -93,9 +93,9 @@ export default function TasksView({ onOpenPage, onOpenProject }: Props) {
           onChange={() => updateProjectTask(task.id, { status: completed ? 'open' : 'completed' })}
           aria-label={completed ? 'Aufgabe wieder öffnen' : 'Aufgabe erledigen'}
         />
-        <div className="task-row-text">
-          <div className={completed ? 'task-row-title completed' : 'task-row-title'}>{task.title}</div>
-          <div className="task-row-page">{project ? projectDisplayName(project) : 'Unbekanntes Projekt'}</div>
+        <div className="central-task-text">
+          <div className={completed ? 'central-task-title completed' : 'central-task-title'}>{task.title}</div>
+          <div className="central-task-source">Projekt · {project ? projectDisplayName(project) : 'Unbekanntes Projekt'}</div>
         </div>
       </div>
     )
