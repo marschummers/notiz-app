@@ -24,17 +24,20 @@ async function mergeTable<Local extends { id: string; updatedAt: number }, Remot
   remoteTableName: string,
   toRemote: (local: Local) => Remote,
   fromRemote: (remote: Remote, existingLocal?: Local) => Local,
+  options?: { separateInsertAndUpdate?: boolean },
 ): Promise<void> {
   if (!supabase) throw new Error('Supabase ist nicht konfiguriert.')
+  const client = supabase
 
   const localRows = await localTable.toArray()
-  const { data: remoteRows, error } = await supabase.from(remoteTableName).select('*')
+  const { data: remoteRows, error } = await client.from(remoteTableName).select('*')
   if (error) throw new Error(`${remoteTableName}: ${error.message}`)
 
   const localById = new Map(localRows.map((r) => [r.id, r]))
   const remoteById = new Map(((remoteRows ?? []) as Remote[]).map((r) => [r.id, r]))
 
   const toPushRemote: Remote[] = []
+  const remoteIdsToUpdate = new Set<string>()
   const toPutLocal: Local[] = []
 
   const allIds = new Set([...localById.keys(), ...remoteById.keys()])
@@ -49,6 +52,7 @@ async function mergeTable<Local extends { id: string; updatedAt: number }, Remot
       const remoteUpdatedAt = ms(remote.updated_at)
       if (local.updatedAt > remoteUpdatedAt) {
         toPushRemote.push(toRemote(local))
+        remoteIdsToUpdate.add(id)
       } else if (remoteUpdatedAt > local.updatedAt) {
         toPutLocal.push(fromRemote(remote, local))
       }
@@ -61,7 +65,37 @@ async function mergeTable<Local extends { id: string; updatedAt: number }, Remot
     await localTable.bulkPut(toPutLocal)
   }
   if (toPushRemote.length > 0) {
-    const { error: upsertError } = await supabase.from(remoteTableName).upsert(toPushRemote)
+    // PostgreSQL prueft bei einem UPSERT auch fuer bereits vorhandene Zeilen zunaechst die
+    // INSERT-Policy. Das ist bei gemeinsam bearbeiteten Projekten falsch: ein Teammitglied darf
+    // ein sichtbares Projekt aktualisieren, aber kein fremdes Projekt neu anlegen. Fuer solche
+    // Tabellen trennen wir deshalb echte INSERTs von UPDATEs.
+    let upsertError: { message: string } | null = null
+    let failedRows = toPushRemote
+    if (options?.separateInsertAndUpdate) {
+      const inserts = toPushRemote.filter((row) => !remoteIdsToUpdate.has(row.id))
+      const updates = toPushRemote.filter((row) => remoteIdsToUpdate.has(row.id))
+      if (inserts.length > 0) {
+        const result = await client.from(remoteTableName).insert(inserts)
+        if (result.error) {
+          upsertError = result.error
+          failedRows = inserts
+        }
+      }
+      if (!upsertError && updates.length > 0) {
+        const results = await Promise.all(updates.map(async (row) => ({
+          row,
+          result: await client.from(remoteTableName).update(row).eq('id', row.id),
+        })))
+        const failed = results.filter(({ result }) => result.error)
+        if (failed.length > 0) {
+          upsertError = failed[0].result.error
+          failedRows = failed.map(({ row }) => row)
+        }
+      }
+    } else {
+      const result = await client.from(remoteTableName).upsert(toPushRemote)
+      upsertError = result.error
+    }
     // Ein RLS-Fehler bricht den gesamten Bulk-Upsert ab, ohne zu verraten, welche Zeile
     // schuld war (Postgres nennt aus Sicherheitsgruenden keine Row-Details) - und da syncAll()
     // alle Tabellen sequenziell abarbeitet, blockiert ein einziger fauler Datensatz sonst
@@ -69,8 +103,8 @@ async function mergeTable<Local extends { id: string; updatedAt: number }, Remot
     // betroffenen IDs (max. 5) im Fehlertext machen das Problem selbst diagnostizierbar, ohne
     // Datenbankzugriff.
     if (upsertError) {
-      const ids = toPushRemote.slice(0, 5).map((row) => row.id).join(', ')
-      const more = toPushRemote.length > 5 ? ` (+${toPushRemote.length - 5} weitere)` : ''
+      const ids = failedRows.slice(0, 5).map((row) => row.id).join(', ')
+      const more = failedRows.length > 5 ? ` (+${failedRows.length - 5} weitere)` : ''
       throw new Error(`${remoteTableName}: ${upsertError.message} [betroffene Zeilen: ${ids}${more}]`)
     }
   }
@@ -528,7 +562,8 @@ export async function syncAll(): Promise<void> {
     status: r.status as ProjectStatus, startDate: r.start_date ? ms(r.start_date) : undefined,
     targetDate: r.target_date ? ms(r.target_date) : undefined, description: r.description ?? undefined,
     customField1Label: r.custom_field_1_label ?? undefined, customField2Label: r.custom_field_2_label ?? undefined,
-    createdAt: ms(r.created_at), updatedAt: ms(r.updated_at), deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined }))
+    createdAt: ms(r.created_at), updatedAt: ms(r.updated_at), deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined }),
+  { separateInsertAndUpdate: true })
 
   await mergeTable<ProjectMember, RemoteProjectMember>(db.projectMembers, 'notiz_project_members', (m) => ({
     id: m.id, project_id: m.projectId, user_id: m.userId, role: m.role,
