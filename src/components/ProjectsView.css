@@ -97,8 +97,14 @@
 .task-column-sort:hover{color:var(--project-text-secondary)}
 .task-column-sort.active{color:var(--project-accent);font-weight:700}
 .task-row{display:grid;align-items:center;gap:10px;min-height:38px;padding:7px 0;border-top:1px solid var(--project-border-soft);font-size:.82rem}
-.task-row-main{display:flex;min-width:0;align-items:center;gap:7px;padding:0;border:0;background:transparent;color:var(--project-text-primary);font:inherit;text-align:left}
-.task-row-main:hover .task-row-title{color:var(--project-accent)}
+/* .task-row-main ist nur noch der Layout-Wrapper (Titel-Button + Kommentar-Vorschau
+   nebeneinander) - das <details> fuer die Kommentarvorschau darf NICHT mehr im Button selbst
+   liegen (siehe .task-row-title-button), sonst oeffnet ein Klick auf das Kommentar-Symbol
+   zusaetzlich die Aufgabe (Klick-Bubbling) und das verschachtelte <details> in einem <button>
+   verhaelt sich browserseitig unzuverlaessig (haengender Popover-Rest nach dem Schliessen). */
+.task-row-main{display:flex;min-width:0;align-items:center;gap:7px}
+.task-row-title-button{display:flex;min-width:0;align-items:center;gap:7px;padding:0;border:0;background:transparent;color:var(--project-text-primary);font:inherit;text-align:left;cursor:pointer}
+.task-row-title-button:hover .task-row-title{color:var(--project-accent)}
 .task-row-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .task-row-cell{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--project-text-secondary);font-size:.78rem}
 .task-row-due input{display:block;width:100%;height:30px;padding:0 8px;border:1px solid var(--project-border);border-radius:var(--project-radius-sm);background:var(--bg);color:var(--project-text-primary);font-size:.76rem}

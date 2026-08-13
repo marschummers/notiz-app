@@ -199,11 +199,13 @@ function TaskRow({ task, afns, comments, profiles, userId, userEmail, onOpen }: 
   const assignee = task.assigneeUserId ? profileName(task.assigneeUserId, profiles, userId, userEmail) : 'Nicht zugewiesen'
   const orderedComments = [...comments].sort((a, b) => b.createdAt - a.createdAt)
   return <div className="task-row">
-    <button className="task-row-main task-col-title" onClick={onOpen}>
-      <span className="task-row-title">{task.title}</span>
-      {afns.length > 0 && <span className="overview-afns">{afns.map((afn) => `AFN ${afn}`).join(', ')}</span>}
-      {comments.length > 0 ? <details className="comment-preview"><summary aria-label={`${comments.length} Kommentare`} title={`${comments.length} Kommentare`}>▤ <span>{comments.length}</span></summary><div className="comment-preview-popover">{orderedComments.map((comment) => { const author = profileName(comment.authorUserId, profiles, userId, userEmail); return <article key={comment.id}><header><strong>{personInitials(author)}</strong><span>{author}</span><time>{formatDateTime(comment.createdAt)}</time></header><p>{comment.body}</p></article> })}</div></details> : null}
-    </button>
+    <div className="task-row-main task-col-title">
+      <button className="task-row-title-button" onClick={onOpen}>
+        <span className="task-row-title">{task.title}</span>
+        {afns.length > 0 && <span className="overview-afns">{afns.map((afn) => `AFN ${afn}`).join(', ')}</span>}
+      </button>
+      {comments.length > 0 && <details className="comment-preview"><summary aria-label={`${comments.length} Kommentare`} title={`${comments.length} Kommentare`}>▤ <span>{comments.length}</span></summary><div className="comment-preview-popover">{orderedComments.map((comment) => { const author = profileName(comment.authorUserId, profiles, userId, userEmail); return <article key={comment.id}><header><strong>{personInitials(author)}</strong><span>{author}</span><time>{formatDateTime(comment.createdAt)}</time></header><p>{comment.body}</p></article> })}</div></details>}
+    </div>
     <span className="task-row-cell task-col-module">{task.customField1Value ?? ''}</span>
     <span className="task-row-cell task-col-prio">{task.customField2Value ?? ''}</span>
     <span className="task-row-cell task-col-assignee" title={assignee}>{task.assigneeUserId ? personInitials(assignee) : '–'}</span>
