@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
-import { createProject } from '../lib/projectActions'
 import type { ProjectNavigation } from '../lib/projectNavigation'
 import { projectCustomer, projectDisplayName, projectShortName } from '../lib/projectDisplay'
+import { NewProjectMenu } from './ProjectTemplates'
 
 export default function ProjectSidebar({ userId, navigation, onNavigate }: { userId: string; navigation: ProjectNavigation; onNavigate: (navigation: ProjectNavigation) => void }) {
   const [search, setSearch] = useState('')
@@ -30,17 +30,12 @@ export default function ProjectSidebar({ userId, navigation, onNavigate }: { use
       ?? matches[0]
   }
 
-  async function addProject() {
-    const id = await createProject({ name: 'Neues Projekt', ownerUserId: userId })
-    onNavigate({ type: 'project', id })
-  }
-
   return <div className="project-sidebar-content">
     <div className="sidebar-section project-sidebar-tools">
       <div className="sidebar-heading"><span>Projekte</span></div>
       <input className="project-sidebar-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Projekte durchsuchen…" aria-label="Projekte durchsuchen" />
       {query && <div className="project-sidebar-results">{results.length ? results.map((project) => <SidebarLink key={project.id} label={projectDisplayName(project)} active={navigation.type === 'project' && navigation.id === project.id} onClick={() => onNavigate({ type: 'project', id: project.id })}/>) : <p className="sidebar-hint">Keine Projekte gefunden.</p>}</div>}
-      <button className="project-sidebar-create" onClick={addProject}>+ Neues Projekt</button>
+      <NewProjectMenu userId={userId} triggerClassName="project-sidebar-create" onCreated={(id) => onNavigate({ type: 'project', id })}/>
     </div>
 
     <SidebarGroup title="Meine Projekte" className="project-sidebar-scroll">
@@ -56,6 +51,7 @@ export default function ProjectSidebar({ userId, navigation, onNavigate }: { use
     </SidebarGroup>
 
     <SidebarGroup title="Weitere">
+      <SidebarLink label="Vorlagen" active={navigation.type === 'templates'} onClick={() => onNavigate({ type: 'templates' })}/>
       <SidebarLink label="Abgeschlossen" active={navigation.type === 'status' && navigation.status === 'completed'} onClick={() => onNavigate({ type: 'status', status: 'completed' })}/>
       <SidebarLink label="Archiv" active={navigation.type === 'status' && navigation.status === 'archived'} onClick={() => onNavigate({ type: 'status', status: 'archived' })}/>
     </SidebarGroup>

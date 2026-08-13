@@ -1,5 +1,9 @@
 import Dexie, { type EntityTable } from 'dexie'
-import type { Folder, Page, Tag, PageTag, Task, QuickTask, TextBlock, Template, PdfPrintout, PdfBlobCache, Project, ProjectTask, ProjectTaskAfn, ProjectTaskComment, ProjectMilestone, ProjectSection, ProjectMember, UserProfile } from './types'
+import type {
+  Folder, Page, Tag, PageTag, Task, QuickTask, TextBlock, Template, PdfPrintout, PdfBlobCache,
+  Project, ProjectTask, ProjectTaskAfn, ProjectTaskComment, ProjectMilestone, ProjectSection, ProjectMember, UserProfile,
+  ProjectTemplate, ProjectTemplateMilestone, ProjectTemplateSection, ProjectTemplateTask,
+} from './types'
 
 export const db = new Dexie('notiz-app') as Dexie & {
   folders: EntityTable<Folder, 'id'>
@@ -20,6 +24,10 @@ export const db = new Dexie('notiz-app') as Dexie & {
   projectTaskComments: EntityTable<ProjectTaskComment, 'id'>
   projectMembers: EntityTable<ProjectMember, 'id'>
   userProfiles: EntityTable<UserProfile, 'id'>
+  projectTemplates: EntityTable<ProjectTemplate, 'id'>
+  projectTemplateMilestones: EntityTable<ProjectTemplateMilestone, 'id'>
+  projectTemplateSections: EntityTable<ProjectTemplateSection, 'id'>
+  projectTemplateTasks: EntityTable<ProjectTemplateTask, 'id'>
 }
 
 db.version(1).stores({
@@ -83,6 +91,17 @@ db.version(10).stores({
 db.version(11).stores({
   projectTasks: 'id, projectId, milestoneId, sectionId, assigneeUserId, status, dueDate, sortOrder, updatedAt',
   projectSections: 'id, projectId, milestoneId, sortOrder, updatedAt',
+})
+
+// Neue Tabellen fuer wiederverwendbare Projektvorlagen (siehe db/types.ts ProjectTemplate/
+// ProjectTemplateMilestone/ProjectTemplateSection/ProjectTemplateTask). Kein status-Feld auf
+// Meilenstein-/Aufgaben-Ebene: beim Anlegen aus einer Vorlage wird immer der normale
+// Default-Status ('planned'/'open') gesetzt, nie ein gespeicherter Wert.
+db.version(12).stores({
+  projectTemplates: 'id, createdByUserId, visibility, updatedAt',
+  projectTemplateMilestones: 'id, templateId, sortOrder, updatedAt',
+  projectTemplateSections: 'id, templateId, milestoneTemplateId, sortOrder, updatedAt',
+  projectTemplateTasks: 'id, templateId, milestoneTemplateId, sectionTemplateId, sortOrder, updatedAt',
 })
 
 export function newId(): string {

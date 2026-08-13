@@ -340,4 +340,61 @@ export interface UserProfile {
   updatedAt: number
 }
 
+export type ProjectTemplateVisibility = 'private' | 'public'
+
+// Wiederverwendbare Projekt-Schnappschuesse (Meilenstein/Themenbereich/Aufgabe-Struktur ohne
+// Kunde/AFN/Team/Status-Historie, siehe createProjectTemplateFromProject/createProjectFromTemplate
+// in lib/projectTemplateActions.ts). Bewusst KEIN status-Feld auf Meilenstein-/Aufgaben-Ebene:
+// beim Erzeugen aus einer Vorlage wird immer der normale Anfangsstatus hart gesetzt, nie ein
+// gespeicherter Wert konserviert.
+export interface ProjectTemplate {
+  id: string
+  name: string
+  description?: string
+  visibility: ProjectTemplateVisibility
+  createdByUserId: string
+  createdAt: number
+  updatedAt: number
+  deletedAt?: number
+}
+
+export interface ProjectTemplateMilestone {
+  id: string
+  templateId: string
+  title: string
+  description?: string
+  /** Kalendertage ab Projektstart (Tag 0 = Startdatum), keine Uhrzeit. */
+  relativeDueDays?: number
+  sortOrder: number
+  createdAt: number
+  updatedAt: number
+  deletedAt?: number
+}
+
+export interface ProjectTemplateSection {
+  id: string
+  templateId: string
+  milestoneTemplateId: string
+  title: string
+  sortOrder: number
+  createdAt: number
+  updatedAt: number
+  deletedAt?: number
+}
+
+export interface ProjectTemplateTask {
+  id: string
+  templateId: string
+  /** Fehlt bei meilensteinlosen Vorlagen-Aufgaben, siehe ProjectTask.milestoneId. */
+  milestoneTemplateId?: string
+  sectionTemplateId?: string
+  title: string
+  description?: string
+  relativeDueDays?: number
+  sortOrder: number
+  createdAt: number
+  updatedAt: number
+  deletedAt?: number
+}
+
 

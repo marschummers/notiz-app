@@ -5,3 +5,4 @@ export type ProjectNavigation =
   | { type: 'project'; id: string; taskId?: string }
   | { type: 'customer'; name: string }
   | { type: 'status'; status: Extract<ProjectStatus, 'completed' | 'archived'> }
+  | { type: 'templates' }

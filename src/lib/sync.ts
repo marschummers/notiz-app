@@ -1,6 +1,6 @@
 import type { EntityTable } from 'dexie'
 import { db } from '../db/db'
-import type { Folder, Page, PageBackground, PageProperties, PageType, Tag, PageTag, Task, QuickTask, TextBlock, Template, TemplateTextBlock, TemplateTask, Stroke, PdfPrintout, Project, ProjectTask, ProjectTaskAfn, ProjectTaskComment, ProjectMilestone, ProjectSection, ProjectStatus, ProjectTaskStatus, ProjectWaitingFor, ProjectMilestoneStatus, ProjectMember, ProjectMemberRole } from '../db/types'
+import type { Folder, Page, PageBackground, PageProperties, PageType, Tag, PageTag, Task, QuickTask, TextBlock, Template, TemplateTextBlock, TemplateTask, Stroke, PdfPrintout, Project, ProjectTask, ProjectTaskAfn, ProjectTaskComment, ProjectMilestone, ProjectSection, ProjectStatus, ProjectTaskStatus, ProjectWaitingFor, ProjectMilestoneStatus, ProjectMember, ProjectMemberRole, ProjectTemplate, ProjectTemplateMilestone, ProjectTemplateSection, ProjectTemplateTask, ProjectTemplateVisibility } from '../db/types'
 import { supabase } from './supabaseClient'
 
 // Faengt fehlende/kaputte Zeitstempel ab, statt dass new Date(...).toISOString() mit
@@ -182,6 +182,11 @@ interface RemoteProjectSection { id: string; user_id: string; project_id: string
 interface RemoteProjectTaskAfn { id: string; user_id: string; task_id: string; afn_number: number; updated_at: string; deleted_at: string | null }
 interface RemoteProjectTaskComment { id: string; task_id: string; author_user_id: string; body: string; created_at: string; updated_at: string; deleted_at: string | null }
 interface RemoteProjectMember { id: string; project_id: string; user_id: string; role: string; created_at: string; updated_at: string; deleted_at: string | null }
+
+interface RemoteProjectTemplate { id: string; user_id: string; created_by_user_id: string; name: string; description: string | null; visibility: string; created_at: string; updated_at: string; deleted_at: string | null }
+interface RemoteProjectTemplateMilestone { id: string; user_id: string; template_id: string; title: string; description: string | null; relative_due_days: number | null; sort_order: number; created_at: string; updated_at: string; deleted_at: string | null }
+interface RemoteProjectTemplateSection { id: string; user_id: string; template_id: string; milestone_template_id: string; title: string; sort_order: number; created_at: string; updated_at: string; deleted_at: string | null }
+interface RemoteProjectTemplateTask { id: string; user_id: string; template_id: string; milestone_template_id: string | null; section_template_id: string | null; title: string; description: string | null; relative_due_days: number | null; sort_order: number; created_at: string; updated_at: string; deleted_at: string | null }
 
 // Zieht Ordner, Seiten, Tasks, Tags, PDF-Ausdruck-Metadaten und deren Verknuepfungen mit
 // Supabase zusammen. Ordner zuerst: pages/tasks/page_tags/pdf_printouts referenzieren
@@ -563,6 +568,73 @@ export async function syncAll(): Promise<void> {
     id: comment.id, task_id: comment.taskId, author_user_id: comment.authorUserId, body: comment.body,
     created_at: iso(comment.createdAt), updated_at: iso(comment.updatedAt), deleted_at: comment.deletedAt ? iso(comment.deletedAt) : null,
   }), (r) => ({ id: r.id, taskId: r.task_id, authorUserId: r.author_user_id, body: r.body,
+    createdAt: ms(r.created_at), updatedAt: ms(r.updated_at), deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined }))
+
+  // RLS liefert nur Vorlagen, die dem Benutzer gehoeren oder oeffentlich sind (visibility =
+  // 'public', siehe Migration 0021). Wechselt eine fremde Vorlage von oeffentlich auf privat,
+  // muss die lokale Kopie verschwinden - sonst wuerde mergeTable sie faelschlich als "nur lokal"
+  // einstufen und per Upsert erneut hochladen (von Supabase korrekt per RLS abgelehnt). Exakt
+  // dieselbe Bereinigung wie oben bei notiz_projects.
+  const { data: accessibleTemplateRows, error: accessibleTemplatesError } = await client
+    .from('notiz_project_templates')
+    .select('id')
+  if (accessibleTemplatesError) throw new Error(`notiz_project_templates: ${accessibleTemplatesError.message}`)
+  const accessibleTemplateIds = new Set((accessibleTemplateRows ?? []).map((row) => row.id as string))
+  const cachedTemplates = await db.projectTemplates.toArray()
+  const inaccessibleTemplateIds = new Set(
+    cachedTemplates
+      .filter((template) => template.createdByUserId !== userId && !accessibleTemplateIds.has(template.id))
+      .map((template) => template.id),
+  )
+
+  if (inaccessibleTemplateIds.size > 0) {
+    const [cachedTemplateMilestones, cachedTemplateSections, cachedTemplateTasks] = await Promise.all([
+      db.projectTemplateMilestones.filter((m) => inaccessibleTemplateIds.has(m.templateId)).toArray(),
+      db.projectTemplateSections.filter((s) => inaccessibleTemplateIds.has(s.templateId)).toArray(),
+      db.projectTemplateTasks.filter((t) => inaccessibleTemplateIds.has(t.templateId)).toArray(),
+    ])
+    await db.transaction(
+      'rw',
+      [db.projectTemplates, db.projectTemplateMilestones, db.projectTemplateSections, db.projectTemplateTasks],
+      async () => {
+        await db.projectTemplateTasks.bulkDelete(cachedTemplateTasks.map((row) => row.id))
+        await db.projectTemplateSections.bulkDelete(cachedTemplateSections.map((row) => row.id))
+        await db.projectTemplateMilestones.bulkDelete(cachedTemplateMilestones.map((row) => row.id))
+        await db.projectTemplates.bulkDelete([...inaccessibleTemplateIds])
+      },
+    )
+  }
+
+  await mergeTable<ProjectTemplate, RemoteProjectTemplate>(db.projectTemplates, 'notiz_project_templates', (t) => ({
+    id: t.id, user_id: userId, created_by_user_id: t.createdByUserId, name: t.name, description: t.description ?? null,
+    visibility: t.visibility, created_at: iso(t.createdAt), updated_at: iso(t.updatedAt), deleted_at: t.deletedAt ? iso(t.deletedAt) : null,
+  }), (r) => ({ id: r.id, name: r.name, description: r.description ?? undefined, createdByUserId: r.created_by_user_id,
+    visibility: r.visibility as ProjectTemplateVisibility,
+    createdAt: ms(r.created_at), updatedAt: ms(r.updated_at), deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined }))
+
+  // Meilensteine vor Themenbereichen/Aufgaben, gleiche FK-Reihenfolge-Logik wie bei Projekten.
+  await mergeTable<ProjectTemplateMilestone, RemoteProjectTemplateMilestone>(db.projectTemplateMilestones, 'notiz_project_template_milestones', (m) => ({
+    id: m.id, user_id: userId, template_id: m.templateId, title: m.title, description: m.description ?? null,
+    relative_due_days: m.relativeDueDays ?? null, sort_order: m.sortOrder,
+    created_at: iso(m.createdAt), updated_at: iso(m.updatedAt), deleted_at: m.deletedAt ? iso(m.deletedAt) : null,
+  }), (r) => ({ id: r.id, templateId: r.template_id, title: r.title, description: r.description ?? undefined,
+    relativeDueDays: r.relative_due_days ?? undefined, sortOrder: r.sort_order,
+    createdAt: ms(r.created_at), updatedAt: ms(r.updated_at), deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined }))
+
+  await mergeTable<ProjectTemplateSection, RemoteProjectTemplateSection>(db.projectTemplateSections, 'notiz_project_template_sections', (s) => ({
+    id: s.id, user_id: userId, template_id: s.templateId, milestone_template_id: s.milestoneTemplateId, title: s.title,
+    sort_order: s.sortOrder, created_at: iso(s.createdAt), updated_at: iso(s.updatedAt), deleted_at: s.deletedAt ? iso(s.deletedAt) : null,
+  }), (r) => ({ id: r.id, templateId: r.template_id, milestoneTemplateId: r.milestone_template_id, title: r.title,
+    sortOrder: r.sort_order, createdAt: ms(r.created_at), updatedAt: ms(r.updated_at), deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined }))
+
+  await mergeTable<ProjectTemplateTask, RemoteProjectTemplateTask>(db.projectTemplateTasks, 'notiz_project_template_tasks', (t) => ({
+    id: t.id, user_id: userId, template_id: t.templateId, milestone_template_id: t.milestoneTemplateId ?? null,
+    section_template_id: t.sectionTemplateId ?? null, title: t.title, description: t.description ?? null,
+    relative_due_days: t.relativeDueDays ?? null, sort_order: t.sortOrder,
+    created_at: iso(t.createdAt), updated_at: iso(t.updatedAt), deleted_at: t.deletedAt ? iso(t.deletedAt) : null,
+  }), (r) => ({ id: r.id, templateId: r.template_id, milestoneTemplateId: r.milestone_template_id ?? undefined,
+    sectionTemplateId: r.section_template_id ?? undefined, title: r.title, description: r.description ?? undefined,
+    relativeDueDays: r.relative_due_days ?? undefined, sortOrder: r.sort_order,
     createdAt: ms(r.created_at), updatedAt: ms(r.updated_at), deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined }))
 }
 

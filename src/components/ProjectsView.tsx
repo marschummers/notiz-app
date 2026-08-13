@@ -2,11 +2,12 @@ import { useMemo, useState, type DragEvent, type FormEvent, type ReactNode } fro
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
 import type { Project, ProjectMember, ProjectMilestone, ProjectMilestoneStatus, ProjectSection, ProjectStatus, ProjectTask, ProjectTaskComment, ProjectTaskStatus, ProjectWaitingFor, UserProfile } from '../db/types'
-import { createProject, createProjectMilestone, createProjectSection, createProjectTask, createProjectTaskComment, deleteProject, deleteProjectMilestone, deleteProjectSection, deleteProjectTask, moveProjectMilestone, moveProjectTask, replaceProjectTaskAfns, setProjectTeam, updateProject, updateProjectMilestone, updateProjectSection, updateProjectTask } from '../lib/projectActions'
+import { createProjectMilestone, createProjectSection, createProjectTask, createProjectTaskComment, deleteProject, deleteProjectMilestone, deleteProjectSection, deleteProjectTask, moveProjectMilestone, moveProjectTask, replaceProjectTaskAfns, setProjectTeam, updateProject, updateProjectMilestone, updateProjectSection, updateProjectTask } from '../lib/projectActions'
 import BufferedDateInput from './BufferedDateInput'
 import type { ProjectNavigation } from '../lib/projectNavigation'
 import { projectCustomer, projectDisplayName, projectShortName } from '../lib/projectDisplay'
 import { syncAll } from '../lib/sync'
+import { NewProjectMenu, SaveAsTemplateDialog, TemplateListView } from './ProjectTemplates'
 import './ProjectsView.css'
 
 const projectStatus: Record<ProjectStatus, string> = { active: 'Aktiv', waiting: 'Wartet', completed: 'Abgeschlossen', archived: 'Archiviert' }
@@ -67,11 +68,13 @@ export default function ProjectsView({ userId, userEmail, navigation, onNavigate
 
   if (navigation.type === 'customer') return <CustomerOverview customerName={navigation.name} projects={projects} tasks={tasks} milestones={milestones} afns={afns} profiles={profiles} userId={userId} userEmail={userEmail} onOpenProject={(id) => onNavigate({ type: 'project', id })} onBack={() => onNavigate({ type: 'overview' })}/>
 
+  if (navigation.type === 'templates') return <TemplateListView userId={userId} onNavigate={onNavigate}/>
+
   const effectiveSection = navigation.type === 'status' ? 'projects' : section
   const listProjects = navigation.type === 'status' ? projects.filter((project) => project.status === navigation.status) : (showClosed ? projects : activeProjects)
 
   return <main className="projects-view"><div className="project-page-content">
-    <header className="projects-header"><div><p className="projects-eyebrow">Arbeitsbereich</p><h1>{navigation.type === 'status' ? projectStatus[navigation.status] : 'Projekte'}</h1></div><button className="primary" onClick={async () => onNavigate({ type: 'project', id: await createProject({ name: 'Neues Projekt', ownerUserId: userId }) })}>+ Neues Projekt</button></header>
+    <header className="projects-header"><div><p className="projects-eyebrow">Arbeitsbereich</p><h1>{navigation.type === 'status' ? projectStatus[navigation.status] : 'Projekte'}</h1></div><NewProjectMenu userId={userId} onCreated={(id) => onNavigate({ type: 'project', id })}/></header>
     <nav className="project-tabs"><button className={effectiveSection === 'dashboard' ? 'active' : ''} onClick={() => { setSection('dashboard'); onNavigate({ type: 'overview' }) }}>Übersicht</button><button className={effectiveSection === 'projects' ? 'active' : ''} onClick={() => { setSection('projects'); onNavigate({ type: 'overview' }) }}>Projekte</button></nav>
     {effectiveSection === 'dashboard' ? <>
       <div className="project-metrics"><Metric label="Aktive Projekte" value={activeProjects.length}/><Metric label="Meine offenen Aufgaben" value={mine.length}/><Metric label="Wartet auf andere" value={mine.filter((task) => task.status === 'waiting').length}/><Metric label="Meilensteine in 30 Tagen" value={milestones.filter((m) => m.status !== 'completed' && m.dueDate && m.dueDate >= today.getTime() && m.dueDate <= today.getTime() + 30 * 86400000).length}/></div>
@@ -286,6 +289,7 @@ function ProjectDetail({ project, tasks, milestones, sections, afns, comments, p
   const [taskMilestonePreset, setTaskMilestonePreset] = useState<string | undefined>()
   const [taskSectionPreset, setTaskSectionPreset] = useState<string | undefined>()
   const [editingTeam, setEditingTeam] = useState(false)
+  const [savingTemplate, setSavingTemplate] = useState(false)
   const [assigneeFilter, setAssigneeFilter] = useState('all')
   const [customField1Filter, setCustomField1Filter] = useState('all')
   const [customField2Filter, setCustomField2Filter] = useState('all')
@@ -311,7 +315,7 @@ function ProjectDetail({ project, tasks, milestones, sections, afns, comments, p
           <h1><span>{projectCustomer(project)}</span>{projectShortName(project) && <><i> | </i>{projectShortName(project)}</>}</h1>
           <p><span>Verantwortlich: {personInitials(ownerName)}</span><span>Team: {teamIds.map((id) => personInitials(profileName(id, profiles, userId, userEmail))).join(', ')}</span><span>Zeitraum: {formatRange(project.startDate, project.targetDate)}</span></p>
         </div>
-        <div className="project-header-actions"><button className="secondary-action compact" onClick={() => setEditingProject(true)}>Projekt bearbeiten</button><button className="secondary-action compact" onClick={() => setEditingTeam(true)}>Team bearbeiten</button><StatusBadge status={project.status} label={projectStatus[project.status]}/></div>
+        <div className="project-header-actions"><button className="secondary-action compact" onClick={() => setEditingProject(true)}>Projekt bearbeiten</button><button className="secondary-action compact" onClick={() => setEditingTeam(true)}>Team bearbeiten</button><button className="secondary-action compact" onClick={() => setSavingTemplate(true)}>Als Vorlage speichern</button><StatusBadge status={project.status} label={projectStatus[project.status]}/></div>
       </header>
 
       {nextMilestone && <NextMilestone milestone={nextMilestone} tasks={tasks} onOpen={() => setOpenedMilestoneId(nextMilestone.id)}/>}
@@ -350,11 +354,12 @@ function ProjectDetail({ project, tasks, milestones, sections, afns, comments, p
     )}
     {editingMilestone && <MilestoneEditDialog projectId={project.id} milestone={editingMilestone === 'new' ? undefined : editingMilestone} onClose={() => setEditingMilestone(null)}/>}
     {editingTeam && <TeamEditDialog project={project} members={members} profiles={profiles} userId={userId} userEmail={userEmail} onClose={() => setEditingTeam(false)}/>}
+    {savingTemplate && <SaveAsTemplateDialog project={project} milestones={milestones} sections={sections} tasks={tasks} userId={userId} onClose={() => setSavingTemplate(false)}/>}
     {openedMilestoneId && milestones.find((m) => m.id === openedMilestoneId) && <MilestoneDetailDialog milestone={milestones.find((m) => m.id === openedMilestoneId)!} tasks={tasks.filter((task) => task.milestoneId === openedMilestoneId)} onTask={(task) => { setOpenedMilestoneId(null); setEditingTask(task) }} onAddTask={() => { setTaskMilestonePreset(openedMilestoneId); setTaskSectionPreset(undefined); setOpenedMilestoneId(null); setEditingTask('new') }} onClose={() => setOpenedMilestoneId(null)}/>}
   </main>
 }
 
-function DialogShell({ title, subtitle, children, onClose }: { title: string; subtitle: string; children: ReactNode; onClose: () => void }) {
+export function DialogShell({ title, subtitle, children, onClose }: { title: string; subtitle: string; children: ReactNode; onClose: () => void }) {
   return <div className="project-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
     <section className="project-dialog" role="dialog" aria-modal="true" aria-label={title}>
       <header><div><p className="projects-eyebrow">{subtitle}</p><h2>{title}</h2></div><button className="dialog-close" onClick={onClose} aria-label="Dialog schließen">×</button></header>
@@ -507,7 +512,7 @@ function TeamEditDialog({ project, members, profiles, userId, userEmail, onClose
   </form></DialogShell>
 }
 
-function FormField({ label, wide, children }: { label: string; wide?: boolean; children: ReactNode }) {
+export function FormField({ label, wide, children }: { label: string; wide?: boolean; children: ReactNode }) {
   return <label className={`dialog-form-field${wide ? ' wide' : ''}`}><span>{label}</span>{children}</label>
 }
 
