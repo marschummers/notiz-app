@@ -772,6 +772,7 @@ function TextBlockItem({
   const formatButtonRef = useRef<HTMLButtonElement>(null)
   const savedSelectionRef = useRef<Range | null>(null)
   const resizeChromeWidthRef = useRef(0)
+  const resizeGestureRef = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null)
 
   useLayoutEffect(() => {
     const el = editorRef.current
@@ -1090,6 +1091,36 @@ function TextBlockItem({
     if (width && width > 0 && width !== block.width) onResizeWidth(width)
   }
 
+  function handleResizePointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    const card = textBlockRef.current
+    if (!card) return
+    e.preventDefault()
+    e.stopPropagation()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    resizeGestureRef.current = { pointerId: e.pointerId, startX: clientToContent(e.clientX, e.clientY).x, startWidth: card.offsetWidth }
+    setLiveWidth(card.offsetWidth)
+  }
+
+  function handleResizePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    const gesture = resizeGestureRef.current
+    if (!gesture || gesture.pointerId !== e.pointerId) return
+    e.preventDefault()
+    e.stopPropagation()
+    const contentX = clientToContent(e.clientX, e.clientY).x
+    setLiveWidth(Math.max(140, gesture.startWidth + contentX - gesture.startX))
+  }
+
+  function handleResizePointerEnd(e: React.PointerEvent<HTMLDivElement>) {
+    const gesture = resizeGestureRef.current
+    if (!gesture || gesture.pointerId !== e.pointerId) return
+    e.preventDefault()
+    e.stopPropagation()
+    resizeGestureRef.current = null
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
+    const width = textBlockRef.current?.offsetWidth
+    if (width && width > 0) onResizeWidth(width)
+  }
+
   function insertLink(page: { id: string; title: string }) {
     const editor = editorRef.current
     if (!linkTrigger || !editor) return
@@ -1230,6 +1261,18 @@ function TextBlockItem({
             <span className="text-block-placeholder">Text eingeben …</span>
           )}
         </div>
+      )}
+      {editing && (
+        <div
+          className="text-block-resize-handle"
+          role="separator"
+          aria-label="Textfeldbreite ändern"
+          aria-orientation="vertical"
+          onPointerDown={handleResizePointerDown}
+          onPointerMove={handleResizePointerMove}
+          onPointerUp={handleResizePointerEnd}
+          onPointerCancel={handleResizePointerEnd}
+        />
       )}
       {editing && (
         <button
