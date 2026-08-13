@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import { useLiveQuery } from 'dexie-react-hooks'
 import type { Page, PagePropertyKey, PagePropertyValue, PageType } from '../db/types'
+import { db } from '../db/db'
 import {
   addAfnToPage,
   removeAfnFromPage,
@@ -17,6 +19,7 @@ import {
 } from '../lib/propertyDefinitions'
 import { InfoIcon } from './icons'
 import BufferedDateInput from './BufferedDateInput'
+import { projectCustomer, projectShortName } from '../lib/projectDisplay'
 import './PageProperties.css'
 
 function isValidAfnInput(value: string): boolean {
@@ -25,12 +28,13 @@ function isValidAfnInput(value: string): boolean {
   return n >= 1 && n <= 999999
 }
 
-function PropertyTextInput({ value, onSave }: { value: string; onSave: (value: string) => void }) {
+function PropertyTextInput({ value, onSave, list }: { value: string; onSave: (value: string) => void; list?: string }) {
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])
   return (
     <input
       type="text"
+      list={list}
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => {
@@ -52,10 +56,18 @@ export default function PageProperties({ page }: { page: Page }) {
   const [open, setOpen] = useState(false)
   const [afnInput, setAfnInput] = useState('')
   const containerRef = useRef<HTMLDivElement>(null)
+  const projects = useLiveQuery(() => db.projects.filter((project) => !project.deletedAt && project.status !== 'archived').toArray(), []) ?? []
   const currentTypeValue = getPagePropertyValue(page, 'type')
   const currentType = typeof currentTypeValue === 'string' ? currentTypeValue : 'Notiz'
   const afnsValue = getPagePropertyValue(page, 'afn')
   const afns = Array.isArray(afnsValue) ? afnsValue.filter((value): value is number => typeof value === 'number') : []
+  const customerValue = getPagePropertyValue(page, 'customer')
+  const selectedCustomer = typeof customerValue === 'string' ? customerValue.trim() : ''
+  const customerSuggestions = [...new Set(projects.map(projectCustomer))].sort((a, b) => a.localeCompare(b, 'de'))
+  const projectSuggestions = projects
+    .filter((project) => !selectedCustomer || projectCustomer(project).localeCompare(selectedCustomer, 'de', { sensitivity: 'base' }) === 0)
+    .map((project) => ({ project, value: projectShortName(project) ?? 'Allgemeines Projekt' }))
+    .sort((a, b) => a.value.localeCompare(b.value, 'de'))
 
   function handleAddAfn() {
     if (!isValidAfnInput(afnInput)) return
@@ -157,6 +169,29 @@ export default function PageProperties({ page }: { page: Page }) {
             <button onClick={handleAddAfn} disabled={!isValidAfnInput(afnInput)}>+</button>
           </div>
         </div>
+      )
+    }
+
+    if (key === 'customer' || key === 'project') {
+      const listId = `${key}-suggestions-${page.id}`
+      const suggestions = key === 'customer' ? customerSuggestions : projectSuggestions.map((item) => item.value)
+      return (
+        <label className="properties-field" key={key}>
+          <span className="properties-label-row"><span className="properties-label">{definition.label}</span>{removeButton}</span>
+          <PropertyTextInput
+            value={typeof value === 'string' ? value : ''}
+            list={listId}
+            onSave={(next) => {
+              const trimmed = next.trim()
+              updatePageProperty(page.id, key, trimmed)
+              if (key === 'project') {
+                const match = projectSuggestions.find((item) => item.value.localeCompare(trimmed, 'de', { sensitivity: 'base' }) === 0)
+                if (match) updatePageProperty(page.id, 'customer', projectCustomer(match.project))
+              }
+            }}
+          />
+          <datalist id={listId}>{suggestions.map((suggestion) => <option key={suggestion} value={suggestion} />)}</datalist>
+        </label>
       )
     }
 

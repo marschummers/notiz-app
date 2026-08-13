@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type ReactNode } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
-import type { Project, ProjectMember, ProjectMilestone, ProjectMilestoneStatus, ProjectSection, ProjectStatus, ProjectTask, ProjectTaskComment, ProjectTaskStatus, UserProfile } from '../db/types'
+import type { Page, Project, ProjectMember, ProjectMilestone, ProjectMilestoneStatus, ProjectSection, ProjectStatus, ProjectTask, ProjectTaskComment, ProjectTaskStatus, UserProfile } from '../db/types'
 import { createProjectMilestone, createProjectSection, createProjectTask, createProjectTaskComment, deleteProject, deleteProjectMilestone, deleteProjectSection, deleteProjectTask, moveProjectMilestone, moveProjectTask, replaceProjectTaskAfns, setProjectTeam, updateProject, updateProjectMilestone, updateProjectSection, updateProjectTask } from '../lib/projectActions'
 import BufferedDateInput from './BufferedDateInput'
 import type { ProjectNavigation } from '../lib/projectNavigation'
 import { projectCustomer, projectDisplayName, projectShortName } from '../lib/projectDisplay'
 import { syncAll } from '../lib/sync'
+import { createPage, updatePageProperty } from '../lib/actions'
+import { getPagePropertyValue } from '../lib/propertyDefinitions'
 import ProjectTaskStatusControl from './ProjectTaskStatus'
 import { NewProjectMenu, SaveAsTemplateDialog, TemplateListView } from './ProjectTemplates'
 import './ProjectsView.css'
@@ -17,7 +19,7 @@ const milestoneStatus: Record<ProjectMilestoneStatus, string> = { planned: 'Gepl
 const taskFilters = ['all', 'open', 'in_progress', 'waiting', 'completed'] as const
 const statusRank: Record<ProjectTaskStatus, number> = { open: 0, in_progress: 1, waiting: 2, completed: 3 }
 
-interface Props { userId: string; userEmail?: string; navigation: ProjectNavigation; onNavigate: (navigation: ProjectNavigation) => void }
+interface Props { userId: string; userEmail?: string; navigation: ProjectNavigation; onNavigate: (navigation: ProjectNavigation) => void; onOpenPage: (id: string) => void }
 type TaskFilter = typeof taskFilters[number]
 type SortColumn = 'title' | 'customField1' | 'customField2' | 'assignee' | 'dueDate' | 'status'
 
@@ -48,12 +50,13 @@ function compareProjectTasks(column: SortColumn, direction: 'asc' | 'desc', cont
   }
 }
 
-export default function ProjectsView({ userId, userEmail, navigation, onNavigate }: Props) {
+export default function ProjectsView({ userId, userEmail, navigation, onNavigate, onOpenPage }: Props) {
   const allProjects = useLiveQuery(() => db.projects.filter((project) => !project.deletedAt).toArray(), []) ?? []
   const allTasks = useLiveQuery(() => db.projectTasks.filter((task) => !task.deletedAt).toArray(), []) ?? []
   const allMilestones = useLiveQuery(() => db.projectMilestones.filter((milestone) => !milestone.deletedAt).toArray(), []) ?? []
   const allSections = useLiveQuery(() => db.projectSections.filter((section) => !section.deletedAt).toArray(), []) ?? []
   const allAfns = useLiveQuery(() => db.projectTaskAfns.filter((afn) => !afn.deletedAt).toArray(), []) ?? []
+  const pages = useLiveQuery(() => db.pages.filter((page) => !page.deletedAt).toArray(), []) ?? []
   const profiles = useLiveQuery(() => db.userProfiles.toArray(), []) ?? []
   const allMembers = useLiveQuery(() => db.projectMembers.filter((member) => !member.deletedAt).toArray(), []) ?? []
   const allComments = useLiveQuery(() => db.projectTaskComments.filter((comment) => !comment.deletedAt).toArray(), []) ?? []
@@ -94,7 +97,7 @@ export default function ProjectsView({ userId, userEmail, navigation, onNavigate
   if (selected) {
     return <ProjectDetail key={`${selected.id}:${selectedTaskId ?? ''}`} project={selected} tasks={tasks.filter((task) => task.projectId === selected.id)} milestones={milestones.filter((milestone) => milestone.projectId === selected.id)} sections={sections.filter((section) => section.projectId === selected.id)} afns={afns} comments={comments}
       profiles={profiles} members={members.filter((member) => member.projectId === selected.id)} userId={userId} userEmail={userEmail} filter={taskFilter} setFilter={setTaskFilter}
-      initialTaskId={selectedTaskId} onBack={() => onNavigate({ type: 'overview' })} />
+      pages={pages} onOpenPage={onOpenPage} initialTaskId={selectedTaskId} onBack={() => onNavigate({ type: 'overview' })} />
   }
 
   if (navigation.type === 'customer') return <CustomerOverview customerName={navigation.name} projects={projects} tasks={tasks} milestones={milestones} afns={afns} profiles={profiles} userId={userId} userEmail={userEmail} onOpenProject={(id) => onNavigate({ type: 'project', id })} onBack={() => onNavigate({ type: 'overview' })}/>
@@ -449,7 +452,7 @@ function OrganizedProjectTasks({ tasks, milestones, sections, renderTask, onAddT
     })}
   </div>
 }
-function ProjectDetail({ project, tasks, milestones, sections, afns, comments, profiles, members, userId, userEmail, filter, setFilter, initialTaskId, onBack }: { project: Project; tasks: ProjectTask[]; milestones: ProjectMilestone[]; sections: ProjectSection[]; afns: { taskId: string; afnNumber: number }[]; comments: ProjectTaskComment[]; profiles: UserProfile[]; members: ProjectMember[]; userId: string; userEmail?: string; filter: TaskFilter; setFilter: (value: TaskFilter) => void; initialTaskId?: string; onBack: () => void }) {
+function ProjectDetail({ project, tasks, milestones, sections, afns, comments, profiles, members, pages, userId, userEmail, filter, setFilter, onOpenPage, initialTaskId, onBack }: { project: Project; tasks: ProjectTask[]; milestones: ProjectMilestone[]; sections: ProjectSection[]; afns: { taskId: string; afnNumber: number }[]; comments: ProjectTaskComment[]; profiles: UserProfile[]; members: ProjectMember[]; pages: Page[]; userId: string; userEmail?: string; filter: TaskFilter; setFilter: (value: TaskFilter) => void; onOpenPage: (id: string) => void; initialTaskId?: string; onBack: () => void }) {
   const [editingProject, setEditingProject] = useState(false)
   const [editingTask, setEditingTask] = useState<ProjectTask | 'new' | null>(() => tasks.find((task) => task.id === initialTaskId) ?? null)
   const [editingMilestone, setEditingMilestone] = useState<ProjectMilestone | 'new' | null>(null)
@@ -485,6 +488,20 @@ function ProjectDetail({ project, tasks, milestones, sections, afns, comments, p
   const teamIds = [...new Set([project.ownerUserId, ...members.map((member) => member.userId)])]
   const teamProfiles = teamIds.map((id) => profiles.find((profile) => profile.id === id)).filter((profile): profile is UserProfile => Boolean(profile))
   const nextMilestone = getNextMilestone(milestones)
+  const noteCustomer = projectCustomer(project)
+  const noteProject = projectShortName(project) ?? 'Allgemeines Projekt'
+  const normalizeProperty = (value: unknown) => typeof value === 'string' ? value.trim().toLocaleLowerCase('de') : ''
+  const projectNotes = pages.filter((page) =>
+    normalizeProperty(getPagePropertyValue(page, 'customer')) === normalizeProperty(noteCustomer) &&
+    normalizeProperty(getPagePropertyValue(page, 'project')) === normalizeProperty(noteProject)
+  ).sort((a, b) => b.updatedAt - a.updatedAt)
+
+  async function createProjectNote() {
+    const id = await createPage(undefined, `Notiz – ${projectDisplayName(project)}`)
+    await updatePageProperty(id, 'customer', noteCustomer)
+    await updatePageProperty(id, 'project', noteProject)
+    onOpenPage(id)
+  }
 
   return <main className="projects-view project-detail-view">
     <div className="project-detail-content">
@@ -522,6 +539,11 @@ function ProjectDetail({ project, tasks, milestones, sections, afns, comments, p
           sortTasks={sortTasks}
           sortActive={sortColumn !== null}
         />
+      </section>
+
+      <section className="project-notes-section">
+        <div className="project-tasks-heading"><div><p className="projects-eyebrow">Privat</p><h2>Meine Notizen</h2></div><button className="primary compact" onClick={createProjectNote}>+ Projektnotiz</button></div>
+        {projectNotes.length === 0 ? <p className="project-notes-empty">Noch keine privaten Notizen mit diesem Projekt verknüpft.</p> : <div className="project-note-list">{projectNotes.map((page) => <button key={page.id} onClick={() => onOpenPage(page.id)}><span><strong>{page.title || 'Ohne Titel'}</strong><small>{String(getPagePropertyValue(page, 'type') ?? 'Notiz')}</small></span><time>{new Date(page.updatedAt).toLocaleDateString('de-DE')}</time></button>)}</div>}
       </section>
 
       <section className="project-milestones-section">

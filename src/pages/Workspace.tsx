@@ -204,7 +204,7 @@ export default function Workspace() {
           userId={session?.user.id ?? ''}
         />
       ) : activeView === 'projects' ? (
-        <ProjectsView userId={session?.user.id ?? ''} userEmail={session?.user.email} navigation={projectNavigation} onNavigate={setProjectNavigation} />
+        <ProjectsView userId={session?.user.id ?? ''} userEmail={session?.user.email} navigation={projectNavigation} onNavigate={setProjectNavigation} onOpenPage={(id) => { setActiveView('notes'); openPage(id) }} />
       ) : activeView === 'access' && session?.user.email === ADMIN_EMAIL ? (
         <AccessRequestsView sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((value) => !value)} />
       ) : activeView === 'tasks' ? (
