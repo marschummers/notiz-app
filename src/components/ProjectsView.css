@@ -86,13 +86,12 @@
    TaskColumnHeader) - eine feste Spaltenaufteilung fuer Kopfzeile UND Zeilen, garantiert exakte
    Ausrichtung. 18px links = Platz fuer den Drag-Handle (siehe .project-task-drag-item). */
 .task-column-header,.task-row{grid-template-columns:minmax(0,1fr) 110px 90px 90px 130px 110px}
-/* 34px = 16px (Innenabstand der Aufgabenliste direkt unter einem Meilenstein, siehe
+/* 34px links = 16px (Innenabstand der Aufgabenliste direkt unter einem Meilenstein, siehe
    .task-milestone-group > .project-detail-task-list) + 18px (Platz fuer den Drag-Handle, siehe
-   .project-task-drag-item) - richtet den Header exakt an Aufgaben aus, die direkt unter einem
-   Meilenstein liegen (der haeufigste Fall). Aufgaben innerhalb eines Themenbereichs ruecken
-   durch dessen eigene Verschachtelung bewusst noch etwas weiter ein (wie bei einer Baumstruktur
-   erwartet), bleiben aber untereinander konsistent ausgerichtet. */
-.task-column-header{display:grid;align-items:center;gap:10px;padding:6px 0 6px 34px;color:var(--text-faint);font-size:.68rem;letter-spacing:.03em;text-transform:uppercase}
+   .project-task-drag-item). 16px rechts bildet den rechten Innenabstand derselben Liste ab.
+   Ohne diesen rechten Ausgleich ist die flexible erste Header-Spalte 16px breiter als in den
+   Aufgabenzeilen und alle folgenden Ueberschriften stehen zu weit rechts. */
+.task-column-header{display:grid;align-items:center;gap:10px;padding:6px 16px 6px 34px;color:var(--text-faint);font-size:.68rem;letter-spacing:.03em;text-transform:uppercase}
 .task-column-sort{min-width:0;overflow:hidden;border:0;background:transparent;padding:0;color:inherit;font:inherit;font-size:inherit;letter-spacing:inherit;text-transform:inherit;text-align:left;white-space:nowrap;text-overflow:ellipsis;cursor:pointer}
 .task-column-sort:hover{color:var(--project-text-secondary)}
 .task-column-sort.active{color:var(--project-accent);font-weight:700}
@@ -102,7 +101,7 @@
    liegen (siehe .task-row-title-button), sonst oeffnet ein Klick auf das Kommentar-Symbol
    zusaetzlich die Aufgabe (Klick-Bubbling) und das verschachtelte <details> in einem <button>
    verhaelt sich browserseitig unzuverlaessig (haengender Popover-Rest nach dem Schliessen). */
-.task-row-main{display:flex;min-width:0;align-items:center;gap:7px}
+.task-row-main{display:flex;min-width:0;align-items:center;gap:7px;padding-left:8px}
 .task-row-title-button{display:flex;min-width:0;align-items:center;gap:7px;padding:0;border:0;background:transparent;color:var(--project-text-primary);font:inherit;text-align:left;cursor:pointer}
 .task-row-title-button:hover .task-row-title{color:var(--project-accent)}
 /* .comment-preview-popover haengt normalerweise (ProjectTaskRow, Dashboard/Kundenuebersicht)
