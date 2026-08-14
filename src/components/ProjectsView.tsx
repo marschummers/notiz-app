@@ -9,6 +9,7 @@ import { projectCustomer, projectDisplayName, projectShortName } from '../lib/pr
 import { syncAll } from '../lib/sync'
 import { createPage, updatePageProperty } from '../lib/actions'
 import { getPagePropertyValue } from '../lib/propertyDefinitions'
+import { authenticateWwapi, disconnectWwapi, isWwapiConnected, readRequirementPreview, type WwapiRequirementPreview } from '../lib/wwapi'
 import ProjectTaskStatusControl from './ProjectTaskStatus'
 import { NewProjectMenu, SaveAsTemplateDialog, TemplateListView } from './ProjectTemplates'
 import './ProjectsView.css'
@@ -671,6 +672,13 @@ function TaskEditDialog({ projectId, project, tasks, task, milestones, sections,
   const [commentText, setCommentText] = useState('')
   const [commentSaving, setCommentSaving] = useState(false)
   const [commentError, setCommentError] = useState('')
+  const [afnPreviews, setAfnPreviews] = useState<WwapiRequirementPreview[]>([])
+  const [afnLoading, setAfnLoading] = useState(false)
+  const [afnError, setAfnError] = useState('')
+  const [wwapiConnected, setWwapiConnected] = useState(isWwapiConnected)
+  const [wwapiUsername, setWwapiUsername] = useState('')
+  const [wwapiPassword, setWwapiPassword] = useState('')
+  const [wwapiConnecting, setWwapiConnecting] = useState(false)
   const customField1Options = useMemo(() => [...new Set(tasks.map((item) => item.customField1Value).filter((value): value is string => !!value))].sort((a, b) => a.localeCompare(b, 'de')), [tasks])
   const customField2Options = useMemo(() => [...new Set(tasks.map((item) => item.customField2Value).filter((value): value is string => !!value))].sort((a, b) => a.localeCompare(b, 'de')), [tasks])
   const taskId = task?.id
@@ -709,6 +717,36 @@ function TaskEditDialog({ projectId, project, tasks, task, milestones, sections,
     }
   }
 
+  async function loadAfnPreviews() {
+    const numbers = parseAfns(afnText).slice(0, 10)
+    if (!numbers.length || afnLoading) return
+    setAfnLoading(true)
+    setAfnError('')
+    try {
+      setAfnPreviews(await Promise.all(numbers.map(readRequirementPreview)))
+    } catch (error) {
+      setAfnPreviews([])
+      setAfnError(error instanceof Error ? error.message : 'AFN konnte nicht geladen werden.')
+    } finally {
+      setAfnLoading(false)
+    }
+  }
+
+  async function connectWwapi() {
+    if (wwapiConnecting) return
+    setWwapiConnecting(true)
+    setAfnError('')
+    try {
+      await authenticateWwapi(wwapiUsername, wwapiPassword)
+      setWwapiConnected(true)
+    } catch (error) {
+      setAfnError(error instanceof Error ? error.message : 'Winweb-Anmeldung fehlgeschlagen.')
+    } finally {
+      setWwapiPassword('')
+      setWwapiConnecting(false)
+    }
+  }
+
   return <DialogShell title={task ? 'Aufgabe bearbeiten' : 'Neue Aufgabe'} subtitle="Projektaufgabe" onClose={closeAndSave}>
     <form className="project-dialog-form" onSubmit={save}>
       <div className="dialog-form-grid">
@@ -722,8 +760,15 @@ function TaskEditDialog({ projectId, project, tasks, task, milestones, sections,
         {status === 'waiting' && <FormField label="Wartet auf"><input value={waitingFor} onChange={(event) => setWaitingFor(event.target.value)} placeholder="z. B. Rückmeldung von Frau Müller" /></FormField>}
         {project.customField1Label && <FormField label={project.customField1Label}><input value={customField1Value} onChange={(event) => setCustomField1Value(event.target.value)} list="custom-field-1-suggestions"/><datalist id="custom-field-1-suggestions">{customField1Options.map((value) => <option key={value} value={value}/>)}</datalist></FormField>}
         {project.customField2Label && <FormField label={project.customField2Label}><input value={customField2Value} onChange={(event) => setCustomField2Value(event.target.value)} list="custom-field-2-suggestions"/><datalist id="custom-field-2-suggestions">{customField2Options.map((value) => <option key={value} value={value}/>)}</datalist></FormField>}
-        <FormField label="AFN-Nummern" wide><input value={afnText} onChange={(event) => setAfnText(event.target.value)} inputMode="numeric" placeholder="181657, 181658"/><small>Mehrere Nummern mit Komma trennen.</small></FormField>
+        <FormField label="AFN-Nummern" wide><div className="afn-preview-input"><input value={afnText} onChange={(event) => { setAfnText(event.target.value); setAfnPreviews([]); setAfnError('') }} inputMode="numeric" placeholder="181657, 181658"/><button type="button" className="secondary-action" disabled={!wwapiConnected || parseAfns(afnText).length === 0 || afnLoading} onClick={loadAfnPreviews}>{afnLoading ? 'Wird geladen …' : 'AFN lesen'}</button></div><small>Kurztext, Zuständigkeit und Texteinträge direkt aus Winweb laden.</small></FormField>
       </div>
+      {afnError && <p className="afn-preview-error">{afnError}</p>}
+      {!wwapiConnected && parseAfns(afnText).length > 0 && <section className="wwapi-login"><h3>Mit Winweb verbinden</h3><p>Persönliche Winweb-Anmeldung zum Lesen der AFN. Das Passwort wird nicht gespeichert.</p><div><input value={wwapiUsername} onChange={(event) => setWwapiUsername(event.target.value)} autoComplete="username" placeholder="Winweb-Benutzer"/><input type="password" value={wwapiPassword} onChange={(event) => setWwapiPassword(event.target.value)} autoComplete="current-password" placeholder="Winweb-Passwort"/><button type="button" className="secondary-action" disabled={!wwapiUsername.trim() || !wwapiPassword || wwapiConnecting} onClick={connectWwapi}>{wwapiConnecting ? 'Verbindet …' : 'Verbinden'}</button></div></section>}
+      {wwapiConnected && <div className="wwapi-connected"><span>Winweb verbunden · nur Lesen</span><button type="button" onClick={() => { disconnectWwapi(); setWwapiConnected(false); setAfnPreviews([]) }}>Trennen</button></div>}
+      {afnPreviews.length > 0 && <section className="afn-previews"><h3>Winweb AFN</h3>{afnPreviews.map(({ requirement, entries }) => {
+        const responsible = [requirement.user_1, requirement.user_2, requirement.user_selection, requirement.kanban_team].filter(Boolean).join(' · ')
+        return <article className="afn-preview" key={requirement.gen}><header><strong>AFN {requirement.gen}</strong><span>{requirement.short_text || 'Ohne Kurztext'}</span></header><p className="afn-preview-responsible">Zuständig: {responsible || 'Nicht angegeben'}{requirement.kanban_state ? ` · ${requirement.kanban_state}` : ''}</p><div className="afn-preview-entries">{entries.length === 0 ? <p>Keine Texteinträge vorhanden.</p> : [...entries].sort((a, b) => String(a.date_insert ?? '').localeCompare(String(b.date_insert ?? ''))).map((entry) => <div key={entry.gen}><p>{entry.text || 'Ohne Text'}</p><small>{[entry.user_update || entry.user_insert, entry.date_update || entry.date_insert ? formatDateTime(new Date(entry.date_update || entry.date_insert!).getTime()) : ''].filter(Boolean).join(' · ')}</small></div>)}</div></article>
+      })}</section>}
       {task && <section className="task-comments">
         <h3>Kommentare</h3>
         <div className="task-comment-list">{comments.length === 0 ? <p className="empty">Noch keine Kommentare.</p> : [...comments].sort((a, b) => a.createdAt - b.createdAt).map((comment) => {
