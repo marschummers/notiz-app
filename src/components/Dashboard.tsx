@@ -1,8 +1,9 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { ReactNode } from 'react'
 import { db } from '../db/db'
-import type { Page, Project, ProjectTask, Task } from '../db/types'
+import type { Page, Project, ProjectTask, QuickTask, Task } from '../db/types'
 import { createPage, toggleTask } from '../lib/actions'
+import { toggleQuickTask } from '../lib/quickTaskActions'
 import { formatRelativeTime } from '../lib/format'
 import { getPagePropertyValue } from '../lib/propertyDefinitions'
 import { projectCustomer, projectDisplayName, projectShortName } from '../lib/projectDisplay'
@@ -82,32 +83,35 @@ function DashboardMetric({ value, label }: { value: number; label: string }) {
   return <div><strong>{value}</strong><span>{label}</span></div>
 }
 
-function OpenTasksSection({ tasks, pageById, onOpenPage, onOpenTasks }: {
+function OpenTasksSection({ tasks, quickTasks, pageById, onOpenPage, onOpenTasks }: {
   tasks: Task[]
+  quickTasks: QuickTask[]
   pageById: Map<string, Page>
   onOpenPage: (pageId: string) => void
   onOpenTasks: () => void
 }) {
-  const visibleTasks = tasks
-    .filter((task) => !task.deletedAt && !task.completed && pageById.has(task.pageId))
-    .sort((a, b) => b.updatedAt - a.updatedAt)
+  const visibleTasks = [
+    ...tasks.filter((task) => !task.deletedAt && !task.completed && pageById.has(task.pageId)).map((task) => ({ kind: 'page' as const, task })),
+    ...quickTasks.filter((task) => !task.deletedAt && !task.completed).map((task) => ({ kind: 'quick' as const, task })),
+  ]
+    .sort((a, b) => b.task.updatedAt - a.task.updatedAt)
     .slice(0, 8)
 
   return (
     <DashboardSection title="Offene Aufgaben" action={<button className="dashboard-text-action" onClick={onOpenTasks}>Alle Aufgaben</button>}>
       {visibleTasks.length === 0 ? <p className="dashboard-empty">Keine offenen Aufgaben.</p> : (
         <div className="dashboard-task-list">
-          {visibleTasks.map((task) => (
-            <div className="dashboard-task" key={task.id}>
+          {visibleTasks.map((item) => (
+            <div className="dashboard-task" key={`${item.kind}-${item.task.id}`}>
               <input
                 type="checkbox"
                 checked={false}
-                aria-label={`Aufgabe „${task.text || 'Ohne Text'}“ erledigen`}
-                onChange={() => toggleTask(task.id, true)}
+                aria-label={`Aufgabe „${item.task.text || 'Ohne Text'}“ erledigen`}
+                onChange={() => item.kind === 'quick' ? toggleQuickTask(item.task.id, true) : toggleTask(item.task.id, true)}
               />
-              <button className="dashboard-task-content" onClick={() => onOpenPage(task.pageId)}>
-                <span className="dashboard-item-title">{task.text || 'Ohne Text'}</span>
-                <span className="dashboard-item-meta">{pageById.get(task.pageId)?.title || 'Ohne Titel'}</span>
+              <button className="dashboard-task-content" onClick={() => item.kind === 'quick' ? onOpenTasks() : onOpenPage(item.task.pageId)}>
+                <span className="dashboard-item-title">{item.task.text || 'Ohne Text'}</span>
+                <span className="dashboard-item-meta">{item.kind === 'quick' ? 'Spontan' : pageById.get(item.task.pageId)?.title || 'Ohne Titel'}</span>
               </button>
             </div>
           ))}
@@ -177,6 +181,7 @@ export default function Dashboard({
 }: Props) {
   const pages = useLiveQuery(() => db.pages.filter((page) => !page.deletedAt).toArray(), []) ?? []
   const tasks = useLiveQuery(() => db.tasks.filter((task) => !task.deletedAt).toArray(), []) ?? []
+  const quickTasks = useLiveQuery(() => db.quickTasks.filter((task) => !task.deletedAt).toArray(), []) ?? []
   const folders = useLiveQuery(() => db.folders.filter((folder) => !folder.deletedAt).toArray(), []) ?? []
   const projects = useLiveQuery(() => db.projects.filter((project) => !project.deletedAt).toArray(), []) ?? []
   const projectTasks = useLiveQuery(() => db.projectTasks.filter((task) => !task.deletedAt).toArray(), []) ?? []
@@ -204,7 +209,7 @@ export default function Dashboard({
             <ProjectSection projects={projects} tasks={projectTasks} userId={userId} onOpenProjects={onOpenProjects} />
           </div>
         )}
-        <OpenTasksSection tasks={tasks} pageById={pageById} onOpenPage={onOpenPage} onOpenTasks={onOpenTasks} />
+        <OpenTasksSection tasks={tasks} quickTasks={quickTasks} pageById={pageById} onOpenPage={onOpenPage} onOpenTasks={onOpenTasks} />
         <RecentPagesSection pages={pages} folderById={folderById} onOpenPage={onOpenPage} />
         <div className="dashboard-wide-section">
           <FavoritesSection pages={pages} onOpenPage={onOpenPage} />
