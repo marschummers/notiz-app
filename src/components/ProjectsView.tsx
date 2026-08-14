@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type ReactNode } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
 import type { Page, Project, ProjectMember, ProjectMilestone, ProjectMilestoneStatus, ProjectSection, ProjectStatus, ProjectTask, ProjectTaskComment, ProjectTaskStatus, UserProfile } from '../db/types'
@@ -602,11 +602,8 @@ export function DialogShell({ title, subtitle, children, onClose }: { title: str
 
 function ProjectEditDialog({ project, onClose, onDeleted }: { project: Project; onClose: () => void; onDeleted: () => void }) {
   const [draft, setDraft] = useState(() => ({ ...project, name: projectShortName(project) ?? '', customerName: projectCustomer(project) }))
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(true)
-  const persist = useCallback(async () => {
+  async function persist() {
     if (!draft.customerName?.trim()) return false
-    setSaving(true)
     await updateProject(project.id, {
       name: draft.name.trim(),
       customerName: draft.customerName.trim(),
@@ -618,18 +615,11 @@ function ProjectEditDialog({ project, onClose, onDeleted }: { project: Project; 
       customField1Label: draft.customField1Label?.trim() || undefined,
       customField2Label: draft.customField2Label?.trim() || undefined,
     })
-    setSaving(false)
-    setSaved(true)
     return true
-  }, [draft, project.id])
+  }
   async function closeAndSave() {
     if (await persist()) onClose()
   }
-  useEffect(() => {
-    setSaved(false)
-    const timeout = window.setTimeout(() => { void persist() }, 600)
-    return () => window.clearTimeout(timeout)
-  }, [persist])
   async function submit(event: FormEvent) {
     event.preventDefault()
     await closeAndSave()
@@ -646,7 +636,7 @@ function ProjectEditDialog({ project, onClose, onDeleted }: { project: Project; 
         <FormField label="Zusatzfeld 1 Bezeichnung"><input value={draft.customField1Label ?? ''} onChange={(event) => setDraft({ ...draft, customField1Label: event.target.value })} placeholder="z. B. Modul (leer = ausgeblendet)"/></FormField>
         <FormField label="Zusatzfeld 2 Bezeichnung"><input value={draft.customField2Label ?? ''} onChange={(event) => setDraft({ ...draft, customField2Label: event.target.value })} placeholder="z. B. Modul (leer = ausgeblendet)"/></FormField>
       </div>
-      <div className="dialog-actions"><button type="button" className="danger-action" onClick={async () => { if (confirm(`Projekt „${projectDisplayName(project)}“ löschen?`)) { await deleteProject(project.id); onDeleted() } }}>Projekt löschen</button><span/><span className="dialog-autosave-status" aria-live="polite">{saving ? 'Wird gespeichert …' : saved ? 'Automatisch gespeichert' : 'Änderungen werden gespeichert …'}</span><button type="button" className="primary" disabled={!draft.customerName?.trim()} onClick={closeAndSave}>Schließen</button></div>
+      <div className="dialog-actions"><button type="button" className="danger-action" onClick={async () => { if (confirm(`Projekt „${projectDisplayName(project)}“ löschen?`)) { await deleteProject(project.id); onDeleted() } }}>Projekt löschen</button><span/><span/><button type="button" className="primary" disabled={!draft.customerName?.trim()} onClick={closeAndSave}>Schließen</button></div>
     </form>
   </DialogShell>
 }
@@ -681,24 +671,19 @@ function TaskEditDialog({ projectId, project, tasks, task, milestones, sections,
   const [commentText, setCommentText] = useState('')
   const [commentSaving, setCommentSaving] = useState(false)
   const [commentError, setCommentError] = useState('')
-  const [autosaveSaving, setAutosaveSaving] = useState(false)
-  const [autosaveSaved, setAutosaveSaved] = useState(true)
   const customField1Options = useMemo(() => [...new Set(tasks.map((item) => item.customField1Value).filter((value): value is string => !!value))].sort((a, b) => a.localeCompare(b, 'de')), [tasks])
   const customField2Options = useMemo(() => [...new Set(tasks.map((item) => item.customField2Value).filter((value): value is string => !!value))].sort((a, b) => a.localeCompare(b, 'de')), [tasks])
   const taskId = task?.id
   const existingCustomField1Value = task?.customField1Value
   const existingCustomField2Value = task?.customField2Value
 
-  const persist = useCallback(async () => {
+  async function persist() {
     if (!title.trim()) return false
-    setAutosaveSaving(true)
     const id = taskId ?? await createProjectTask(projectId, title, assigneeUserId || undefined)
     await updateProjectTask(id, { title: title.trim(), description: description.trim() || undefined, status, dueDate, milestoneId: milestoneId || undefined, sectionId: milestoneId && availableSections.some((section) => section.id === sectionId) ? sectionId : undefined, assigneeUserId: assigneeUserId || undefined, waitingFor: status === 'waiting' ? (waitingFor.trim() || undefined) : undefined, customField1Value: project.customField1Label ? (customField1Value.trim() || undefined) : existingCustomField1Value, customField2Value: project.customField2Label ? (customField2Value.trim() || undefined) : existingCustomField2Value })
     await replaceProjectTaskAfns(id, parseAfns(afnText))
-    setAutosaveSaving(false)
-    setAutosaveSaved(true)
     return true
-  }, [afnText, assigneeUserId, availableSections, customField1Value, customField2Value, description, dueDate, existingCustomField1Value, existingCustomField2Value, milestoneId, project.customField1Label, project.customField2Label, projectId, sectionId, status, taskId, title, waitingFor])
+  }
 
   async function save(event: FormEvent) {
     event.preventDefault()
@@ -708,13 +693,6 @@ function TaskEditDialog({ projectId, project, tasks, task, milestones, sections,
   async function closeAndSave() {
     if (!taskId || await persist()) onClose()
   }
-
-  useEffect(() => {
-    if (!taskId) return
-    setAutosaveSaved(false)
-    const timeout = window.setTimeout(() => { void persist() }, 600)
-    return () => window.clearTimeout(timeout)
-  }, [persist, taskId])
 
   async function addComment() {
     if (!task || !commentText.trim() || commentSaving) return
@@ -755,7 +733,7 @@ function TaskEditDialog({ projectId, project, tasks, task, milestones, sections,
         <div className="task-comment-compose"><textarea value={commentText} onChange={(event) => setCommentText(event.target.value)} rows={2} placeholder="Kommentar schreiben…"/><button type="button" className="primary" disabled={!commentText.trim() || commentSaving} onClick={addComment}>{commentSaving ? 'Wird gesendet…' : 'Abschicken'}</button></div>
         {commentError && <p className="task-comment-error">{commentError}</p>}
       </section>}
-      <div className="dialog-actions">{task ? <button type="button" className="danger-action" onClick={async () => { if (confirm('Aufgabe löschen?')) { await deleteProjectTask(task.id); onClose() } }}>Aufgabe löschen</button> : <span/>}<span/>{task ? <><span className="dialog-autosave-status" aria-live="polite">{autosaveSaving ? 'Wird gespeichert …' : autosaveSaved ? 'Automatisch gespeichert' : 'Änderungen werden gespeichert …'}</span><button type="button" className="primary" disabled={!title.trim()} onClick={closeAndSave}>Schließen</button></> : <><button type="button" className="secondary-action" onClick={onClose}>Abbrechen</button><button className="primary" disabled={!title.trim()}>Speichern</button></>}</div>
+      <div className="dialog-actions">{task ? <button type="button" className="danger-action" onClick={async () => { if (confirm('Aufgabe löschen?')) { await deleteProjectTask(task.id); onClose() } }}>Aufgabe löschen</button> : <span/>}<span/>{task ? <><span/><button type="button" className="primary" disabled={!title.trim()} onClick={closeAndSave}>Schließen</button></> : <><button type="button" className="secondary-action" onClick={onClose}>Abbrechen</button><button className="primary" disabled={!title.trim()}>Speichern</button></>}</div>
     </form>
   </DialogShell>
 }
