@@ -336,6 +336,7 @@ export interface UserProfile {
   id: string
   email: string
   displayName?: string
+  isGuest?: boolean
   updatedAt: number
 }
 

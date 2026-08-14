@@ -1,10 +1,14 @@
 import { useAuth } from './lib/auth'
 import LoginPage from './pages/LoginPage'
 import Workspace from './pages/Workspace'
+import GuestWorkspace from './pages/GuestWorkspace'
+import InvitationPage from './pages/InvitationPage'
+import { pendingInvitationToken } from './lib/projectInvitations'
 import './App.css'
 
 export default function App() {
-  const { configured, loading, session, approved, refreshApproval, signOut } = useAuth()
+  const { configured, loading, session, approved, isGuest, refreshApproval, signOut } = useAuth()
+  const invitationToken = pendingInvitationToken()
 
   if (!configured) {
     return (
@@ -21,9 +25,11 @@ export default function App() {
 
   if (!session) return <LoginPage />
 
+  if (invitationToken) return <InvitationPage token={invitationToken} />
+
   if (approved === null) return <div className="auth-loading">Prüfe Freigabe…</div>
 
-  if (!approved) {
+  if (!approved && !isGuest) {
     return (
       <div className="access-waiting-screen">
         <div className="access-waiting-card">
@@ -40,6 +46,6 @@ export default function App() {
     )
   }
 
-  return <Workspace />
+  return isGuest && !approved ? <GuestWorkspace /> : <Workspace />
 }
 

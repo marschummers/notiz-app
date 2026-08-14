@@ -10,6 +10,7 @@ interface AuthState {
   // false, wenn Supabase nicht konfiguriert ist (fehlende Umgebungsvariablen).
   configured: boolean
   approved: boolean | null
+  isGuest: boolean
   refreshApproval: () => Promise<void>
   signInWithOtp: (email: string) => Promise<{ error: string | null }>
   // Bestaetigt den 6-stelligen Code aus derselben Mail wie der Login-Link. Wichtig fuer als
@@ -26,6 +27,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const [approved, setApproved] = useState<boolean | null>(null)
+  const [isGuest, setIsGuest] = useState(false)
 
   useEffect(() => {
     if (!supabase) {
@@ -49,13 +51,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     const { data, error } = await supabase
       .from('notiz_profiles')
-      .select('approved')
+      .select('approved, is_guest')
       .eq('id', session.user.id)
       .maybeSingle()
     // Rueckwaertskompatibel waehrend des Deployments: Wird die App kurz vor der Migration
     // geladen, darf die noch fehlende Spalte nicht alle bestehenden Benutzer aussperren.
     const approvalSchemaMissing = !!error && (error.code === '42703' || error.code === 'PGRST204' || error.message.includes('approved'))
     setApproved(approvalSchemaMissing ? true : error ? false : (data?.approved ?? false))
+    setIsGuest(error ? false : (data?.is_guest ?? false))
   }
 
   useEffect(() => {
@@ -67,7 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!supabase) return { error: 'Supabase ist nicht konfiguriert.' }
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: window.location.origin + window.location.pathname },
+      options: { emailRedirectTo: window.location.origin + window.location.pathname + window.location.search },
     })
     return { error: error?.message ?? null }
   }
@@ -83,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ session, loading, configured: !!supabase, approved, refreshApproval, signInWithOtp, verifyOtp, signOut }}>
+    <AuthContext.Provider value={{ session, loading, configured: !!supabase, approved, isGuest, refreshApproval, signInWithOtp, verifyOtp, signOut }}>
       {children}
     </AuthContext.Provider>
   )

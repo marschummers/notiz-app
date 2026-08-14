@@ -358,3 +358,10 @@
 .task-drop-list .task-section-empty {
   pointer-events: none;
 }
+
+.guest-invite-box{display:grid;gap:10px;margin-top:18px;padding:16px;border:1px solid var(--border);border-radius:12px;background:var(--panel-muted)}
+.guest-invite-box>div:first-child{display:grid;gap:4px}.guest-invite-box small{color:var(--text-muted)}
+.guest-invite-row,.guest-invite-result{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}.guest-invite-row input,.guest-invite-result input{min-width:0;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg);color:inherit}
+.guest-invite-result small{grid-column:1/-1}.guest-invite-result button{border:1px solid var(--border);border-radius:8px;background:var(--panel-bg);color:inherit}.guest-invite-error{margin:0;color:#ff6676}
+.team-member-list .guest-remove-button{padding:6px 9px;border:1px solid var(--project-danger);border-radius:7px;background:transparent;color:var(--project-danger);font-size:.7rem}
+@media(max-width:650px){.guest-invite-row,.guest-invite-result{grid-template-columns:1fr}.guest-invite-result small{grid-column:auto}}

@@ -270,6 +270,7 @@ export async function syncAll(): Promise<void> {
     id: profile.id as string,
     email: profile.email as string,
     displayName: (profile.display_name as string | null) ?? undefined,
+    isGuest: (profile.is_guest as boolean | null) ?? false,
     updatedAt: ms(profile.updated_at as string),
   })))
 
@@ -714,6 +715,7 @@ export async function updateOwnDisplayName(displayName: string): Promise<void> {
     id: userData.user.id,
     email: userData.user.email ?? '',
     displayName: trimmed,
+    isGuest: (await db.userProfiles.get(userData.user.id))?.isGuest,
     updatedAt,
   })
 }

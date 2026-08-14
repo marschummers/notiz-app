@@ -12,6 +12,7 @@ import { getPagePropertyValue } from '../lib/propertyDefinitions'
 import { authenticateWwapi, disconnectWwapi, isWwapiConnected, readRequirementPreview, type WwapiRequirementPreview } from '../lib/wwapi'
 import ProjectTaskStatusControl from './ProjectTaskStatus'
 import { NewProjectMenu, SaveAsTemplateDialog, TemplateListView } from './ProjectTemplates'
+import { createProjectInvitation } from '../lib/projectInvitations'
 import './ProjectsView.css'
 
 const projectStatus: Record<ProjectStatus, string> = { active: 'Aktiv', waiting: 'Wartet', completed: 'Abgeschlossen', archived: 'Archiviert' }
@@ -787,6 +788,10 @@ function TeamEditDialog({ project, members, profiles, userId, userEmail, onClose
   const initialIds = new Set([project.ownerUserId, ...members.map((member) => member.userId)])
   const [ownerId, setOwnerId] = useState(project.ownerUserId)
   const [selected, setSelected] = useState(initialIds)
+  const [guestEmail, setGuestEmail] = useState('')
+  const [inviteLink, setInviteLink] = useState('')
+  const [inviteError, setInviteError] = useState<string | null>(null)
+  const [inviting, setInviting] = useState(false)
   const values = profiles.length ? profiles : [{ id: userId, email: userEmail ?? 'Ich', updatedAt: 0 }]
   function toggle(id: string) {
     const next = new Set(selected)
@@ -799,9 +804,30 @@ function TeamEditDialog({ project, members, profiles, userId, userEmail, onClose
     await setProjectTeam(project.id, ownerId, [...selected, ownerId])
     onClose()
   }
+  async function inviteGuest() {
+    if (!guestEmail.trim()) return
+    setInviting(true)
+    setInviteError(null)
+    try { setInviteLink(await createProjectInvitation(project.id, guestEmail)) }
+    catch (value) { setInviteError(value instanceof Error ? value.message : String(value)) }
+    finally { setInviting(false) }
+  }
+  async function removeGuest(profile: UserProfile) {
+    if (!confirm(`Gastzugang für ${profile.displayName || profile.email} vollständig aus diesem Projekt entfernen?`)) return
+    const remaining = [...selected].filter((id) => id !== profile.id)
+    await setProjectTeam(project.id, ownerId, [...remaining, ownerId])
+    await syncAll()
+    onClose()
+  }
   return <DialogShell title="Team bearbeiten" subtitle={projectDisplayName(project)} onClose={onClose}><form className="project-dialog-form" onSubmit={save}>
     <div className="dialog-form-grid"><FormField label="Hauptverantwortlich" wide><select value={ownerId} onChange={(event) => { setOwnerId(event.target.value); setSelected(new Set([...selected, event.target.value])) }}>{profileOptions(values, userId, userEmail)}</select></FormField></div>
-    <div className="team-member-list">{values.map((profile) => <label key={profile.id}><input type="checkbox" checked={selected.has(profile.id)} disabled={profile.id === ownerId} onChange={() => toggle(profile.id)}/><span>{profile.displayName || profile.email}</span>{profile.id === ownerId && <small>Verantwortlich</small>}</label>)}</div>
+    <div className="team-member-list">{values.map((profile) => <label key={profile.id}><input type="checkbox" checked={selected.has(profile.id)} disabled={profile.id === ownerId || profile.isGuest} onChange={() => toggle(profile.id)}/><span>{profile.displayName || profile.email}</span>{profile.id === ownerId && <small>Verantwortlich</small>}{profile.isGuest && selected.has(profile.id) && <><small>Gast</small><button type="button" className="guest-remove-button" onClick={() => removeGuest(profile)}>Gastzugang entfernen</button></>}</label>)}</div>
+    {project.ownerUserId === userId && <section className="guest-invite-box">
+      <div><strong>Externen Gast einladen</strong><small>Der Gast sieht nur dieses Projekt und kann Aufgaben kommentieren.</small></div>
+      <div className="guest-invite-row"><input type="email" value={guestEmail} onChange={(event) => { setGuestEmail(event.target.value); setInviteLink('') }} placeholder="gast@firma.de"/><button type="button" className="secondary-action" disabled={!guestEmail.trim() || inviting} onClick={inviteGuest}>{inviting ? 'Erstellt …' : 'Einladungslink erstellen'}</button></div>
+      {inviteError && <p className="guest-invite-error">{inviteError}</p>}
+      {inviteLink && <div className="guest-invite-result"><input readOnly value={inviteLink}/><button type="button" onClick={async () => { await navigator.clipboard.writeText(inviteLink) }}>Kopieren</button><small>Der Link ist 14 Tage gültig und funktioniert nur mit {guestEmail.trim()}.</small></div>}
+    </section>}
     <div className="dialog-actions"><span/><span/><button type="button" className="secondary-action" onClick={onClose}>Abbrechen</button><button className="primary">Speichern</button></div>
   </form></DialogShell>
 }
