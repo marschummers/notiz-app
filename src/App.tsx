@@ -37,7 +37,7 @@ export default function App() {
           <h1>Warte auf Freigabe</h1>
           <p>
             Deine Anmeldung als <strong>{session.user.email}</strong> ist eingegangen. Sobald dein Zugang freigegeben
-            wurde, kannst du die Notiz-App verwenden.
+            wurde, kannst du Workspace verwenden.
           </p>
           <button className="primary" onClick={refreshApproval}>Freigabe erneut prüfen</button>
           <button className="secondary-action" onClick={signOut}>Abmelden</button>

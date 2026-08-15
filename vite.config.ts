@@ -12,9 +12,9 @@ export default defineConfig({
       injectRegister: false,
       includeAssets: ['favicon-32.png', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Notiz App',
-        short_name: 'Notiz App',
-        description: 'Handschriftliche Notizen mit Apple Pencil, Ordnerstruktur und Tags',
+        name: 'Workspace',
+        short_name: 'Workspace',
+        description: 'Notizen, Wissensmanagement und gemeinsame Projekte an einem Ort',
         theme_color: '#11151f',
         background_color: '#11151f',
         display: 'standalone',

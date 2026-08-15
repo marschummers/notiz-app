@@ -52,7 +52,7 @@ export default function LoginPage() {
     <div className="login-screen">
       <button className="login-theme-switch" onClick={toggleTheme}>Design: {theme === 'winweb' ? 'Winweb' : 'Kupfer'}</button>
       <BrandLogo compact />
-      <h1>Notiz App</h1>
+      <h1>Workspace</h1>
       <div className="login-panel">
         {sent ? (
           <>
