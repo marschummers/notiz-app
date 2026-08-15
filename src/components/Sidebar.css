@@ -31,6 +31,19 @@
   background: linear-gradient(135deg, var(--bg-elevated), var(--bg));
 }
 
+/* Logo und Produktname muessen bereits in der Standardbreite gemeinsam Platz finden.
+   Das Logo darf bei einer schmaler gezogenen Sidebar etwas schrumpfen; der Produktname
+   bleibt vollstaendig lesbar. */
+.sidebar-brand .brand-logo img {
+  width: 145px;
+  min-width: 0;
+  flex: 1 1 145px;
+}
+
+.sidebar-brand .brand-logo > span {
+  flex: 0 0 auto;
+}
+
 .sidebar-section {
   padding: 10px 0;
   padding-top: 10px;
