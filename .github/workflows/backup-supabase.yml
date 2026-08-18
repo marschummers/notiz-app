@@ -30,7 +30,7 @@ jobs:
       - name: Install backup tools
         run: |
           sudo apt-get update
-          sudo apt-get install --yes awscli rclone
+          sudo apt-get install --yes rclone
 
       - name: Validate required secrets
         shell: bash
@@ -78,15 +78,17 @@ jobs:
           test -n "$access_token" && test "$access_token" != null || { echo 'Storage backup login failed'; exit 1; }
 
           mkdir -p backup/plain/storage/notiz-pdfs
-          AWS_ACCESS_KEY_ID='ielieyybudoyicedztct' \
-          AWS_SECRET_ACCESS_KEY="$SUPABASE_ANON_KEY" \
-          AWS_SESSION_TOKEN="$access_token" \
-            aws s3 sync \
-              's3://notiz-pdfs' \
-              backup/plain/storage/notiz-pdfs \
-              --endpoint-url 'https://ielieyybudoyicedztct.storage.supabase.co/storage/v1/s3' \
-              --region 'eu-west-1' \
-              --no-progress
+          export RCLONE_CONFIG_SUPABASE_STORAGE_TYPE='s3'
+          export RCLONE_CONFIG_SUPABASE_STORAGE_PROVIDER='Other'
+          export RCLONE_CONFIG_SUPABASE_STORAGE_ACCESS_KEY_ID='ielieyybudoyicedztct'
+          export RCLONE_CONFIG_SUPABASE_STORAGE_SECRET_ACCESS_KEY="$SUPABASE_ANON_KEY"
+          export RCLONE_CONFIG_SUPABASE_STORAGE_SESSION_TOKEN="$access_token"
+          export RCLONE_CONFIG_SUPABASE_STORAGE_ENDPOINT='https://ielieyybudoyicedztct.storage.supabase.co/storage/v1/s3'
+          export RCLONE_CONFIG_SUPABASE_STORAGE_REGION='eu-west-1'
+          export RCLONE_CONFIG_SUPABASE_STORAGE_FORCE_PATH_STYLE='true'
+          rclone sync \
+            'supabase-storage:notiz-pdfs' \
+            backup/plain/storage/notiz-pdfs
 
           (
             cd backup/plain
