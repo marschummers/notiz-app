@@ -78,16 +78,16 @@ jobs:
           test -n "$access_token" && test "$access_token" != null || { echo 'Storage backup login failed'; exit 1; }
 
           mkdir -p backup/plain/storage/notiz-pdfs
-          export RCLONE_CONFIG_SUPABASE_STORAGE_TYPE='s3'
-          export RCLONE_CONFIG_SUPABASE_STORAGE_PROVIDER='Other'
-          export RCLONE_CONFIG_SUPABASE_STORAGE_ACCESS_KEY_ID='ielieyybudoyicedztct'
-          export RCLONE_CONFIG_SUPABASE_STORAGE_SECRET_ACCESS_KEY="$SUPABASE_ANON_KEY"
-          export RCLONE_CONFIG_SUPABASE_STORAGE_SESSION_TOKEN="$access_token"
-          export RCLONE_CONFIG_SUPABASE_STORAGE_ENDPOINT='https://ielieyybudoyicedztct.storage.supabase.co/storage/v1/s3'
-          export RCLONE_CONFIG_SUPABASE_STORAGE_REGION='eu-west-1'
-          export RCLONE_CONFIG_SUPABASE_STORAGE_FORCE_PATH_STYLE='true'
+          export RCLONE_CONFIG_SUPABASESTORAGE_TYPE='s3'
+          export RCLONE_CONFIG_SUPABASESTORAGE_PROVIDER='Other'
+          export RCLONE_CONFIG_SUPABASESTORAGE_ACCESS_KEY_ID='ielieyybudoyicedztct'
+          export RCLONE_CONFIG_SUPABASESTORAGE_SECRET_ACCESS_KEY="$SUPABASE_ANON_KEY"
+          export RCLONE_CONFIG_SUPABASESTORAGE_SESSION_TOKEN="$access_token"
+          export RCLONE_CONFIG_SUPABASESTORAGE_ENDPOINT='https://ielieyybudoyicedztct.storage.supabase.co/storage/v1/s3'
+          export RCLONE_CONFIG_SUPABASESTORAGE_REGION='eu-west-1'
+          export RCLONE_CONFIG_SUPABASESTORAGE_FORCE_PATH_STYLE='true'
           rclone sync \
-            'supabase-storage:notiz-pdfs' \
+            'supabasestorage:notiz-pdfs' \
             backup/plain/storage/notiz-pdfs
 
           (
