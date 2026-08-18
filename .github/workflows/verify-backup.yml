@@ -1,0 +1,162 @@
+name: Verify Supabase backup restore
+
+on:
+  schedule:
+    # Einmal monatlich auf einem kurzlebigen GitHub-Runner testen.
+    - cron: '43 4 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-backup-verification
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BACKUP_ENCRYPTION_PASSWORD: ${{ secrets.BACKUP_ENCRYPTION_PASSWORD }}
+      PGHOST: 127.0.0.1
+      PGPORT: 55432
+      PGDATABASE: restore_test
+      PGUSER: postgres
+      PGPASSWORD: restore-test-only
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install rclone and PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes rclone postgresql-client
+
+      - name: Validate required secrets
+        shell: bash
+        run: |
+          test -n "$BACKUP_ENCRYPTION_PASSWORD" || { echo 'BACKUP_ENCRYPTION_PASSWORD is missing'; exit 1; }
+          test -n "${{ secrets.RCLONE_CONFIG_B64 }}" || { echo 'RCLONE_CONFIG_B64 is missing'; exit 1; }
+
+      - name: Configure Google Drive
+        shell: bash
+        run: |
+          mkdir -p "$HOME/.config/rclone"
+          echo '${{ secrets.RCLONE_CONFIG_B64 }}' | base64 --decode > "$HOME/.config/rclone/rclone.conf"
+          chmod 600 "$HOME/.config/rclone/rclone.conf"
+
+      - name: Download newest encrypted backup
+        id: backup
+        shell: bash
+        run: |
+          mkdir -p restore
+          latest="$(rclone lsf 'workspace-backup:Workspace-App-Backups/daily' --files-only | sort | tail -n 1)"
+          test -n "$latest" || { echo 'No backup found in Google Drive'; exit 1; }
+          rclone copyto \
+            "workspace-backup:Workspace-App-Backups/daily/$latest" \
+            restore/latest.tar.gz.gpg
+          echo "source=$latest" >> "$GITHUB_OUTPUT"
+
+      - name: Decrypt and inspect archive
+        shell: bash
+        run: |
+          gpg --batch --yes --pinentry-mode loopback \
+            --passphrase "$BACKUP_ENCRYPTION_PASSWORD" \
+            --decrypt --output restore/database.tar.gz restore/latest.tar.gz.gpg
+          mkdir -p restore/plain
+          tar -C restore/plain -xzf restore/database.tar.gz
+          test -s restore/plain/database.dump
+          docker run --rm \
+            -v "$PWD/restore/plain:/restore" \
+            postgres:17-alpine \
+            pg_restore --list /restore/database.dump > restore/plain/verified-manifest.txt
+          test -s restore/plain/verified-manifest.txt
+
+      - name: Start disposable PostgreSQL database
+        shell: bash
+        run: |
+          docker run --detach --rm \
+            --name workspace-backup-restore-test \
+            -e POSTGRES_PASSWORD="$PGPASSWORD" \
+            -e POSTGRES_DB="$PGDATABASE" \
+            -p "$PGPORT:5432" \
+            postgres:17-alpine
+          for attempt in {1..30}; do
+            pg_isready && exit 0
+            sleep 2
+          done
+          echo 'Disposable PostgreSQL database did not start in time'
+          exit 1
+
+      - name: Prepare Supabase compatibility stubs
+        shell: bash
+        run: |
+          psql --set ON_ERROR_STOP=1 <<'SQL'
+          create schema if not exists auth;
+          create schema if not exists extensions;
+          create extension if not exists pgcrypto with schema extensions;
+          create extension if not exists "uuid-ossp" with schema extensions;
+          create table if not exists auth.users (id uuid primary key);
+          create or replace function auth.uid() returns uuid
+            language sql stable as 'select null::uuid';
+          create or replace function auth.role() returns text
+            language sql stable as 'select null::text';
+          create or replace function auth.jwt() returns jsonb
+            language sql stable as 'select null::jsonb';
+          SQL
+
+      - name: Restore schema and data into disposable database
+        shell: bash
+        run: |
+          docker cp restore/plain/database.dump \
+            workspace-backup-restore-test:/tmp/database.dump
+          docker exec \
+            -e PGPASSWORD="$PGPASSWORD" \
+            workspace-backup-restore-test \
+            pg_restore --exit-on-error --no-owner --no-privileges \
+              --username=postgres --section=pre-data \
+              --dbname="$PGDATABASE" /tmp/database.dump
+          docker exec \
+            -e PGPASSWORD="$PGPASSWORD" \
+            workspace-backup-restore-test \
+            pg_restore --exit-on-error --no-owner --no-privileges --disable-triggers \
+              --username=postgres --section=data \
+              --dbname="$PGDATABASE" /tmp/database.dump
+
+      - name: Verify restored application data
+        shell: bash
+        run: |
+          table_count="$(psql --tuples-only --no-align --command="select count(*) from pg_tables where schemaname = 'public'")"
+          test "$table_count" -gt 0 || { echo 'No public tables were restored'; exit 1; }
+          psql --set ON_ERROR_STOP=1 <<'SQL'
+          do $$
+          declare
+            current_table record;
+            current_count bigint;
+            total_count bigint := 0;
+          begin
+            for current_table in
+              select tablename from pg_tables where schemaname = 'public'
+            loop
+              execute format('select count(*) from public.%I', current_table.tablename)
+                into current_count;
+              total_count := total_count + current_count;
+            end loop;
+            if total_count = 0 then
+              raise exception 'Restore contained no application rows';
+            end if;
+            raise notice 'Restore verified: % application rows across public tables', total_count;
+          end $$;
+          SQL
+          {
+            echo '## Backup restore verified'
+            echo ''
+            echo "Source: \`${{ steps.backup.outputs.source }}\`"
+            echo "Restored public tables: $table_count"
+            echo 'The disposable database was isolated from Supabase production.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Stop disposable database
+        if: always()
+        run: docker stop workspace-backup-restore-test || true
