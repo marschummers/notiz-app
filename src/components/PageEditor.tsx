@@ -48,6 +48,8 @@ interface Props {
 
 export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBack, onOpenPage }: Props) {
   const [newTag, setNewTag] = useState('')
+  const [tagInputFocused, setTagInputFocused] = useState(false)
+  const [activeTagSuggestion, setActiveTagSuggestion] = useState(0)
   const [taskMode, setTaskMode] = useState(false)
   const [textBlockMode, setTextBlockMode] = useState(false)
   const [lassoMode, setLassoMode] = useState(false)
@@ -93,13 +95,26 @@ export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBac
   const pagePattern = (darkPaper ? pageBackground.slice(5) : pageBackground) as PagePattern
   const tagIds = new Set((tagLinks ?? []).map((l) => l.tagId))
   const pageTags = (allTags ?? []).filter((t) => tagIds.has(t.id))
+  const normalizedTagQuery = newTag.trim().toLocaleLowerCase('de')
+  const tagSuggestions = normalizedTagQuery
+    ? (allTags ?? [])
+        .filter((tag) => !tagIds.has(tag.id) && tag.name.toLocaleLowerCase('de').includes(normalizedTagQuery))
+        .sort((a, b) => {
+          const aStartsWithQuery = a.name.toLocaleLowerCase('de').startsWith(normalizedTagQuery)
+          const bStartsWithQuery = b.name.toLocaleLowerCase('de').startsWith(normalizedTagQuery)
+          if (aStartsWithQuery !== bStartsWithQuery) return aStartsWithQuery ? -1 : 1
+          return a.name.localeCompare(b.name, 'de', { sensitivity: 'base' })
+        })
+        .slice(0, 8)
+    : []
 
-  async function submitNewTag() {
-    const trimmed = newTag.trim()
+  async function submitNewTag(name = newTag) {
+    const trimmed = name.trim()
     if (!trimmed) return
     const tagId = await findOrCreateTag(trimmed)
     await addTagToPage(pageId, tagId)
     setNewTag('')
+    setActiveTagSuggestion(0)
   }
 
   return (
@@ -139,19 +154,59 @@ export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBac
             </button>
           </span>
         ))}
-        <input
-          className="tag-input"
-          value={newTag}
-          onChange={(e) => setNewTag(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
+        <div className="tag-input-wrap">
+          <input
+            className="tag-input"
+            value={newTag}
+            onChange={(e) => {
+              setNewTag(e.target.value)
+              setActiveTagSuggestion(0)
+            }}
+            onFocus={() => setTagInputFocused(true)}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowDown' && tagSuggestions.length > 0) {
+                e.preventDefault()
+                setActiveTagSuggestion((index) => (index + 1) % tagSuggestions.length)
+              } else if (e.key === 'ArrowUp' && tagSuggestions.length > 0) {
+                e.preventDefault()
+                setActiveTagSuggestion((index) => (index - 1 + tagSuggestions.length) % tagSuggestions.length)
+              } else if (e.key === 'Enter') {
+                e.preventDefault()
+                submitNewTag(tagSuggestions[activeTagSuggestion]?.name ?? newTag)
+              } else if (e.key === 'Escape') {
+                setTagInputFocused(false)
+              }
+            }}
+            onBlur={() => {
+              setTagInputFocused(false)
               submitNewTag()
-            }
-          }}
-          onBlur={submitNewTag}
-          placeholder="+ Tag"
-        />
+            }}
+            placeholder="+ Tag"
+            autoComplete="off"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={tagInputFocused && tagSuggestions.length > 0}
+            aria-controls="tag-suggestions"
+          />
+          {tagInputFocused && tagSuggestions.length > 0 && (
+            <div id="tag-suggestions" className="tag-suggestions" role="listbox">
+              {tagSuggestions.map((tag, index) => (
+                <button
+                  key={tag.id}
+                  type="button"
+                  className={index === activeTagSuggestion ? 'active' : ''}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onMouseEnter={() => setActiveTagSuggestion(index)}
+                  onClick={() => submitNewTag(tag.name)}
+                  role="option"
+                  aria-selected={index === activeTagSuggestion}
+                >
+                  #{tag.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <select
           className="background-select"
           value={pagePattern}
