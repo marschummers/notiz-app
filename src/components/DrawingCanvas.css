@@ -96,7 +96,13 @@
   flex: 1;
   width: 100%;
   min-height: 0;
-  overflow: hidden;
+  /* Frei verbreiterte Textfelder duerfen ueber die sichtbare Papierbreite hinausragen.
+     In diesem Fall erscheint am unteren Rand der Zeichenflaeche eine horizontale
+     Scrollleiste, damit auch der rechte Teil erreichbar bleibt. Vertikal wird die Seite
+     weiterhin ueber die bestehende Zoom-/Pan-Logik navigiert. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
   /* Sichtbar, wenn beim Herauszoomen/Verschieben Raender ausserhalb von Hintergrund/Canvas
      frei liegen - selbe Papierfarbe, damit das nicht als Luecke auffaellt. */
   background-color: #f3f0e7;
@@ -405,7 +411,7 @@
      weiter unten) wuerde sonst beim naechsten Rendern wieder auf die Obergrenze zurueckgestutzt -
      je nachdem wie breit gezogen wurde, sah das wie ein Zurueckspringen aus. Der Nutzer soll die
      Breite frei bestimmen koennen (siehe .text-block-input resize:horizontal); .drawing-canvas-
-     wrap (overflow:hidden) faengt eine absurd breite Auswahl noetigenfalls optisch ab. */
+     wrap stellt fuer eine ueberbreite Auswahl eine horizontale Scrollleiste bereit. */
   padding: 6px 8px;
   border-radius: 8px;
   border: 1px solid transparent;
