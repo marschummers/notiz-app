@@ -20,20 +20,26 @@ jobs:
     env:
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
       BACKUP_ENCRYPTION_PASSWORD: ${{ secrets.BACKUP_ENCRYPTION_PASSWORD }}
+      SUPABASE_STORAGE_BACKUP_EMAIL: ${{ secrets.SUPABASE_STORAGE_BACKUP_EMAIL }}
+      SUPABASE_STORAGE_BACKUP_PASSWORD: ${{ secrets.SUPABASE_STORAGE_BACKUP_PASSWORD }}
+      SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install rclone
+      - name: Install backup tools
         run: |
           sudo apt-get update
-          sudo apt-get install --yes rclone
+          sudo apt-get install --yes awscli rclone
 
       - name: Validate required secrets
         shell: bash
         run: |
           test -n "$SUPABASE_DB_URL" || { echo 'SUPABASE_DB_URL is missing'; exit 1; }
           test -n "$BACKUP_ENCRYPTION_PASSWORD" || { echo 'BACKUP_ENCRYPTION_PASSWORD is missing'; exit 1; }
+          test -n "$SUPABASE_STORAGE_BACKUP_EMAIL" || { echo 'SUPABASE_STORAGE_BACKUP_EMAIL is missing'; exit 1; }
+          test -n "$SUPABASE_STORAGE_BACKUP_PASSWORD" || { echo 'SUPABASE_STORAGE_BACKUP_PASSWORD is missing'; exit 1; }
+          test -n "$SUPABASE_ANON_KEY" || { echo 'VITE_SUPABASE_ANON_KEY is missing'; exit 1; }
           test -n "${{ secrets.RCLONE_CONFIG_B64 }}" || { echo 'RCLONE_CONFIG_B64 is missing'; exit 1; }
 
       - name: Export database
@@ -55,13 +61,48 @@ jobs:
             pg_restore --list /backup/database.dump > backup/plain/manifest.txt
           test -s backup/plain/manifest.txt
 
+      - name: Download PDF storage with read-only user
+        shell: bash
+        run: |
+          auth_payload="$(jq -n \
+            --arg email "$SUPABASE_STORAGE_BACKUP_EMAIL" \
+            --arg password "$SUPABASE_STORAGE_BACKUP_PASSWORD" \
+            '{email: $email, password: $password}')"
+          access_token="$(curl --fail --silent --show-error \
+            --request POST \
+            --header "apikey: $SUPABASE_ANON_KEY" \
+            --header 'Content-Type: application/json' \
+            --data "$auth_payload" \
+            'https://ielieyybudoyicedztct.supabase.co/auth/v1/token?grant_type=password' \
+            | jq --raw-output '.access_token')"
+          test -n "$access_token" && test "$access_token" != null || { echo 'Storage backup login failed'; exit 1; }
+
+          mkdir -p backup/plain/storage/notiz-pdfs
+          AWS_ACCESS_KEY_ID='ielieyybudoyicedztct' \
+          AWS_SECRET_ACCESS_KEY="$SUPABASE_ANON_KEY" \
+          AWS_SESSION_TOKEN="$access_token" \
+            aws s3 sync \
+              's3://notiz-pdfs' \
+              backup/plain/storage/notiz-pdfs \
+              --endpoint-url 'https://ielieyybudoyicedztct.storage.supabase.co/storage/v1/s3' \
+              --region 'eu-west-1' \
+              --no-progress
+
+          (
+            cd backup/plain
+            find storage -type f -print0 \
+              | sort --zero-terminated \
+              | xargs --null --no-run-if-empty sha256sum \
+              > storage-files.sha256
+          )
+
       - name: Encrypt backup
         id: archive
         shell: bash
         run: |
           timestamp="$(date -u +'%Y-%m-%dT%H-%M-%SZ')"
           archive="workspace-supabase-${timestamp}.tar.gz.gpg"
-          tar -C backup/plain -czf backup/database.tar.gz database.dump manifest.txt
+          tar -C backup/plain -czf backup/database.tar.gz .
           gpg --batch --yes --pinentry-mode loopback \
             --passphrase "$BACKUP_ENCRYPTION_PASSWORD" \
             --symmetric --cipher-algo AES256 \

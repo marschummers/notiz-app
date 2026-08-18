@@ -67,6 +67,10 @@ jobs:
           mkdir -p restore/plain
           tar -C restore/plain -xzf restore/database.tar.gz
           test -s restore/plain/database.dump
+          test -f restore/plain/storage-files.sha256
+          if test -s restore/plain/storage-files.sha256; then
+            (cd restore/plain && sha256sum --check storage-files.sha256)
+          fi
           docker run --rm \
             -v "$PWD/restore/plain:/restore" \
             postgres:17-alpine \
@@ -155,6 +159,7 @@ jobs:
             echo ''
             echo "Source: \`${{ steps.backup.outputs.source }}\`"
             echo "Restored public tables: $table_count"
+            echo 'Storage file checksums: verified'
             echo 'The disposable database was isolated from Supabase production.'
           } >> "$GITHUB_STEP_SUMMARY"
 
