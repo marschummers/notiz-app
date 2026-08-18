@@ -104,6 +104,7 @@ jobs:
             language sql stable as 'select null::text';
           create or replace function auth.jwt() returns jsonb
             language sql stable as 'select null::jsonb';
+          drop schema public cascade;
           SQL
 
       - name: Restore schema and data into disposable database
