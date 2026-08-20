@@ -103,15 +103,15 @@ jobs:
           rclone copy "backup/${{ steps.archive.outputs.archive }}" \
             'workspace-backup:Workspace-App-Backups/daily'
 
-      - name: Remove Google Drive backups older than 90 days
+      - name: Remove Google Drive backups older than 14 days
         shell: bash
         run: |
-          rclone delete 'workspace-backup:Workspace-App-Backups/daily' --min-age 90d
+          rclone delete 'workspace-backup:Workspace-App-Backups/daily' --min-age 14d
 
       - name: Keep an encrypted GitHub copy
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.archive.outputs.archive }}
           path: backup/${{ steps.archive.outputs.archive }}
-          retention-days: 30
+          retention-days: 14
           if-no-files-found: error
