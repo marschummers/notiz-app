@@ -5,6 +5,19 @@
   overflow: hidden;
 }
 
+/* Auf dem Handy liegt der Hauptinhalt (im Gegensatz zur Sidebar, siehe .sidebar-brand in
+   Sidebar.css) sonst ungeschuetzt unter Notch/Dynamic Island/Statusleiste. Wirkt hier bewusst
+   auf .workspace statt auf jede Ansicht einzeln: die Sidebar liegt auf dem Handy als
+   position:fixed-Overlay (siehe Sidebar.css) und bleibt von diesem Padding unberuehrt, nur der
+   normale Flex-Inhalt (die jeweils aktive Ansicht) ruecken dadurch einheitlich ein. Auf dem
+   Desktop ist env(safe-area-inset-top) ohnehin 0, trotzdem bewusst auf die Handy-Breite
+   beschraenkt, um Desktop-Layout in keinem Fall zu beeinflussen. */
+@media (max-width: 768px) {
+  .workspace {
+    padding-top: env(safe-area-inset-top);
+  }
+}
+
 .sidebar-resize-handle {
   position: relative;
   z-index: 20;
