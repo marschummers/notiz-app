@@ -162,6 +162,30 @@
 .customer-overview .project-read-header{margin-bottom:var(--project-section-gap)}.customer-section{margin-top:var(--project-content-gap)}.customer-list{display:flex;flex-direction:column}.customer-row{display:grid;grid-template-columns:minmax(180px,1fr) minmax(120px,auto) auto;align-items:center;gap:16px;min-height:58px;padding:9px 4px;border:0;border-top:1px solid var(--project-border-soft);background:transparent;color:var(--project-text-primary);text-align:left}.customer-row:hover{background:var(--project-surface-raised)}.customer-row>span:first-child{display:grid;min-width:0;gap:2px}.customer-row strong,.customer-row small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.customer-row small,.customer-row>span:not(:first-child){color:var(--project-text-secondary);font-size:.78rem}.customer-task-row{grid-template-columns:minmax(220px,1fr) minmax(130px,.5fr) 115px auto}.customer-row .milestone-overdue{color:var(--project-danger)}
 @media(max-width:800px){.customer-row,.customer-task-row{grid-template-columns:minmax(0,1fr) auto}.customer-row>span:not(:first-child){grid-column:2}.customer-task-row .project-status-badge{grid-column:2}}
 
+/* Handy-Breite (siehe MOBILE_BREAKPOINT in Workspace.tsx): die feste 4-Spalten-Aufteilung von
+   oben (@media max-width:800px) passt in der Summe (90+130+100px + Gaps) nicht mehr in einen
+   390px breiten Bildschirm - Status/Termin wurden rechts abgeschnitten. Titel bekommt hier eine
+   eigene volle Zeile (grid-column:1/-1), Verantwortlich/Termin/Status ruecken automatisch in die
+   Zeile darunter und werden dort nur noch so breit wie ihr Inhalt (auto statt fester px-Werte) -
+   gleiches Muster wie bei .overview-task-row weiter oben. Die Kopfzeile mit Spaltentiteln passt
+   zu gestapelten Karten nicht mehr und wird ausgeblendet (Sortierung bleibt ueber die bestehende
+   Sortierung erhalten, laesst sich auf dieser Breite nur nicht mehr per Klick aendern).
+   Muss NACH der @media(max-width:800px)-Regel oben stehen, da 768px<800px und beide Regeln bei
+   Handy-Breite gleichzeitig greifen - hier gesetzte Werte muessen also gewinnen. */
+@media (max-width: 768px) {
+  .task-column-header {
+    display: none;
+  }
+  .task-row {
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    gap: 6px 12px;
+    padding: 10px 4px;
+  }
+  .task-row-main.task-col-title {
+    grid-column: 1 / -1;
+  }
+}
+
 /* Optionale Hierarchie Meilenstein -> Themenbereich -> Aufgabe. Native details/summary
    bleibt per Tastatur und Touch bedienbar und benoetigt keinen zusaetzlichen Collapse-State. */
 .organized-task-list {
