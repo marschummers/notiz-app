@@ -9,11 +9,13 @@ import type { ProjectTask, QuickTask, Task } from '../db/types'
 import './TasksView.css'
 
 interface Props {
+  sidebarOpen: boolean
+  onToggleSidebar: () => void
   onOpenPage: (pageId: string) => void
   onOpenProject: (projectId: string, taskId: string) => void
 }
 
-export default function TasksView({ onOpenPage, onOpenProject }: Props) {
+export default function TasksView({ sidebarOpen, onToggleSidebar, onOpenPage, onOpenProject }: Props) {
   const [draft, setDraft] = useState('')
   const tasks = useLiveQuery(() => db.tasks.filter((task) => !task.deletedAt).toArray(), [])
   const quickTasks = useLiveQuery(() => db.quickTasks.filter((task) => !task.deletedAt).toArray(), [])
@@ -106,7 +108,10 @@ export default function TasksView({ onOpenPage, onOpenProject }: Props) {
 
   return (
     <div className="tasks-view">
-      <h1>Aufgaben</h1>
+      <div className="mobile-header-row">
+        {!sidebarOpen && <button className="dashboard-sidebar-toggle" onClick={onToggleSidebar} aria-label="Seitenleiste öffnen">☰</button>}
+        <h1>Aufgaben</h1>
+      </div>
       <form className="quick-task-form" onSubmit={handleSubmit}>
         <input
           value={draft}

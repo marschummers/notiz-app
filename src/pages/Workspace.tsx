@@ -18,6 +18,14 @@ import './Workspace.css'
 import type { ProjectNavigation } from '../lib/projectNavigation'
 import { subscribeProjectRealtime } from '../lib/projectRealtime'
 
+// Deutlich unter den bestehenden Desktop-Breakpoints (800/820 in Dashboard.css/ProjectsView.css)
+// - erfasst gezielt nur Handy/schmales Tablet-Hochformat, keine normalen (auch schmaleren)
+// Desktop-Fenster, damit sich am Desktop-Verhalten nichts aendert.
+const MOBILE_BREAKPOINT = 768
+function isMobileViewportNow(): boolean {
+  return window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`).matches
+}
+
 export default function Workspace() {
   const DEFAULT_SIDEBAR_WIDTH = 260
   const MIN_SIDEBAR_WIDTH = 200
@@ -27,7 +35,10 @@ export default function Workspace() {
   const [activeView, setActiveView] = useState<'start' | 'notes' | 'projects' | 'tasks' | 'search' | 'all-notes' | 'access'>('start')
   const [projectNavigation, setProjectNavigation] = useState<ProjectNavigation>({ type: 'overview' })
   const [openPageId, setOpenPageId] = useState<string | null>(null)
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  // Auf dem Handy soll die Sidebar als Overlay starten (zu), auf dem Desktop wie bisher offen -
+  // isMobileViewport wird per matchMedia synchron beim ersten Render ermittelt, kein Flackern.
+  const [isMobileViewport, setIsMobileViewport] = useState(isMobileViewportNow)
+  const [sidebarOpen, setSidebarOpen] = useState(() => !isMobileViewportNow())
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH)
   const [resizingSidebar, setResizingSidebar] = useState(false)
   const sidebarResizeRef = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null)
@@ -64,20 +75,45 @@ export default function Workspace() {
 
   useEffect(() => subscribeProjectRealtime(), [])
 
+  // Beim Ueberschreiten der Handy-/Desktop-Grenze (z.B. Bildschirmdrehung, Fenstergroesse) den
+  // jeweiligen Standardzustand der Sidebar wiederherstellen - offen auf dem Desktop, zu auf dem
+  // Handy, statt einen ggf. nicht mehr passenden Zustand ueber den Wechsel hinweg zu behalten.
+  useEffect(() => {
+    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`)
+    function onChange(e: MediaQueryListEvent) {
+      setIsMobileViewport(e.matches)
+      setSidebarOpen(!e.matches)
+    }
+    mql.addEventListener('change', onChange)
+    return () => mql.removeEventListener('change', onChange)
+  }, [])
+
   function openPage(id: string) {
     setOpenPageId(id)
     // Beim Schreiben soll wirklich der komplette Bildschirm zur Verfuegung stehen - die
-    // Sidebar faehrt automatisch ein, laesst sich aber jederzeit wieder ausklappen.
+    // Sidebar faehrt automatisch ein, laesst sich aber jederzeit wieder ausklappen. Gilt schon
+    // immer auf jeder Bildschirmgroesse, bewusst unveraendert.
     setSidebarOpen(false)
+  }
+
+  // Auf dem Handy liegt die Sidebar als Overlay ueber dem Inhalt (siehe Sidebar.css) - nach der
+  // Auswahl eines Menuepunkts soll sie automatisch zufahren, damit der gewaehlte Bereich sichtbar
+  // wird, ohne extra antippen zu muessen. Auf dem Desktop bleibt das bestehende Verhalten
+  // (Sidebar bleibt beim Navigieren offen) unveraendert.
+  function withMobileClose<Args extends unknown[]>(fn: (...args: Args) => void) {
+    return (...args: Args) => {
+      fn(...args)
+      if (isMobileViewport) setSidebarOpen(false)
+    }
   }
 
   // Gemeinsam von Sidebar (Ordner-/Tag-Klick) UND SearchView (Ordner-/Tag-Treffer) genutzt,
   // damit ein Suchergebnis genau dorthin springt, wo ein normaler Sidebar-Klick auch hinfuehrt.
-  function selectFolderOrTag(s: Selection) {
+  const selectFolderOrTag = withMobileClose((s: Selection) => {
     setSelection(s)
     setActiveView('notes')
     setOpenPageId(null)
-  }
+  })
 
   function startSidebarResize(e: React.PointerEvent<HTMLDivElement>) {
     e.preventDefault()
@@ -123,35 +159,35 @@ export default function Workspace() {
         selection={selection}
         activeView={activeView}
         onSelect={selectFolderOrTag}
-        onSelectStart={() => {
+        onSelectStart={withMobileClose(() => {
           setActiveView('start')
           setOpenPageId(null)
-        }}
-        onSelectNotes={() => {
+        })}
+        onSelectNotes={withMobileClose(() => {
           setActiveView('notes')
           setOpenPageId(null)
-        }}
-        onSelectProjects={() => {
+        })}
+        onSelectProjects={withMobileClose(() => {
           setProjectNavigation({ type: 'overview' })
           setActiveView('projects')
           setOpenPageId(null)
-        }}
-        onSelectTasks={() => {
+        })}
+        onSelectTasks={withMobileClose(() => {
           setActiveView('tasks')
           setOpenPageId(null)
-        }}
-        onSelectSearch={() => {
+        })}
+        onSelectSearch={withMobileClose(() => {
           setActiveView('search')
           setOpenPageId(null)
-        }}
-        onSelectAllNotes={() => {
+        })}
+        onSelectAllNotes={withMobileClose(() => {
           setActiveView('all-notes')
           setOpenPageId(null)
-        }}
-        onSelectAccess={() => {
+        })}
+        onSelectAccess={withMobileClose(() => {
           setActiveView('access')
           setOpenPageId(null)
-        }}
+        })}
         onSelectFavorite={openPage}
         onSync={handleSync}
         syncing={syncing}
@@ -164,9 +200,11 @@ export default function Workspace() {
         onSignOut={signOut}
         userId={session?.user.id ?? ''}
         projectNavigation={projectNavigation}
-        onProjectNavigate={(navigation) => { setProjectNavigation(navigation); setActiveView('projects'); setOpenPageId(null) }}
+        onProjectNavigate={withMobileClose((navigation: ProjectNavigation) => { setProjectNavigation(navigation); setActiveView('projects'); setOpenPageId(null) })}
       />
-      {sidebarOpen && (
+      {/* Ziehgriff fuer die Desktop-Breite ergibt auf dem Handy (Sidebar liegt dort als
+          Overlay mit fester Breite, siehe Sidebar.css) keinen Sinn - dort nicht rendern. */}
+      {sidebarOpen && !isMobileViewport && (
         <div
           className={`sidebar-resize-handle${resizingSidebar ? ' active' : ''}`}
           role="separator"
@@ -180,6 +218,11 @@ export default function Workspace() {
           onDoubleClick={() => setSidebarWidth(DEFAULT_SIDEBAR_WIDTH)}
         />
       )}
+      {/* Abdunkel-Hintergrund fuer die mobile Overlay-Sidebar - antippen schliesst sie wieder,
+          wie bei einem ueblichen Drawer-Menü. Nur auf dem Handy relevant, siehe Sidebar.css. */}
+      {isMobileViewport && sidebarOpen && (
+        <div className="mobile-sidebar-backdrop" onClick={() => setSidebarOpen(false)} />
+      )}
       {openPageId ? (
         <PageEditor
           pageId={openPageId}
@@ -187,7 +230,9 @@ export default function Workspace() {
           onToggleSidebar={() => setSidebarOpen((v) => !v)}
           onBack={() => {
             setOpenPageId(null)
-            setSidebarOpen(true)
+            // Auf dem Desktop wie bisher die Sidebar wieder ausklappen; auf dem Handy soll nach
+            // "Zurueck" nicht ungefragt das Overlay-Menue aufgehen, sondern nur die Liste.
+            setSidebarOpen(!isMobileViewport)
             handleSync()
           }}
           onOpenPage={openPage}
@@ -204,11 +249,21 @@ export default function Workspace() {
           userId={session?.user.id ?? ''}
         />
       ) : activeView === 'projects' ? (
-        <ProjectsView userId={session?.user.id ?? ''} userEmail={session?.user.email} navigation={projectNavigation} onNavigate={setProjectNavigation} onOpenPage={(id) => { setActiveView('notes'); openPage(id) }} />
+        <ProjectsView
+          sidebarOpen={sidebarOpen}
+          onToggleSidebar={() => setSidebarOpen((v) => !v)}
+          userId={session?.user.id ?? ''}
+          userEmail={session?.user.email}
+          navigation={projectNavigation}
+          onNavigate={setProjectNavigation}
+          onOpenPage={(id) => { setActiveView('notes'); openPage(id) }}
+        />
       ) : activeView === 'access' && session?.user.email === ADMIN_EMAIL ? (
         <AccessRequestsView sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((value) => !value)} />
       ) : activeView === 'tasks' ? (
         <TasksView
+          sidebarOpen={sidebarOpen}
+          onToggleSidebar={() => setSidebarOpen((v) => !v)}
           onOpenPage={openPage}
           onOpenProject={(projectId, taskId) => {
             setProjectNavigation({ type: 'project', id: projectId, taskId })
@@ -218,12 +273,14 @@ export default function Workspace() {
         />
       ) : activeView === 'search' ? (
         <SearchView
+          sidebarOpen={sidebarOpen}
+          onToggleSidebar={() => setSidebarOpen((v) => !v)}
           onOpenPage={openPage}
           onSelectFolder={(id) => selectFolderOrTag({ type: 'folder', id })}
           onSelectTag={(id) => selectFolderOrTag({ type: 'tag', id })}
         />
       ) : activeView === 'all-notes' ? (
-        <AllNotesView onOpenPage={openPage} />
+        <AllNotesView sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((v) => !v)} onOpenPage={openPage} />
       ) : (
         <PageList selection={selection} sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((v) => !v)} onOpenPage={openPage} />
       )}

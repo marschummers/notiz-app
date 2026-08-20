@@ -14,6 +14,8 @@ import type { Folder, Page, Tag, Task } from '../db/types'
 import './SearchView.css'
 
 interface Props {
+  sidebarOpen: boolean
+  onToggleSidebar: () => void
   onOpenPage: (pageId: string) => void
   onSelectFolder: (folderId: string | undefined) => void
   onSelectTag: (tagId: string) => void
@@ -53,7 +55,7 @@ function pageSearchMetadata(page: Page): string[] {
   return [...metadata, ...getPageAfns(page).map((afn) => `AFN ${afn}`)]
 }
 
-export default function SearchView({ onOpenPage, onSelectFolder, onSelectTag }: Props) {
+export default function SearchView({ sidebarOpen, onToggleSidebar, onOpenPage, onSelectFolder, onSelectTag }: Props) {
   const [query, setQuery] = useState('')
   const [propertyFilters, setPropertyFilters] = useState<PagePropertyFilters>({})
   const [visibleOptionalFilters, setVisibleOptionalFilters] = useState<SearchPropertyKey[]>([])
@@ -140,14 +142,17 @@ export default function SearchView({ onOpenPage, onSelectFolder, onSelectTag }: 
 
   return (
     <div className="search-view">
-      <input
-        autoFocus
-        type="text"
-        className="search-input"
-        placeholder="Seiten, Aufgaben, Tags, Ordner durchsuchen …"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-      />
+      <div className="mobile-header-row">
+        {!sidebarOpen && <button className="dashboard-sidebar-toggle" onClick={onToggleSidebar} aria-label="Seitenleiste öffnen">☰</button>}
+        <input
+          autoFocus
+          type="text"
+          className="search-input"
+          placeholder="Seiten, Aufgaben, Tags, Ordner durchsuchen …"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      </div>
 
       <div className="search-property-filters" aria-label="Seiten nach Properties filtern">
         {visibleFilterKeys.map((key) => {

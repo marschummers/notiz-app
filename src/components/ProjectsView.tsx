@@ -21,7 +21,7 @@ const milestoneStatus: Record<ProjectMilestoneStatus, string> = { planned: 'Gepl
 const taskFilters = ['all', 'open', 'in_progress', 'waiting', 'completed'] as const
 const statusRank: Record<ProjectTaskStatus, number> = { open: 0, in_progress: 1, waiting: 2, completed: 3 }
 
-interface Props { userId: string; userEmail?: string; navigation: ProjectNavigation; onNavigate: (navigation: ProjectNavigation) => void; onOpenPage: (id: string) => void }
+interface Props { sidebarOpen: boolean; onToggleSidebar: () => void; userId: string; userEmail?: string; navigation: ProjectNavigation; onNavigate: (navigation: ProjectNavigation) => void; onOpenPage: (id: string) => void }
 type TaskFilter = typeof taskFilters[number]
 type SortColumn = 'title' | 'customField1' | 'customField2' | 'assignee' | 'dueDate' | 'status'
 
@@ -52,7 +52,7 @@ function compareProjectTasks(column: SortColumn, direction: 'asc' | 'desc', cont
   }
 }
 
-export default function ProjectsView({ userId, userEmail, navigation, onNavigate, onOpenPage }: Props) {
+export default function ProjectsView({ sidebarOpen, onToggleSidebar, userId, userEmail, navigation, onNavigate, onOpenPage }: Props) {
   const allProjects = useLiveQuery(() => db.projects.filter((project) => !project.deletedAt).toArray(), []) ?? []
   const allTasks = useLiveQuery(() => db.projectTasks.filter((task) => !task.deletedAt).toArray(), []) ?? []
   const allMilestones = useLiveQuery(() => db.projectMilestones.filter((milestone) => !milestone.deletedAt).toArray(), []) ?? []
@@ -110,7 +110,7 @@ export default function ProjectsView({ userId, userEmail, navigation, onNavigate
   const listProjects = navigation.type === 'status' ? projects.filter((project) => project.status === navigation.status) : (showClosed ? projects : activeProjects)
 
   return <main className="projects-view"><div className="project-page-content">
-    <header className="projects-header"><div><p className="projects-eyebrow">Arbeitsbereich</p><h1>{navigation.type === 'status' ? projectStatus[navigation.status] : 'Projekte'}</h1></div><NewProjectMenu userId={userId} onCreated={(id) => onNavigate({ type: 'project', id })}/></header>
+    <header className="projects-header"><div className="mobile-header-row">{!sidebarOpen && <button className="dashboard-sidebar-toggle" onClick={onToggleSidebar} aria-label="Seitenleiste öffnen">☰</button>}<div><p className="projects-eyebrow">Arbeitsbereich</p><h1>{navigation.type === 'status' ? projectStatus[navigation.status] : 'Projekte'}</h1></div></div><NewProjectMenu userId={userId} onCreated={(id) => onNavigate({ type: 'project', id })}/></header>
     <nav className="project-tabs"><button className={effectiveSection === 'dashboard' ? 'active' : ''} onClick={() => { setSection('dashboard'); onNavigate({ type: 'overview' }) }}>Übersicht</button><button className={effectiveSection === 'projects' ? 'active' : ''} onClick={() => { setSection('projects'); onNavigate({ type: 'overview' }) }}>Projekte</button></nav>
     {effectiveSection === 'dashboard' ? <>
       <div className="project-metrics"><Metric label="Aktive Projekte" value={activeProjects.length}/><Metric label="Meine offenen Aufgaben" value={mine.length}/><Metric label="Wartet auf andere" value={waitingTasks.length}/><Metric label="Meilensteine in 30 Tagen" value={milestones.filter((m) => m.status !== 'completed' && m.dueDate && m.dueDate >= today.getTime() && m.dueDate <= today.getTime() + 30 * 86400000).length}/></div>

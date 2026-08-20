@@ -29,6 +29,31 @@
   background: var(--accent);
 }
 
+/* Kleiner, wiederverwendbarer Zeilen-Wrapper fuer den mobilen Seitenleisten-Wiederoeffnen-Button
+   (.dashboard-sidebar-toggle, siehe Dashboard.tsx) vor der eigentlichen Ueberschrift/Suchleiste
+   einer Ansicht - beeinflusst nur das Layout dieser einen Zeile, nicht die Typografie der
+   jeweiligen Ansicht (kein h1-Selektor o.ae.), damit bestehende Styles unangetastet bleiben.
+   :last-child bekommt flex:1, damit ein Eingabefeld (z.B. die Suche) weiterhin die volle
+   verbleibende Breite ausnutzt statt an width:100% zu scheitern. */
+.mobile-header-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mobile-header-row > *:last-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.mobile-sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 499;
+  background: rgb(10 8 5 / 55%);
+  backdrop-filter: blur(2px);
+}
+
 .profile-name-backdrop {
   position: fixed;
   inset: 0;

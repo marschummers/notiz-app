@@ -42,6 +42,8 @@ function formatDate(ms: number): string {
 }
 
 interface Props {
+  sidebarOpen: boolean
+  onToggleSidebar: () => void
   onOpenPage: (pageId: string) => void
 }
 
@@ -49,7 +51,7 @@ interface Props {
 // sieht man je nur einen Ausschnitt), ersetzt sie nicht. Filterung rein lokal in JS ueber die
 // ohnehin schon geladenen Dexie-Daten (kein Query-Sprache/Library), Filter sind kombinierbar
 // (UND-Verknuepfung).
-export default function AllNotesView({ onOpenPage }: Props) {
+export default function AllNotesView({ sidebarOpen, onToggleSidebar, onOpenPage }: Props) {
   const [typeFilter, setTypeFilter] = useState<'Alle' | PageType>('Alle')
   const [dateFilter, setDateFilter] = useState<DateFilter>('Alle')
   const [tagFilter, setTagFilter] = useState('Alle')
@@ -98,7 +100,10 @@ export default function AllNotesView({ onOpenPage }: Props) {
 
   return (
     <div className="all-notes-view">
-      <h1>Alle Notizen</h1>
+      <div className="mobile-header-row">
+        {!sidebarOpen && <button className="dashboard-sidebar-toggle" onClick={onToggleSidebar} aria-label="Seitenleiste öffnen">☰</button>}
+        <h1>Alle Notizen</h1>
+      </div>
 
       <div className="all-notes-filters">
         <div className="filter-field">
