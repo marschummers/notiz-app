@@ -23,6 +23,7 @@ jobs:
       SUPABASE_STORAGE_BACKUP_EMAIL: ${{ secrets.SUPABASE_STORAGE_BACKUP_EMAIL }}
       SUPABASE_STORAGE_BACKUP_PASSWORD: ${{ secrets.SUPABASE_STORAGE_BACKUP_PASSWORD }}
       SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      SUPABASE_URL: https://ielieyybudoyicedztct.supabase.co
 
     steps:
       - uses: actions/checkout@v4
@@ -64,31 +65,8 @@ jobs:
       - name: Download PDF storage with read-only user
         shell: bash
         run: |
-          auth_payload="$(jq -n \
-            --arg email "$SUPABASE_STORAGE_BACKUP_EMAIL" \
-            --arg password "$SUPABASE_STORAGE_BACKUP_PASSWORD" \
-            '{email: $email, password: $password}')"
-          access_token="$(curl --fail --silent --show-error \
-            --request POST \
-            --header "apikey: $SUPABASE_ANON_KEY" \
-            --header 'Content-Type: application/json' \
-            --data "$auth_payload" \
-            'https://ielieyybudoyicedztct.supabase.co/auth/v1/token?grant_type=password' \
-            | jq --raw-output '.access_token')"
-          test -n "$access_token" && test "$access_token" != null || { echo 'Storage backup login failed'; exit 1; }
-
-          mkdir -p backup/plain/storage/notiz-pdfs
-          export RCLONE_CONFIG_SUPABASESTORAGE_TYPE='s3'
-          export RCLONE_CONFIG_SUPABASESTORAGE_PROVIDER='Other'
-          export RCLONE_CONFIG_SUPABASESTORAGE_ACCESS_KEY_ID='ielieyybudoyicedztct'
-          export RCLONE_CONFIG_SUPABASESTORAGE_SECRET_ACCESS_KEY="$SUPABASE_ANON_KEY"
-          export RCLONE_CONFIG_SUPABASESTORAGE_SESSION_TOKEN="$access_token"
-          export RCLONE_CONFIG_SUPABASESTORAGE_ENDPOINT='https://ielieyybudoyicedztct.storage.supabase.co/storage/v1/s3'
-          export RCLONE_CONFIG_SUPABASESTORAGE_REGION='eu-west-1'
-          export RCLONE_CONFIG_SUPABASESTORAGE_FORCE_PATH_STYLE='true'
-          rclone sync \
-            'supabasestorage:notiz-pdfs' \
-            backup/plain/storage/notiz-pdfs
+          STORAGE_BACKUP_OUTPUT="$PWD/backup/plain/storage/notiz-pdfs" \
+            node .github/scripts/backup-storage.mjs
 
           (
             cd backup/plain
