@@ -682,6 +682,10 @@ function TaskEditDialog({ projectId, project, tasks, task, milestones, sections,
   const [wwapiConnecting, setWwapiConnecting] = useState(false)
   const customField1Options = useMemo(() => [...new Set(tasks.map((item) => item.customField1Value).filter((value): value is string => !!value))].sort((a, b) => a.localeCompare(b, 'de')), [tasks])
   const customField2Options = useMemo(() => [...new Set(tasks.map((item) => item.customField2Value).filter((value): value is string => !!value))].sort((a, b) => a.localeCompare(b, 'de')), [tasks])
+  const teamProfiles = useMemo(() => {
+    const teamIds = new Set(memberIds)
+    return profiles.filter((profile) => teamIds.has(profile.id))
+  }, [memberIds, profiles])
   const taskId = task?.id
   const existingCustomField1Value = task?.customField1Value
   const existingCustomField2Value = task?.customField2Value
@@ -755,7 +759,7 @@ function TaskEditDialog({ projectId, project, tasks, task, milestones, sections,
         <FormField label="Beschreibung" wide><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={4} placeholder="Optional" /></FormField>
         <FormField label="Status"><select value={status} onChange={(event) => setStatus(event.target.value as ProjectTaskStatus)}>{Object.entries(taskStatus).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></FormField>
         <FormField label="Termin"><BufferedDateInput value={dueDate} onSave={setDueDate}/></FormField>
-        <FormField label="Verantwortlich"><select value={assigneeUserId} onChange={(event) => setAssigneeUserId(event.target.value)}><option value="">Nicht zugewiesen</option>{profileOptions(profiles, userId, userEmail, memberIds)}</select></FormField>
+        <FormField label="Verantwortlich"><select value={assigneeUserId} onChange={(event) => setAssigneeUserId(event.target.value)}><option value="">Nicht zugewiesen</option>{profileOptions(teamProfiles, userId, userEmail, memberIds)}</select></FormField>
         <FormField label="Meilenstein"><select value={milestoneId} onChange={(event) => { setMilestoneId(event.target.value); setSectionId('') }}><option value="">Kein Meilenstein</option>{milestones.filter((m) => m.status !== 'completed' || m.id === task?.milestoneId).sort((a,b) => a.sortOrder - b.sortOrder).map((m) => <option key={m.id} value={m.id}>{m.title}</option>)}</select></FormField>
         <FormField label="Themenbereich"><select value={sectionId} disabled={!milestoneId || availableSections.length === 0} onChange={(event) => setSectionId(event.target.value)}><option value="">{!milestoneId ? 'Zuerst Meilenstein wählen' : 'Nur Meilenstein (kein Themenbereich)'}</option>{availableSections.map((section) => <option key={section.id} value={section.id}>{section.title}</option>)}</select></FormField>
         {status === 'waiting' && <FormField label="Wartet auf"><input value={waitingFor} onChange={(event) => setWaitingFor(event.target.value)} placeholder="z. B. Rückmeldung von Frau Müller" /></FormField>}
