@@ -792,7 +792,13 @@ function TeamEditDialog({ project, members, profiles, userId, userEmail, onClose
   const [inviteLink, setInviteLink] = useState('')
   const [inviteError, setInviteError] = useState<string | null>(null)
   const [inviting, setInviting] = useState(false)
-  const values = profiles.length ? profiles : [{ id: userId, email: userEmail ?? 'Ich', updatedAt: 0 }]
+  const values = profiles.length
+    ? profiles.filter((profile) =>
+        profile.id === project.ownerUserId ||
+        profile.approved === true ||
+        (profile.isGuest === true && initialIds.has(profile.id))
+      )
+    : [{ id: userId, email: userEmail ?? 'Ich', updatedAt: 0 }]
   function toggle(id: string) {
     const next = new Set(selected)
     if (next.has(id) && id !== ownerId) next.delete(id)
