@@ -270,6 +270,8 @@ export async function syncAll(): Promise<void> {
     id: profile.id as string,
     email: profile.email as string,
     displayName: (profile.display_name as string | null) ?? undefined,
+    approved: (profile.approved as boolean | null) ?? false,
+    rejectedAt: profile.rejected_at ? ms(profile.rejected_at as string) : undefined,
     isGuest: (profile.is_guest as boolean | null) ?? false,
     updatedAt: ms(profile.updated_at as string),
   })))
@@ -711,11 +713,14 @@ export async function updateOwnDisplayName(displayName: string): Promise<void> {
   }
   if (profileError) throw new Error(`notiz_profiles: ${profileError.message}`)
 
+  const existingProfile = await db.userProfiles.get(userData.user.id)
   await db.userProfiles.put({
     id: userData.user.id,
     email: userData.user.email ?? '',
     displayName: trimmed,
-    isGuest: (await db.userProfiles.get(userData.user.id))?.isGuest,
+    approved: existingProfile?.approved,
+    rejectedAt: existingProfile?.rejectedAt,
+    isGuest: existingProfile?.isGuest,
     updatedAt,
   })
 }
