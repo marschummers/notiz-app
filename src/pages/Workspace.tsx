@@ -35,6 +35,7 @@ export default function Workspace() {
   const [activeView, setActiveView] = useState<'start' | 'notes' | 'projects' | 'tasks' | 'search' | 'all-notes' | 'access'>('start')
   const [projectNavigation, setProjectNavigation] = useState<ProjectNavigation>({ type: 'overview' })
   const [openPageId, setOpenPageId] = useState<string | null>(null)
+  const [pageReturnProjectId, setPageReturnProjectId] = useState<string | null>(null)
   // Auf dem Handy soll die Sidebar als Overlay starten (zu), auf dem Desktop wie bisher offen -
   // isMobileViewport wird per matchMedia synchron beim ersten Render ermittelt, kein Flackern.
   const [isMobileViewport, setIsMobileViewport] = useState(isMobileViewportNow)
@@ -88,8 +89,9 @@ export default function Workspace() {
     return () => mql.removeEventListener('change', onChange)
   }, [])
 
-  function openPage(id: string) {
+  function openPage(id: string, returnProjectId?: string) {
     setOpenPageId(id)
+    setPageReturnProjectId(returnProjectId ?? null)
     // Beim Schreiben soll wirklich der komplette Bildschirm zur Verfuegung stehen - die
     // Sidebar faehrt automatisch ein, laesst sich aber jederzeit wieder ausklappen. Gilt schon
     // immer auf jeder Bildschirmgroesse, bewusst unveraendert.
@@ -230,12 +232,17 @@ export default function Workspace() {
           onToggleSidebar={() => setSidebarOpen((v) => !v)}
           onBack={() => {
             setOpenPageId(null)
+            if (pageReturnProjectId) {
+              setProjectNavigation({ type: 'project', id: pageReturnProjectId })
+              setActiveView('projects')
+            }
+            setPageReturnProjectId(null)
             // Auf dem Desktop wie bisher die Sidebar wieder ausklappen; auf dem Handy soll nach
             // "Zurueck" nicht ungefragt das Overlay-Menue aufgehen, sondern nur die Liste.
             setSidebarOpen(!isMobileViewport)
             handleSync()
           }}
-          onOpenPage={openPage}
+          onOpenPage={(id) => openPage(id, pageReturnProjectId ?? undefined)}
         />
       ) : activeView === 'start' ? (
         <Dashboard
@@ -256,7 +263,11 @@ export default function Workspace() {
           userEmail={session?.user.email}
           navigation={projectNavigation}
           onNavigate={setProjectNavigation}
-          onOpenPage={(id) => { setActiveView('notes'); openPage(id) }}
+          onOpenPage={(id) => {
+            const projectId = projectNavigation.type === 'project' ? projectNavigation.id : undefined
+            setActiveView('notes')
+            openPage(id, projectId)
+          }}
         />
       ) : activeView === 'access' && session?.user.email === ADMIN_EMAIL ? (
         <AccessRequestsView sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((value) => !value)} />
