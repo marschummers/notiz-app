@@ -304,6 +304,31 @@ export interface ProjectSection {
   deletedAt?: number
 }
 
+export interface ProjectSectionDocument {
+  id: string
+  projectId: string
+  sectionId: string
+  content: string
+  updatedByUserId: string
+  createdAt: number
+  updatedAt: number
+  deletedAt?: number
+}
+
+export interface ProjectSectionDocumentRevision {
+  id: string
+  documentId: string
+  projectId: string
+  sectionId: string
+  previousContent: string
+  content: string
+  reason?: string
+  changedByUserId: string
+  createdAt: number
+  updatedAt: number
+  deletedAt?: number
+}
+
 export interface ProjectTaskAfn {
   id: string
   taskId: string
