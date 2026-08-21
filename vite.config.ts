@@ -4,7 +4,9 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: '/notiz-app/',
+  // Relative Pfade funktionieren sowohl unter der eigenen Domain (/) als auch waehrend des
+  // Uebergangs unter der bisherigen GitHub-Pages-Adresse (/notiz-app/).
+  base: './',
   plugins: [
     react(),
     VitePWA({
@@ -18,8 +20,8 @@ export default defineConfig({
         theme_color: '#11151f',
         background_color: '#11151f',
         display: 'standalone',
-        start_url: '/notiz-app/',
-        scope: '/notiz-app/',
+        start_url: './',
+        scope: './',
         icons: [
           { src: 'icon-192.png?v=2', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
           { src: 'icon-512.png?v=2', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
