@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, t
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
 import type { Page, Project, ProjectMember, ProjectMilestone, ProjectMilestoneStatus, ProjectSection, ProjectSectionDocument, ProjectSectionDocumentRevision, ProjectStatus, ProjectTask, ProjectTaskComment, ProjectTaskStatus, UserProfile } from '../db/types'
-import { createProjectMilestone, createProjectSection, createProjectTask, createProjectTaskComment, deleteProject, deleteProjectMilestone, deleteProjectSection, deleteProjectTask, moveProjectMilestone, moveProjectTask, replaceProjectTaskAfns, saveProjectSectionDocument, setProjectTeam, updateProject, updateProjectMilestone, updateProjectSection, updateProjectTask } from '../lib/projectActions'
+import { createProjectMilestone, createProjectSection, createProjectTask, createProjectTaskComment, deleteProject, deleteProjectMilestone, deleteProjectSection, deleteProjectTask, deleteProjectTaskComment, moveProjectMilestone, moveProjectTask, replaceProjectTaskAfns, saveProjectSectionDocument, setProjectTeam, updateProject, updateProjectMilestone, updateProjectSection, updateProjectTask } from '../lib/projectActions'
 import BufferedDateInput from './BufferedDateInput'
 import type { ProjectNavigation } from '../lib/projectNavigation'
 import { projectCustomer, projectDisplayName, projectShortName } from '../lib/projectDisplay'
@@ -789,6 +789,17 @@ function TaskEditDialog({ projectId, project, tasks, task, milestones, sections,
     }
   }
 
+  async function removeComment(comment: ProjectTaskComment) {
+    if (!confirm('Kommentar löschen?')) return
+    setCommentError('')
+    try {
+      await deleteProjectTaskComment(comment.id)
+      await syncAll()
+    } catch (error) {
+      setCommentError(error instanceof Error ? error.message : 'Kommentar konnte nicht gelöscht werden.')
+    }
+  }
+
   async function loadAfnPreviews() {
     const numbers = parseAfns(afnText).slice(0, 10)
     if (!numbers.length || afnLoading) return
@@ -845,7 +856,8 @@ function TaskEditDialog({ projectId, project, tasks, task, milestones, sections,
         <h3>Kommentare</h3>
         <div className="task-comment-list">{comments.length === 0 ? <p className="empty">Noch keine Kommentare.</p> : [...comments].sort((a, b) => a.createdAt - b.createdAt).map((comment) => {
           const author = profileName(comment.authorUserId, profiles, userId, userEmail)
-          return <article key={comment.id} className="task-comment"><header><strong>{personInitials(author)}</strong><span>{author}</span><time>{formatDateTime(comment.createdAt)}</time></header><p>{comment.body}</p></article>
+          const canDelete = comment.authorUserId === userId || project.ownerUserId === userId
+          return <article key={comment.id} className="task-comment"><header><strong>{personInitials(author)}</strong><span>{author}</span><time>{formatDateTime(comment.createdAt)}</time>{canDelete && <button type="button" className="task-comment-delete" onClick={() => removeComment(comment)} aria-label={`Kommentar von ${author} löschen`} title="Kommentar löschen">×</button>}</header><p>{comment.body}</p></article>
         })}</div>
         <div className="task-comment-compose"><textarea value={commentText} onChange={(event) => setCommentText(event.target.value)} rows={2} placeholder="Kommentar schreiben…"/><button type="button" className="primary" disabled={!commentText.trim() || commentSaving} onClick={addComment}>{commentSaving ? 'Wird gesendet…' : 'Abschicken'}</button></div>
         {commentError && <p className="task-comment-error">{commentError}</p>}
