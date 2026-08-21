@@ -281,6 +281,16 @@
   min-width: 180px;
 }
 
+/* Die Gruppen schneiden ihren Inhalt fuer die abgerundeten Ecken normalerweise ab. Solange
+   ein Aktionsmenue geoeffnet ist, muss dessen absolut positioniertes Popover jedoch ueber die
+   Gruppenhoehe hinausragen duerfen - besonders bei einem noch leeren neuen Meilenstein. */
+.task-milestone-group:has(> summary .kebab-menu-popover),
+.task-section-group:has(> summary .kebab-menu-popover) {
+  position: relative;
+  z-index: 2;
+  overflow: visible;
+}
+
 .kebab-menu-popover .danger-text {
   color: var(--bad);
 }
