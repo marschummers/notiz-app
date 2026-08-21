@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useAuth } from './lib/auth'
 import LoginPage from './pages/LoginPage'
 import Workspace from './pages/Workspace'
@@ -8,7 +9,7 @@ import './App.css'
 
 export default function App() {
   const { configured, loading, session, approved, isGuest, refreshApproval, signOut } = useAuth()
-  const invitationToken = pendingInvitationToken()
+  const [invitationToken, setInvitationToken] = useState(pendingInvitationToken)
 
   if (!configured) {
     return (
@@ -25,7 +26,7 @@ export default function App() {
 
   if (!session) return <LoginPage />
 
-  if (invitationToken) return <InvitationPage token={invitationToken} />
+  if (invitationToken) return <InvitationPage token={invitationToken} onResolved={() => setInvitationToken(null)} />
 
   if (approved === null) return <div className="auth-loading">Prüfe Freigabe…</div>
 
