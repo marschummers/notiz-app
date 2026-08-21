@@ -23,6 +23,7 @@ jobs:
         with:
           node-version: 24
       - run: npm ci
+      - run: npm run check:migrations
       - run: npm run build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
