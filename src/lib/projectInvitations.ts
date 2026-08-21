@@ -8,6 +8,13 @@ export function pendingInvitationToken(): string | null {
   return fromUrl ?? localStorage.getItem('notiz_pending_invite')
 }
 
+export function discardPendingInvitation(): void {
+  localStorage.removeItem('notiz_pending_invite')
+  const url = new URL(window.location.href)
+  url.searchParams.delete(INVITE_QUERY_KEY)
+  window.history.replaceState({}, '', url)
+}
+
 export async function createProjectInvitation(projectId: string, email: string): Promise<string> {
   if (!supabase) throw new Error('Supabase ist nicht konfiguriert.')
   const { data, error } = await supabase.rpc('notiz_create_project_invitation', {
@@ -25,9 +32,6 @@ export async function acceptProjectInvitation(token: string): Promise<string> {
   if (!supabase) throw new Error('Supabase ist nicht konfiguriert.')
   const { data, error } = await supabase.rpc('notiz_accept_project_invitation', { p_token: token })
   if (error) throw new Error(error.message)
-  localStorage.removeItem('notiz_pending_invite')
-  const url = new URL(window.location.href)
-  url.searchParams.delete(INVITE_QUERY_KEY)
-  window.history.replaceState({}, '', url)
+  discardPendingInvitation()
   return String(data)
 }
