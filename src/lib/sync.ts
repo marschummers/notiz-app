@@ -1,6 +1,6 @@
 import type { EntityTable } from 'dexie'
 import { db } from '../db/db'
-import type { Folder, Page, PageBackground, PageProperties, PageType, Tag, PageTag, Task, QuickTask, TextBlock, Template, TemplateTextBlock, TemplateTask, Stroke, PdfPrintout, Project, ProjectTask, ProjectTaskAfn, ProjectTaskComment, ProjectMilestone, ProjectSection, ProjectStatus, ProjectTaskStatus, ProjectMilestoneStatus, ProjectMember, ProjectMemberRole, ProjectTemplate, ProjectTemplateMilestone, ProjectTemplateSection, ProjectTemplateTask, ProjectTemplateVisibility } from '../db/types'
+import type { Folder, Page, PageBackground, PageProperties, PageType, Tag, PageTag, Task, QuickTask, TextBlock, Template, TemplateTextBlock, TemplateTask, Stroke, PdfPrintout, Project, ProjectTask, ProjectTaskAfn, ProjectTaskComment, ProjectMilestone, ProjectSection, ProjectSectionDocument, ProjectSectionDocumentRevision, ProjectStatus, ProjectTaskStatus, ProjectMilestoneStatus, ProjectMember, ProjectMemberRole, ProjectTemplate, ProjectTemplateMilestone, ProjectTemplateSection, ProjectTemplateTask, ProjectTemplateVisibility } from '../db/types'
 import { supabase } from './supabaseClient'
 
 // Faengt fehlende/kaputte Zeitstempel ab, statt dass new Date(...).toISOString() mit
@@ -223,6 +223,8 @@ interface RemoteProject { id: string; user_id: string; name: string; customer_na
 interface RemoteProjectTask { id: string; user_id: string; project_id: string; milestone_id: string | null; section_id: string | null; title: string; description: string | null; assignee_user_id: string | null; status: string; due_date: string | null; waiting_for: string | null; custom_field_1_value: string | null; custom_field_2_value: string | null; sort_order: number; created_at: string; updated_at: string; deleted_at: string | null }
 interface RemoteProjectMilestone { id: string; user_id: string; project_id: string; title: string; description: string | null; due_date: string | null; status: string; sort_order: number; created_at: string; updated_at: string; deleted_at: string | null }
 interface RemoteProjectSection { id: string; user_id: string; project_id: string; milestone_id: string; title: string; sort_order: number; created_at: string; updated_at: string; deleted_at: string | null }
+interface RemoteProjectSectionDocument { id: string; user_id: string; project_id: string; section_id: string; content: string; updated_by_user_id: string; created_at: string; updated_at: string; deleted_at: string | null }
+interface RemoteProjectSectionDocumentRevision { id: string; user_id: string; document_id: string; project_id: string; section_id: string; previous_content: string; content: string; reason: string | null; changed_by_user_id: string; created_at: string; updated_at: string; deleted_at: string | null }
 interface RemoteProjectTaskAfn { id: string; user_id: string; task_id: string; afn_number: number; updated_at: string; deleted_at: string | null }
 interface RemoteProjectTaskComment { id: string; task_id: string; author_user_id: string; body: string; created_at: string; updated_at: string; deleted_at: string | null }
 interface RemoteProjectMember { id: string; project_id: string; user_id: string; role: string; created_at: string; updated_at: string; deleted_at: string | null }
@@ -533,22 +535,26 @@ export async function syncAll(): Promise<void> {
       .filter((task) => inaccessibleProjectIds.has(task.projectId))
       .toArray()
     const inaccessibleTaskIds = new Set(cachedProjectTasks.map((task) => task.id))
-    const [cachedAfns, cachedComments, cachedMilestones, cachedSections, cachedMembers] = await Promise.all([
+    const [cachedAfns, cachedComments, cachedMilestones, cachedSections, cachedSectionDocuments, cachedSectionDocumentRevisions, cachedMembers] = await Promise.all([
       db.projectTaskAfns.filter((afn) => inaccessibleTaskIds.has(afn.taskId)).toArray(),
       db.projectTaskComments.filter((comment) => inaccessibleTaskIds.has(comment.taskId)).toArray(),
       db.projectMilestones.filter((milestone) => inaccessibleProjectIds.has(milestone.projectId)).toArray(),
       db.projectSections.filter((section) => inaccessibleProjectIds.has(section.projectId)).toArray(),
+      db.projectSectionDocuments.filter((document) => inaccessibleProjectIds.has(document.projectId)).toArray(),
+      db.projectSectionDocumentRevisions.filter((revision) => inaccessibleProjectIds.has(revision.projectId)).toArray(),
       db.projectMembers.filter((member) => inaccessibleProjectIds.has(member.projectId)).toArray(),
     ])
     await db.transaction(
       'rw',
-      [db.projects, db.projectTasks, db.projectTaskAfns, db.projectTaskComments, db.projectMilestones, db.projectSections, db.projectMembers],
+      [db.projects, db.projectTasks, db.projectTaskAfns, db.projectTaskComments, db.projectMilestones, db.projectSections, db.projectSectionDocuments, db.projectSectionDocumentRevisions, db.projectMembers],
       async () => {
         await db.projectTaskAfns.bulkDelete(cachedAfns.map((row) => row.id))
         await db.projectTaskComments.bulkDelete(cachedComments.map((row) => row.id))
         await db.projectTasks.bulkDelete(cachedProjectTasks.map((row) => row.id))
         await db.projectMilestones.bulkDelete(cachedMilestones.map((row) => row.id))
         await db.projectSections.bulkDelete(cachedSections.map((row) => row.id))
+        await db.projectSectionDocuments.bulkDelete(cachedSectionDocuments.map((row) => row.id))
+        await db.projectSectionDocumentRevisions.bulkDelete(cachedSectionDocumentRevisions.map((row) => row.id))
         await db.projectMembers.bulkDelete(cachedMembers.map((row) => row.id))
         await db.projects.bulkDelete([...inaccessibleProjectIds])
       },
@@ -591,6 +597,28 @@ export async function syncAll(): Promise<void> {
   }), (remote) => ({
     id: remote.id, projectId: remote.project_id, milestoneId: remote.milestone_id, title: remote.title,
     sortOrder: remote.sort_order, createdAt: ms(remote.created_at), updatedAt: ms(remote.updated_at),
+    deletedAt: remote.deleted_at ? ms(remote.deleted_at) : undefined,
+  }))
+
+  await mergeTable<ProjectSectionDocument, RemoteProjectSectionDocument>(db.projectSectionDocuments, 'notiz_project_section_documents', (document) => ({
+    id: document.id, user_id: userId, project_id: document.projectId, section_id: document.sectionId,
+    content: document.content, updated_by_user_id: document.updatedByUserId,
+    created_at: iso(document.createdAt), updated_at: iso(document.updatedAt), deleted_at: document.deletedAt ? iso(document.deletedAt) : null,
+  }), (remote) => ({
+    id: remote.id, projectId: remote.project_id, sectionId: remote.section_id, content: remote.content,
+    updatedByUserId: remote.updated_by_user_id, createdAt: ms(remote.created_at), updatedAt: ms(remote.updated_at),
+    deletedAt: remote.deleted_at ? ms(remote.deleted_at) : undefined,
+  }))
+
+  await mergeTable<ProjectSectionDocumentRevision, RemoteProjectSectionDocumentRevision>(db.projectSectionDocumentRevisions, 'notiz_project_section_document_revisions', (revision) => ({
+    id: revision.id, user_id: userId, document_id: revision.documentId, project_id: revision.projectId,
+    section_id: revision.sectionId, previous_content: revision.previousContent, content: revision.content,
+    reason: revision.reason ?? null, changed_by_user_id: revision.changedByUserId,
+    created_at: iso(revision.createdAt), updated_at: iso(revision.updatedAt), deleted_at: revision.deletedAt ? iso(revision.deletedAt) : null,
+  }), (remote) => ({
+    id: remote.id, documentId: remote.document_id, projectId: remote.project_id, sectionId: remote.section_id,
+    previousContent: remote.previous_content, content: remote.content, reason: remote.reason ?? undefined,
+    changedByUserId: remote.changed_by_user_id, createdAt: ms(remote.created_at), updatedAt: ms(remote.updated_at),
     deletedAt: remote.deleted_at ? ms(remote.deleted_at) : undefined,
   }))
 

@@ -29,6 +29,17 @@ async function applyProjectRow(table: string, row: Row) {
     title: String(row.title ?? ''), sortOrder: Number(row.sort_order),
     createdAt: time(row.created_at) ?? Date.now(), updatedAt: time(row.updated_at) ?? Date.now(), deletedAt: time(row.deleted_at),
   })
+  if (table === 'notiz_project_section_documents') await db.projectSectionDocuments.put({
+    id: String(row.id), projectId: String(row.project_id), sectionId: String(row.section_id),
+    content: String(row.content ?? ''), updatedByUserId: String(row.updated_by_user_id),
+    createdAt: time(row.created_at) ?? Date.now(), updatedAt: time(row.updated_at) ?? Date.now(), deletedAt: time(row.deleted_at),
+  })
+  if (table === 'notiz_project_section_document_revisions') await db.projectSectionDocumentRevisions.put({
+    id: String(row.id), documentId: String(row.document_id), projectId: String(row.project_id), sectionId: String(row.section_id),
+    previousContent: String(row.previous_content ?? ''), content: String(row.content ?? ''),
+    reason: row.reason ? String(row.reason) : undefined, changedByUserId: String(row.changed_by_user_id),
+    createdAt: time(row.created_at) ?? Date.now(), updatedAt: time(row.updated_at) ?? Date.now(), deletedAt: time(row.deleted_at),
+  })
   if (table === 'notiz_project_tasks') await db.projectTasks.put({
     id: String(row.id), projectId: String(row.project_id), milestoneId: row.milestone_id ? String(row.milestone_id) : undefined,
     sectionId: row.section_id ? String(row.section_id) : undefined, title: String(row.title ?? ''), description: row.description ? String(row.description) : undefined,
@@ -51,7 +62,7 @@ async function applyProjectRow(table: string, row: Row) {
 export function subscribeProjectRealtime() {
   if (!supabase) return () => undefined
   const client = supabase
-  const tables = ['notiz_projects', 'notiz_project_members', 'notiz_project_tasks', 'notiz_project_milestones', 'notiz_project_sections', 'notiz_project_task_afns', 'notiz_project_task_comments']
+  const tables = ['notiz_projects', 'notiz_project_members', 'notiz_project_tasks', 'notiz_project_milestones', 'notiz_project_sections', 'notiz_project_section_documents', 'notiz_project_section_document_revisions', 'notiz_project_task_afns', 'notiz_project_task_comments']
   let channel = client.channel('notiz-project-realtime')
   for (const table of tables) {
     channel = channel.on('postgres_changes', { event: '*', schema: 'public', table }, (payload) => {

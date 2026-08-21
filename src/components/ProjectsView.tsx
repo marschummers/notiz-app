@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type ReactNode } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
-import type { Page, Project, ProjectMember, ProjectMilestone, ProjectMilestoneStatus, ProjectSection, ProjectStatus, ProjectTask, ProjectTaskComment, ProjectTaskStatus, UserProfile } from '../db/types'
-import { createProjectMilestone, createProjectSection, createProjectTask, createProjectTaskComment, deleteProject, deleteProjectMilestone, deleteProjectSection, deleteProjectTask, moveProjectMilestone, moveProjectTask, replaceProjectTaskAfns, setProjectTeam, updateProject, updateProjectMilestone, updateProjectSection, updateProjectTask } from '../lib/projectActions'
+import type { Page, Project, ProjectMember, ProjectMilestone, ProjectMilestoneStatus, ProjectSection, ProjectSectionDocument, ProjectSectionDocumentRevision, ProjectStatus, ProjectTask, ProjectTaskComment, ProjectTaskStatus, UserProfile } from '../db/types'
+import { createProjectMilestone, createProjectSection, createProjectTask, createProjectTaskComment, deleteProject, deleteProjectMilestone, deleteProjectSection, deleteProjectTask, moveProjectMilestone, moveProjectTask, replaceProjectTaskAfns, saveProjectSectionDocument, setProjectTeam, updateProject, updateProjectMilestone, updateProjectSection, updateProjectTask } from '../lib/projectActions'
 import BufferedDateInput from './BufferedDateInput'
 import type { ProjectNavigation } from '../lib/projectNavigation'
 import { projectCustomer, projectDisplayName, projectShortName } from '../lib/projectDisplay'
@@ -62,6 +62,8 @@ export default function ProjectsView({ sidebarOpen, onToggleSidebar, userId, use
   const profiles = useLiveQuery(() => db.userProfiles.toArray(), []) ?? []
   const allMembers = useLiveQuery(() => db.projectMembers.filter((member) => !member.deletedAt).toArray(), []) ?? []
   const allComments = useLiveQuery(() => db.projectTaskComments.filter((comment) => !comment.deletedAt).toArray(), []) ?? []
+  const allSectionDocuments = useLiveQuery(() => db.projectSectionDocuments.filter((document) => !document.deletedAt).toArray(), []) ?? []
+  const allSectionDocumentRevisions = useLiveQuery(() => db.projectSectionDocumentRevisions.filter((revision) => !revision.deletedAt).toArray(), []) ?? []
   const memberProjectIds = useMemo(
     () => new Set(allMembers.filter((member) => member.userId === userId).map((member) => member.projectId)),
     [allMembers, userId],
@@ -78,6 +80,8 @@ export default function ProjectsView({ sidebarOpen, onToggleSidebar, userId, use
   const afns = useMemo(() => allAfns.filter((afn) => taskIds.has(afn.taskId)), [allAfns, taskIds])
   const members = useMemo(() => allMembers.filter((member) => projectIds.has(member.projectId)), [allMembers, projectIds])
   const comments = useMemo(() => allComments.filter((comment) => taskIds.has(comment.taskId)), [allComments, taskIds])
+  const sectionDocuments = useMemo(() => allSectionDocuments.filter((document) => projectIds.has(document.projectId)), [allSectionDocuments, projectIds])
+  const sectionDocumentRevisions = useMemo(() => allSectionDocumentRevisions.filter((revision) => projectIds.has(revision.projectId)), [allSectionDocumentRevisions, projectIds])
   const [section, setSection] = useState<'dashboard' | 'projects'>('dashboard')
   const [search, setSearch] = useState('')
   const [showClosed, setShowClosed] = useState(false)
@@ -97,7 +101,7 @@ export default function ProjectsView({ sidebarOpen, onToggleSidebar, userId, use
   const otherDueTasks = actionableTasks.filter((task) => task.dueDate && (task.dueDate < today.getTime() || task.dueDate >= tomorrow))
 
   if (selected) {
-    return <ProjectDetail key={`${selected.id}:${selectedTaskId ?? ''}`} project={selected} tasks={tasks.filter((task) => task.projectId === selected.id)} milestones={milestones.filter((milestone) => milestone.projectId === selected.id)} sections={sections.filter((section) => section.projectId === selected.id)} afns={afns} comments={comments}
+    return <ProjectDetail key={`${selected.id}:${selectedTaskId ?? ''}`} project={selected} tasks={tasks.filter((task) => task.projectId === selected.id)} milestones={milestones.filter((milestone) => milestone.projectId === selected.id)} sections={sections.filter((section) => section.projectId === selected.id)} sectionDocuments={sectionDocuments.filter((document) => document.projectId === selected.id)} sectionDocumentRevisions={sectionDocumentRevisions.filter((revision) => revision.projectId === selected.id)} afns={afns} comments={comments}
       profiles={profiles} members={members.filter((member) => member.projectId === selected.id)} userId={userId} userEmail={userEmail} filter={taskFilter} setFilter={setTaskFilter}
       pages={pages} onOpenPage={onOpenPage} initialTaskId={selectedTaskId} onBack={() => onNavigate({ type: 'overview' })} />
   }
@@ -454,7 +458,68 @@ function OrganizedProjectTasks({ tasks, milestones, sections, renderTask, onAddT
     })}
   </div>
 }
-function ProjectDetail({ project, tasks, milestones, sections, afns, comments, profiles, members, pages, userId, userEmail, filter, setFilter, onOpenPage, initialTaskId, onBack }: { project: Project; tasks: ProjectTask[]; milestones: ProjectMilestone[]; sections: ProjectSection[]; afns: { taskId: string; afnNumber: number }[]; comments: ProjectTaskComment[]; profiles: UserProfile[]; members: ProjectMember[]; pages: Page[]; userId: string; userEmail?: string; filter: TaskFilter; setFilter: (value: TaskFilter) => void; onOpenPage: (id: string) => void; initialTaskId?: string; onBack: () => void }) {
+
+function documentationSegments(text: string): string[] {
+  return text.split(/(?:\r?\n)+|(?<=[.!?])\s+/).map((value) => value.trim()).filter(Boolean)
+}
+
+function documentedChanges(revision: ProjectSectionDocumentRevision) {
+  const before = documentationSegments(revision.previousContent)
+  const after = documentationSegments(revision.content)
+  return { removed: before.filter((value) => !after.includes(value)), added: after.filter((value) => !before.includes(value)) }
+}
+
+function escapeDocumentHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]!)
+}
+
+function exportProjectDocumentation(project: Project, milestones: ProjectMilestone[], sections: ProjectSection[], documents: ProjectSectionDocument[]) {
+  const documentBySection = new Map(documents.map((document) => [document.sectionId, document]))
+  const groups = [...milestones].sort((a, b) => a.sortOrder - b.sortOrder).map((milestone) => ({
+    milestone,
+    sections: sections.filter((section) => section.milestoneId === milestone.id && documentBySection.get(section.id)?.content.trim()).sort((a, b) => a.sortOrder - b.sortOrder),
+  })).filter((group) => group.sections.length > 0)
+  if (groups.length === 0) { alert('Es gibt noch keinen Projektstand mit Inhalt.'); return }
+  const exportWindow = window.open('', '_blank')
+  if (!exportWindow) { alert('Das Exportfenster wurde vom Browser blockiert. Bitte Pop-ups für diese Seite erlauben.'); return }
+  const body = groups.map(({ milestone, sections: milestoneSections }) => `<section class="milestone"><h2>${escapeDocumentHtml(milestone.title)}</h2>${milestoneSections.map((section) => `<article><h3>${escapeDocumentHtml(section.title)}</h3><div>${escapeDocumentHtml(documentBySection.get(section.id)!.content).replace(/\n/g, '<br>')}</div></article>`).join('')}</section>`).join('')
+  exportWindow.document.write(`<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Projektstand – ${escapeDocumentHtml(projectDisplayName(project))}</title><style>@page{size:A4;margin:18mm}body{font-family:Arial,sans-serif;color:#172033;line-height:1.5;margin:0}header{padding-bottom:16px;border-bottom:2px solid #3158b8}h1{margin:0 0 5px;font-size:25px}header p{margin:0;color:#586174}.milestone{break-inside:avoid;margin-top:24px}.milestone h2{font-size:18px;color:#3158b8;border-bottom:1px solid #cbd3e4;padding-bottom:5px}article{break-inside:avoid;margin-top:17px}article h3{font-size:14px;margin:0 0 7px}article div{font-size:11pt}.meta{margin-top:6px;font-size:10pt;color:#586174}@media print{button{display:none}}button{margin:18px 0;padding:10px 15px}</style></head><body><header><h1>${escapeDocumentHtml(projectDisplayName(project))}</h1><p>Projektstand</p><p class="meta">Stand: ${new Date().toLocaleDateString('de-DE')}</p></header>${body}<button onclick="window.print()">Als PDF speichern / drucken</button><script>window.addEventListener('load',()=>setTimeout(()=>window.print(),200))</script></body></html>`)
+  exportWindow.document.close()
+}
+
+function ProjectSectionDocumentationEditor({ project, section, document, revisions, profiles, userId }: { project: Project; section: ProjectSection; document?: ProjectSectionDocument; revisions: ProjectSectionDocumentRevision[]; profiles: UserProfile[]; userId: string }) {
+  const [draft, setDraft] = useState(document?.content ?? '')
+  const [reason, setReason] = useState('')
+  const [saving, setSaving] = useState<'documented' | 'plain' | null>(null)
+  const [message, setMessage] = useState('')
+  const changed = draft.trim() !== (document?.content ?? '').trim()
+  async function save(documentChange: boolean) {
+    if (!changed || saving) return
+    setSaving(documentChange ? 'documented' : 'plain'); setMessage('')
+    try {
+      await saveProjectSectionDocument({ projectId: project.id, sectionId: section.id, content: draft, userId, documentChange, reason })
+      await syncAll(); setReason(''); setMessage(documentChange ? 'Gespeichert und im Verlauf dokumentiert.' : 'Gespeichert, ohne Eintrag im Verlauf.')
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Projektstand konnte nicht gespeichert werden.') }
+    finally { setSaving(null) }
+  }
+  const orderedRevisions = [...revisions].sort((a, b) => b.createdAt - a.createdAt)
+  return <details className="project-documentation-topic"><summary><span>{section.title}</span><small>{document?.content.trim() ? `Aktualisiert ${formatDate(document.updatedAt)}` : 'Noch kein Projektstand'}</small></summary><div className="project-documentation-editor">
+    <textarea value={draft} onChange={(event) => { setDraft(event.target.value); setMessage('') }} rows={8} placeholder={`Aktuellen Projektstand für „${section.title}“ als Fließtext festhalten …`}/>
+    <label>Begründung für den Verlauf (optional)<input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Warum wurde der Projektstand fachlich geändert?"/></label>
+    <div className="project-documentation-actions"><button type="button" className="secondary-action" disabled={!changed || Boolean(saving)} onClick={() => save(false)}>{saving === 'plain' ? 'Speichert …' : 'Speichern ohne Doku'}</button><button type="button" className="primary" disabled={!changed || Boolean(saving)} onClick={() => save(true)}>{saving === 'documented' ? 'Speichert …' : 'Speichern mit Doku'}</button></div>
+    {message && <p className="project-documentation-message">{message}</p>}
+    {orderedRevisions.length > 0 && <details className="project-documentation-history"><summary>Entscheidungsverlauf ({orderedRevisions.length})</summary><div>{orderedRevisions.map((revision) => { const changes = documentedChanges(revision); return <article key={revision.id}><header><strong>{profileName(revision.changedByUserId, profiles, userId)}</strong><time>{formatDateTime(revision.createdAt)}</time></header>{revision.reason && <p><b>Begründung:</b> {revision.reason}</p>}{changes.removed.map((value, index) => <del key={`removed-${index}`}>Entfernt: {value}</del>)}{changes.added.map((value, index) => <ins key={`added-${index}`}>Hinzugefügt: {value}</ins>)}</article> })}</div></details>}
+  </div></details>
+}
+
+function ProjectDocumentation({ project, milestones, sections, documents, revisions, profiles, userId }: { project: Project; milestones: ProjectMilestone[]; sections: ProjectSection[]; documents: ProjectSectionDocument[]; revisions: ProjectSectionDocumentRevision[]; profiles: UserProfile[]; userId: string }) {
+  const orderedMilestones = [...milestones].sort((a, b) => a.sortOrder - b.sortOrder)
+  return <section className="project-documentation-section"><div className="project-tasks-heading"><div><p className="projects-eyebrow">Übergabe & Entscheidungen</p><h2>Projektdokumentation</h2></div><button type="button" className="secondary-action" onClick={() => exportProjectDocumentation(project, milestones, sections, documents)}>Stand jetzt exportieren</button></div><p className="project-documentation-intro">Pflege den aktuellen Stand als Fließtext. Nur „Speichern mit Doku“ erzeugt einen Eintrag im Entscheidungsverlauf.</p>
+    {sections.length === 0 ? <p className="project-notes-empty">Lege zuerst in einem Meilenstein einen Themenbereich an.</p> : <div className="project-documentation-list">{orderedMilestones.map((milestone) => { const milestoneSections = sections.filter((section) => section.milestoneId === milestone.id).sort((a, b) => a.sortOrder - b.sortOrder); if (!milestoneSections.length) return null; return <section className="project-documentation-milestone" key={milestone.id}><h3>{milestone.title}</h3>{milestoneSections.map((section) => <ProjectSectionDocumentationEditor key={section.id} project={project} section={section} document={documents.find((document) => document.sectionId === section.id)} revisions={revisions.filter((revision) => revision.sectionId === section.id)} profiles={profiles} userId={userId}/>)}</section> })}</div>}
+  </section>
+}
+
+function ProjectDetail({ project, tasks, milestones, sections, sectionDocuments, sectionDocumentRevisions, afns, comments, profiles, members, pages, userId, userEmail, filter, setFilter, onOpenPage, initialTaskId, onBack }: { project: Project; tasks: ProjectTask[]; milestones: ProjectMilestone[]; sections: ProjectSection[]; sectionDocuments: ProjectSectionDocument[]; sectionDocumentRevisions: ProjectSectionDocumentRevision[]; afns: { taskId: string; afnNumber: number }[]; comments: ProjectTaskComment[]; profiles: UserProfile[]; members: ProjectMember[]; pages: Page[]; userId: string; userEmail?: string; filter: TaskFilter; setFilter: (value: TaskFilter) => void; onOpenPage: (id: string) => void; initialTaskId?: string; onBack: () => void }) {
   const [editingProject, setEditingProject] = useState(false)
   const [editingTask, setEditingTask] = useState<ProjectTask | 'new' | null>(() => tasks.find((task) => task.id === initialTaskId) ?? null)
   const [editingMilestone, setEditingMilestone] = useState<ProjectMilestone | 'new' | null>(null)
@@ -555,6 +620,8 @@ function ProjectDetail({ project, tasks, milestones, sections, afns, comments, p
           sortActive={sortColumn !== null}
         />
       </section>
+
+      <ProjectDocumentation project={project} milestones={milestones} sections={sections} documents={sectionDocuments} revisions={sectionDocumentRevisions} profiles={profiles} userId={userId}/>
 
       <section className="project-notes-section">
         <div className="project-tasks-heading"><div><p className="projects-eyebrow">Privat</p><h2>Meine Notizen</h2></div><button className="primary compact" onClick={createProjectNote}>+ Projektnotiz</button></div>

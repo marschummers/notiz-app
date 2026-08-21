@@ -1,5 +1,5 @@
 import { db, newId } from '../db/db'
-import type { Project, ProjectTask, ProjectTaskAfn, ProjectTaskComment, ProjectMilestone, ProjectSection, ProjectMember } from '../db/types'
+import type { Project, ProjectTask, ProjectTaskAfn, ProjectTaskComment, ProjectMilestone, ProjectSection, ProjectMember, ProjectSectionDocument, ProjectSectionDocumentRevision } from '../db/types'
 
 export async function createProject(input: Pick<Project, 'name' | 'ownerUserId'> & Partial<Project>): Promise<string> {
   const now = Date.now()
@@ -17,7 +17,7 @@ export async function updateProject(id: string, changes: Partial<Omit<Project, '
 
 export async function deleteProject(id: string): Promise<void> {
   const now = Date.now()
-  await db.transaction('rw', [db.projects, db.projectTasks, db.projectTaskAfns, db.projectTaskComments, db.projectMilestones, db.projectSections, db.projectMembers], async () => {
+  await db.transaction('rw', [db.projects, db.projectTasks, db.projectTaskAfns, db.projectTaskComments, db.projectMilestones, db.projectSections, db.projectSectionDocuments, db.projectSectionDocumentRevisions, db.projectMembers], async () => {
     const tasks = await db.projectTasks.where('projectId').equals(id).toArray()
     for (const task of tasks) {
       const afns = await db.projectTaskAfns.where('taskId').equals(task.id).toArray()
@@ -30,6 +30,10 @@ export async function deleteProject(id: string): Promise<void> {
     await Promise.all(milestones.map((milestone) => db.projectMilestones.update(milestone.id, { deletedAt: now, updatedAt: now })))
     const sections = await db.projectSections.where('projectId').equals(id).toArray()
     await Promise.all(sections.map((section) => db.projectSections.update(section.id, { deletedAt: now, updatedAt: now })))
+    const documents = await db.projectSectionDocuments.where('projectId').equals(id).toArray()
+    await Promise.all(documents.map((document) => db.projectSectionDocuments.update(document.id, { deletedAt: now, updatedAt: now })))
+    const revisions = await db.projectSectionDocumentRevisions.where('projectId').equals(id).toArray()
+    await Promise.all(revisions.map((revision) => db.projectSectionDocumentRevisions.update(revision.id, { deletedAt: now, updatedAt: now })))
     const members = await db.projectMembers.where('projectId').equals(id).toArray()
     await Promise.all(members.map((member) => db.projectMembers.update(member.id, { deletedAt: now, updatedAt: now })))
     await db.projects.update(id, { deletedAt: now, updatedAt: now })
@@ -50,11 +54,16 @@ export async function updateProjectMilestone(id: string, changes: Partial<Omit<P
 
 export async function deleteProjectMilestone(id: string): Promise<void> {
   const now = Date.now()
-  await db.transaction('rw', db.projectMilestones, db.projectSections, db.projectTasks, async () => {
+  await db.transaction('rw', db.projectMilestones, db.projectSections, db.projectSectionDocuments, db.projectSectionDocumentRevisions, db.projectTasks, async () => {
     const tasks = await db.projectTasks.where('milestoneId').equals(id).toArray()
     await Promise.all(tasks.map((task) => db.projectTasks.update(task.id, { milestoneId: undefined, sectionId: undefined, updatedAt: now })))
     const sections = await db.projectSections.where('milestoneId').equals(id).toArray()
     await Promise.all(sections.map((section) => db.projectSections.update(section.id, { deletedAt: now, updatedAt: now })))
+    const sectionIds = new Set(sections.map((section) => section.id))
+    const documents = await db.projectSectionDocuments.filter((document) => sectionIds.has(document.sectionId)).toArray()
+    const revisions = await db.projectSectionDocumentRevisions.filter((revision) => sectionIds.has(revision.sectionId)).toArray()
+    await Promise.all(documents.map((document) => db.projectSectionDocuments.update(document.id, { deletedAt: now, updatedAt: now })))
+    await Promise.all(revisions.map((revision) => db.projectSectionDocumentRevisions.update(revision.id, { deletedAt: now, updatedAt: now })))
     await db.projectMilestones.update(id, { deletedAt: now, updatedAt: now })
   })
 }
@@ -97,9 +106,66 @@ export async function updateProjectSection(id: string, title: string): Promise<v
 export async function deleteProjectSection(id: string): Promise<void> {
   const now = Date.now()
   const tasks = await db.projectTasks.where('sectionId').equals(id).toArray()
-  await db.transaction('rw', db.projectSections, db.projectTasks, async () => {
+  const documents = await db.projectSectionDocuments.where('sectionId').equals(id).toArray()
+  const revisions = await db.projectSectionDocumentRevisions.where('sectionId').equals(id).toArray()
+  await db.transaction('rw', db.projectSections, db.projectTasks, db.projectSectionDocuments, db.projectSectionDocumentRevisions, async () => {
     await Promise.all(tasks.map((task) => db.projectTasks.update(task.id, { sectionId: undefined, updatedAt: now })))
+    await Promise.all(documents.map((document) => db.projectSectionDocuments.update(document.id, { deletedAt: now, updatedAt: now })))
+    await Promise.all(revisions.map((revision) => db.projectSectionDocumentRevisions.update(revision.id, { deletedAt: now, updatedAt: now })))
     await db.projectSections.update(id, { deletedAt: now, updatedAt: now })
+  })
+}
+
+export async function saveProjectSectionDocument(input: {
+  projectId: string
+  sectionId: string
+  content: string
+  userId: string
+  documentChange: boolean
+  reason?: string
+}): Promise<void> {
+  const content = input.content.trim()
+  const now = Date.now()
+  const existing = (await db.projectSectionDocuments.where('sectionId').equals(input.sectionId).toArray())
+    .find((document) => !document.deletedAt)
+  if (existing?.content === content) return
+
+  await db.transaction('rw', db.projectSectionDocuments, db.projectSectionDocumentRevisions, async () => {
+    const documentId = existing?.id ?? newId()
+    if (existing) {
+      await db.projectSectionDocuments.update(existing.id, {
+        content,
+        updatedByUserId: input.userId,
+        updatedAt: now,
+      })
+    } else {
+      const document: ProjectSectionDocument = {
+        id: documentId,
+        projectId: input.projectId,
+        sectionId: input.sectionId,
+        content,
+        updatedByUserId: input.userId,
+        createdAt: now,
+        updatedAt: now,
+      }
+      await db.projectSectionDocuments.add(document)
+    }
+
+    if (input.documentChange) {
+      const revision: ProjectSectionDocumentRevision = {
+        id: newId(),
+        documentId,
+        projectId: input.projectId,
+        sectionId: input.sectionId,
+        previousContent: existing?.content ?? '',
+        content,
+        reason: input.reason?.trim() || undefined,
+        changedByUserId: input.userId,
+        createdAt: now,
+        updatedAt: now,
+      }
+      await db.projectSectionDocumentRevisions.add(revision)
+    }
   })
 }
 
