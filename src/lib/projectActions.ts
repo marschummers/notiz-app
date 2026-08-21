@@ -243,6 +243,10 @@ export async function createProjectTaskComment(taskId: string, authorUserId: str
   return comment.id
 }
 
+export async function deleteProjectTaskComment(id: string): Promise<void> {
+  await db.projectTaskComments.update(id, { deletedAt: Date.now(), updatedAt: Date.now() })
+}
+
 export async function setProjectTeam(projectId: string, ownerUserId: string, userIds: string[]): Promise<void> {
   const now = Date.now()
   const wanted = new Set([ownerUserId, ...userIds])
