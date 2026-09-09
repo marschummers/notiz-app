@@ -644,7 +644,11 @@ export async function syncAll(): Promise<void> {
     id: comment.id, task_id: comment.taskId, author_user_id: comment.authorUserId, body: comment.body,
     created_at: iso(comment.createdAt), updated_at: iso(comment.updatedAt), deleted_at: comment.deletedAt ? iso(comment.deletedAt) : null,
   }), (r) => ({ id: r.id, taskId: r.task_id, authorUserId: r.author_user_id, body: r.body,
-    createdAt: ms(r.created_at), updatedAt: ms(r.updated_at), deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined }))
+    createdAt: ms(r.created_at), updatedAt: ms(r.updated_at), deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined }),
+  // Ein UPSERT prueft auch bei vorhandenen Kommentaren die INSERT-Policy. Das blockiert die
+  // erlaubte Moderation fremder Kommentare durch den Projektverantwortlichen, weil nur der
+  // Verfasser einen Kommentar einfuegen darf. Echte Inserts und Updates daher getrennt senden.
+  { separateInsertAndUpdate: true })
 
   // RLS liefert nur Vorlagen, die dem Benutzer gehoeren oder oeffentlich sind (visibility =
   // 'public', siehe Migration 0021). Wechselt eine fremde Vorlage von oeffentlich auf privat,
