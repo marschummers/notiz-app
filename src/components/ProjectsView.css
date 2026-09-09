@@ -180,12 +180,39 @@
     display: none;
   }
   .task-row {
-    grid-template-columns: minmax(0, 1fr) auto auto auto;
-    gap: 6px 12px;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 9px 12px;
     padding: 10px 4px;
   }
   .task-row-main.task-col-title {
     grid-column: 1 / -1;
+    width: 100%;
+    align-items: flex-start;
+  }
+  .task-row-title-button {
+    width: 100%;
+    flex: 1;
+    align-items: flex-start;
+  }
+  .task-row-title {
+    overflow: visible;
+    font-weight: 650;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    white-space: normal;
+  }
+  .task-col-assignee {
+    grid-column: 1;
+  }
+  .task-col-due {
+    grid-column: 2;
+  }
+  .task-col-status {
+    grid-column: 3;
+  }
+  .task-filter-row ~ .organized-task-list {
+    margin-top: 12px;
   }
 }
 
