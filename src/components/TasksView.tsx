@@ -13,13 +13,17 @@ interface Props {
   onToggleSidebar: () => void
   onOpenPage: (pageId: string) => void
   onOpenProject: (projectId: string, taskId: string) => void
+  userId: string
 }
 
-export default function TasksView({ sidebarOpen, onToggleSidebar, onOpenPage, onOpenProject }: Props) {
+export default function TasksView({ sidebarOpen, onToggleSidebar, onOpenPage, onOpenProject, userId }: Props) {
   const [draft, setDraft] = useState('')
   const tasks = useLiveQuery(() => db.tasks.filter((task) => !task.deletedAt).toArray(), [])
   const quickTasks = useLiveQuery(() => db.quickTasks.filter((task) => !task.deletedAt).toArray(), [])
-  const projectTasks = useLiveQuery(() => db.projectTasks.filter((task) => !task.deletedAt && !task.milestoneId).toArray(), [])
+  const projectTasks = useLiveQuery(
+    () => db.projectTasks.filter((task) => !task.deletedAt && !task.milestoneId && task.assigneeUserId === userId).toArray(),
+    [userId],
+  )
   const projects = useLiveQuery(() => db.projects.filter((project) => !project.deletedAt).toArray(), [])
   const pages = useLiveQuery(() => db.pages.toArray(), [])
 

@@ -275,6 +275,7 @@ export default function Workspace() {
         <TasksView
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen((v) => !v)}
+          userId={session?.user.id ?? ''}
           onOpenPage={openPage}
           onOpenProject={(projectId, taskId) => {
             setProjectNavigation({ type: 'project', id: projectId, taskId })
