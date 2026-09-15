@@ -209,6 +209,7 @@ interface RemoteTemplate {
 // Storage (Bucket "notiz-pdfs", siehe lib/pdfStorage.ts) und wird von mergeTable NIE angefasst,
 // nur diese kleine Zeile laeuft ueber den normalen Last-Write-Wins-Abgleich.
 interface RemotePdfPrintout {
+  placement: import("../db/types").PdfPlacement | null
   id: string
   user_id: string
   page_id: string
@@ -348,6 +349,7 @@ export async function syncAll(): Promise<void> {
       page_id: p.pageId,
       file_name: p.fileName,
       storage_path: p.storagePath,
+      placement: p.placement ?? null,
       created_at: iso(p.createdAt),
       updated_at: iso(p.updatedAt),
       deleted_at: p.deletedAt ? iso(p.deletedAt) : null,
@@ -357,6 +359,7 @@ export async function syncAll(): Promise<void> {
       pageId: r.page_id,
       fileName: r.file_name,
       storagePath: r.storage_path,
+      placement: r.placement ?? undefined,
       createdAt: ms(r.created_at),
       updatedAt: ms(r.updated_at),
       deletedAt: r.deleted_at ? ms(r.deleted_at) : undefined,

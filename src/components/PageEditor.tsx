@@ -18,6 +18,7 @@ import {
   toggleTask,
   updatePageBackground,
   updatePageStrokes,
+  updatePdfPlacement,
   updateTaskText,
   updateTextBlockText,
   updateTextBlockWidth,
@@ -267,6 +268,7 @@ export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBac
           onResizeTextBlockWidth={(id, width) => updateTextBlockWidth(id, width)}
           onOpenPageLink={(targetPageId) => onOpenPage(targetPageId)}
           pdfPrintout={pdfPrintout ?? null}
+          onPdfPlacementChange={(value) => pdfPrintout ? updatePdfPlacement(pdfPrintout.id, value) : Promise.resolve()}
           onAttachPdf={async (file) => {
             await attachPdfToPage(pageId, file)
           }}

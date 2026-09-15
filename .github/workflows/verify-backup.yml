@@ -5,6 +5,11 @@ on:
     # Einmal monatlich auf einem kurzlebigen GitHub-Runner testen.
     - cron: '43 4 1 * *'
   workflow_dispatch:
+    inputs:
+      migration:
+        description: 'Optional migration filename to test on the restored disposable database'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -128,6 +133,17 @@ jobs:
             pg_restore --exit-on-error --no-owner --no-privileges --disable-triggers \
               --username=postgres --section=data \
               --dbname="$PGDATABASE" /tmp/database.dump
+
+      - name: Test requested migration on disposable database
+        if: inputs.migration != ''
+        env:
+          TEST_MIGRATION: ${{ inputs.migration }}
+        shell: bash
+        run: |
+          [[ "$TEST_MIGRATION" =~ ^[0-9]{4}_[a-z0-9_]+\.sql$ ]] || exit 1
+          test -f "supabase/migrations/$TEST_MIGRATION"
+          psql --set ON_ERROR_STOP=1 --file="supabase/migrations/$TEST_MIGRATION"
+          psql --set ON_ERROR_STOP=1 --file="supabase/migrations/$TEST_MIGRATION"
 
       - name: Verify restored application data
         shell: bash

@@ -228,6 +228,16 @@ export async function attachPdfToPage(pageId: string, file: File): Promise<PdfPr
 // Entfernt einen PDF-Ausdruck weich (siehe lib/sync.ts) - die Datei bleibt in Storage liegen,
 // nur der lokale Blob-Cache (siehe db/types.ts PdfBlobCache) wird sofort geleert, da der nie
 // synchronisiert wird und ohne aktive Metadaten-Zeile ohnehin nicht mehr erreichbar waere.
+export async function updatePdfPlacement(id: string, placement: import('../db/types').PdfPlacement): Promise<void> {
+  if (![placement.x, placement.y, placement.width].every(Number.isFinite)) return
+  const printout = await db.pdfPrintouts.get(id)
+  if (!printout || printout.deletedAt) return
+  const now = Date.now()
+  const width = Math.min(1, Math.max(0.2, placement.width))
+  await db.pdfPrintouts.update(id, { placement: { x: Math.max(0, Math.min(1 - width, placement.x)), y: Math.max(0, placement.y), width }, updatedAt: now })
+  await touchPage(printout.pageId, now)
+}
+
 export async function removePdfFromPage(id: string): Promise<void> {
   const now = Date.now()
   const printout = await db.pdfPrintouts.get(id)

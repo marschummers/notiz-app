@@ -220,7 +220,10 @@ export interface Template {
 // Wins-synchronisierte Verweis darauf (gleiches Muster wie jede andere Tabelle, siehe
 // lib/sync.ts). Eine Seite traegt fuer diese erste Version genau einen aktiven (nicht weich
 // geloeschten) PDF-Ausdruck.
+export interface PdfPlacement { x: number; y: number; width: number }
+
 export interface PdfPrintout {
+  placement?: PdfPlacement
   id: string
   pageId: string
   fileName: string

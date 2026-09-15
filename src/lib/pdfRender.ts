@@ -7,6 +7,7 @@ import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url'
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
 export interface RenderedPdfPage {
+  placement?: import("../db/types").PdfPlacement
   // Fertig gerendertes Canvas nur im Speicher (nie als Datei/DataURL gespeichert) - siehe
   // components/DrawingCanvas.tsx PdfPageHost, das dieses Canvas-Element direkt in den DOM
   // haengt statt es erneut zu kodieren.
