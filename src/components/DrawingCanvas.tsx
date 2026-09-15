@@ -1488,7 +1488,9 @@ export default function DrawingCanvas({
   // Bytes kommen (siehe Lade-Effekt unten, reagiert auf die von aussen (PageEditor.tsx)
   // uebergebene pdfPrintout-Metadaten-Zeile statt nur auf die lokale Dateiauswahl).
   const [renderedPdfPages, setPdfPages] = useState<RenderedPdfPage[]>([])
+  const [pdfEditing, setPdfEditing] = useState(false)
   const [placementDraft, setPlacementDraft] = useState<PdfPlacement | null>(null)
+  useEffect(() => { setPdfEditing(false) }, [pdfPrintout?.id])
   const pdfGestureRef = useRef<{ x: number; y: number; placement: PdfPlacement } | null>(null)
   const placement = placementDraft ?? pdfPrintout?.placement
   const pdfPages = useMemo(() => renderedPdfPages.map(page => ({ ...page, placement })), [renderedPdfPages, placement])
@@ -2386,6 +2388,11 @@ export default function DrawingCanvas({
         >
           <PdfIcon />
         </button>
+        {pdfPrintout && onPdfPlacementChange && (
+          <button aria-pressed={pdfEditing} onClick={() => setPdfEditing(value => !value)}>
+            {pdfEditing ? "Fertig" : "PDF bearbeiten"}
+          </button>
+        )}
         {pdfPrintout && (
           <button className="icon-button" onClick={() => onRemovePdf?.()} aria-label="PDF entfernen" title="PDF entfernen">
             ✕
@@ -2480,7 +2487,7 @@ export default function DrawingCanvas({
           }}
           onClick={handleTaskLayerClick}
         >
-          {pdfPages.length > 0 && onPdfPlacementChange && (
+          {pdfEditing && pdfPages.length > 0 && onPdfPlacementChange && (
             <div className="pdf-controls" style={{ left: pdfLayout[0].left, top: pdfLayout[0].top, width: pdfLayout[0].width }} onClick={e => e.stopPropagation()}>
               <button type="button" title="PDF verschieben" aria-label="PDF verschieben"
                 onPointerDown={e => {
@@ -2502,10 +2509,7 @@ export default function DrawingCanvas({
                 }}
                 onPointerCancel={() => { pdfGestureRef.current = null; setPlacementDraft(null) }}
               >⠿ {pdfPrintout?.fileName}</button>
-              <label>Größe <select aria-label="PDF-Größe" value={placement?.width ?? 1} onChange={e => {
-                const width = Number(e.target.value)
-                void savePlacement({ x: Math.min(placement?.x ?? 0, 1 - width), y: placement?.y ?? 0, width })
-              }}>{[0.25, 0.4, 0.5, 0.6, 0.75, 1].map(width => <option key={width} value={width}>{width * 100} %</option>)}</select></label>
+
             </div>
           )}
           {textBlockAlignmentGuide && (
@@ -2555,6 +2559,17 @@ export default function DrawingCanvas({
           ))}
         </div>
       </div>
+      {pdfEditing && pdfPrintout && onPdfPlacementChange && (
+        <div className="pdf-edit-panel" role="region" aria-label="PDF bearbeiten">
+          <span className="pdf-edit-name">{pdfPrintout.fileName}</span>
+              <label>Größe <select aria-label="PDF-Größe" value={placement?.width ?? 1} onChange={e => {
+                const width = Number(e.target.value)
+                void savePlacement({ x: Math.min(placement?.x ?? 0, 1 - width), y: placement?.y ?? 0, width })
+              }}>{[0.25, 0.4, 0.5, 0.6, 0.75, 1].map(width => <option key={width} value={width}>{width * 100} %</option>)}</select></label>
+          <span className="pdf-edit-hint">Am Griff verschieben · Beschriftung bleibt erhalten</span>
+          <button type="button" onClick={() => setPdfEditing(false)}>Fertig</button>
+        </div>
+      )}
     </div>
   )
 }
