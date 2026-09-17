@@ -419,6 +419,15 @@ function describeTouch(t: Touch): { touchType: string; force: number } {
   return { touchType, force }
 }
 
+function hasStylusContact(t: Touch): boolean {
+  // Beim Abheben liefert WebKit vereinzelt noch ein letztes touchmove fuer den Pencil. Dessen
+  // Position kann bereits weit versetzt sein, force ist dabei aber 0. Dieser Sample darf nicht
+  // mit dem letzten echten Punkt verbunden werden (sonst entsteht ein langer gerader Strich).
+  // Auf Browsern ohne Force-Unterstuetzung ist Touch.force undefined; dort bleibt das bisherige
+  // Verhalten deshalb unveraendert.
+  return typeof t.force !== 'number' || t.force > 0
+}
+
 interface ViewState {
   scale: number
   x: number
@@ -2135,6 +2144,12 @@ export default function DrawingCanvas({
       for (const t of Array.from(e.changedTouches)) {
         if (t.identifier !== activeTouchIdRef.current) continue
         const { touchType, force } = describeTouch(t)
+        if (touchType === 'stylus' && !hasStylusContact(t)) {
+          // Der Kontakt ist physisch bereits beendet. Den Strich sofort abschliessen, auch wenn
+          // das zugehoerige touchend erst spaeter kommt oder von WebKit ganz verschluckt wird.
+          finishCurrentStroke()
+          continue
+        }
         const p = pointFrom(t.clientX, t.clientY, force)
         extendStroke(p)
         updateDebug(touchType, force)
