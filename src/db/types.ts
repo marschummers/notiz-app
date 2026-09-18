@@ -218,8 +218,8 @@ export interface Template {
 // DrawingCanvas.tsx, lib/pdfStorage.ts). Die eigentliche PDF-Datei liegt NICHT hier, sondern im
 // Supabase-Storage-Bucket "notiz-pdfs" unter `storagePath` - diese Zeile ist nur der Last-Write-
 // Wins-synchronisierte Verweis darauf (gleiches Muster wie jede andere Tabelle, siehe
-// lib/sync.ts). Eine Seite traegt fuer diese erste Version genau einen aktiven (nicht weich
-// geloeschten) PDF-Ausdruck.
+// lib/sync.ts). Eine Seite kann mehrere aktive PDF-Ausdrucke tragen; `id` bleibt zugleich der
+// stabile Anker fuer handschriftliche Annotationen auf genau diesem Ausdruck.
 export interface PdfPlacement { x: number; y: number; width: number }
 
 export interface PdfPrintout {

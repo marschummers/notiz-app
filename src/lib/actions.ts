@@ -202,10 +202,9 @@ export async function deletePage(id: string): Promise<void> {
 // Heftet ein PDF an eine Seite: laedt das Original zuerst in Supabase Storage hoch (siehe
 // lib/pdfStorage.ts) und legt danach die synchronisierte Metadaten-Zeile an - in dieser
 // Reihenfolge, damit nie eine Zeile existiert, deren storagePath noch gar nicht hochgeladen ist.
-// Ein evtl. vorhandener aktiver PDF-Ausdruck derselben Seite wird weich geloescht (eine Seite
-// traegt fuer diese erste Version genau einen aktiven Ausdruck) - die dazugehoerige Datei bleibt
-// unangetastet in Storage liegen (gleiche "nie hart loeschen"-Haltung wie ueberall sonst).
-export async function attachPdfToPage(pageId: string, file: File): Promise<PdfPrintout> {
+// Bereits vorhandene Ausdrucke bleiben aktiv; jeder neue Datensatz besitzt eine eigene ID und
+// kann dadurch unabhaengig positioniert, annotiert und entfernt werden.
+export async function attachPdfToPage(pageId: string, file: File, placement?: import('../db/types').PdfPlacement): Promise<PdfPrintout> {
   if (!supabase) throw new Error('Supabase ist nicht konfiguriert.')
   const { data: userData, error } = await supabase.auth.getUser()
   if (error || !userData.user) throw new Error('Nicht eingeloggt.')
@@ -214,12 +213,7 @@ export async function attachPdfToPage(pageId: string, file: File): Promise<PdfPr
   const id = newId()
   const storagePath = await uploadPdf(userData.user.id, id, file)
 
-  const existing = await db.pdfPrintouts.filter((p) => p.pageId === pageId && !p.deletedAt).toArray()
-  for (const p of existing) {
-    await db.pdfPrintouts.update(p.id, { deletedAt: now, updatedAt: now })
-  }
-
-  const printout: PdfPrintout = { id, pageId, fileName: file.name, storagePath, createdAt: now, updatedAt: now }
+  const printout: PdfPrintout = { id, pageId, fileName: file.name, storagePath, placement, createdAt: now, updatedAt: now }
   await db.pdfPrintouts.add(printout)
   await touchPage(pageId, now)
   return printout

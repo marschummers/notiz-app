@@ -59,10 +59,8 @@ export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBac
   const allTags = useLiveQuery(() => db.tags.filter((t) => !t.deletedAt).toArray(), [])
   const tasks = useLiveQuery(() => db.tasks.filter((t) => !t.deletedAt && t.pageId === pageId).toArray(), [pageId])
   const textBlocks = useLiveQuery(() => db.textBlocks.filter((t) => !t.deletedAt && t.pageId === pageId).toArray(), [pageId])
-  // Eine Seite traegt hoechstens einen aktiven PDF-Ausdruck (siehe lib/actions.ts
-  // attachPdfToPage) - .first() statt .toArray(), es gibt nie mehr als eine passende Zeile.
-  const pdfPrintout = useLiveQuery(
-    () => db.pdfPrintouts.filter((p) => !p.deletedAt && p.pageId === pageId).first(),
+  const pdfPrintouts = useLiveQuery(
+    () => db.pdfPrintouts.filter((p) => !p.deletedAt && p.pageId === pageId).sortBy('createdAt'),
     [pageId],
   )
   // Fuer die [[-Seitenlink-Autocomplete in Textfeldern - dieselben Daten, die auch die globale
@@ -267,14 +265,12 @@ export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBac
           onMoveTextBlock={(id, x, y) => moveTextBlock(id, x, y)}
           onResizeTextBlockWidth={(id, width) => updateTextBlockWidth(id, width)}
           onOpenPageLink={(targetPageId) => onOpenPage(targetPageId)}
-          pdfPrintout={pdfPrintout ?? null}
-          onPdfPlacementChange={(value) => pdfPrintout ? updatePdfPlacement(pdfPrintout.id, value) : Promise.resolve()}
-          onAttachPdf={async (file) => {
-            await attachPdfToPage(pageId, file)
+          pdfPrintouts={pdfPrintouts ?? []}
+          onPdfPlacementChange={(id, value) => updatePdfPlacement(id, value)}
+          onAttachPdf={async (file, placement) => {
+            await attachPdfToPage(pageId, file, placement)
           }}
-          onRemovePdf={() => {
-            if (pdfPrintout) removePdfFromPage(pdfPrintout.id)
-          }}
+          onRemovePdf={(id) => removePdfFromPage(id)}
           lassoMode={lassoMode}
           onRequestExitLasso={() => setLassoMode(false)}
           toolbarExtra={

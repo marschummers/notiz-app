@@ -740,6 +740,7 @@
 .pdf-controls { position: absolute; z-index: 6; display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none; }
 .pdf-controls button, .pdf-controls label { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; font-size: 12px; pointer-events: auto; }
 .pdf-controls button { cursor: grab; touch-action: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pdf-controls.selected button { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent); }
 .pdf-controls select { margin-left: 6px; }
 
 .pdf-edit-panel { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; flex-shrink: 0; padding: 10px 14px; border-top: 1px solid var(--border); background: var(--bg); color: var(--text); }

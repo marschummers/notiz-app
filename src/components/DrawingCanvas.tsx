@@ -104,6 +104,8 @@ function redrawAll(ctx: CanvasRenderingContext2D, width: number, height: number,
 }
 
 interface PdfPageBox {
+  printoutId: string
+  pageNumber: number
   left: number
   top: number
   width: number
@@ -114,15 +116,15 @@ interface PdfPageBox {
 // (dieselbe Breite wie die Zeichenflaeche, siehe canvasWidth) - EINZIGE Stelle, die diese
 // Rechnung macht (sowohl fuer die Gesamthoehe der Notizflaeche als auch fuer die PDF-Bindung von
 // Strichen, siehe findPdfPageAt/pdfPageBox unten), damit beide nie auseinanderlaufen koennen.
-function computePdfPageLayout(pdfPages: RenderedPdfPage[], canvasWidth: number): PdfPageBox[] {
-  const placement = pdfPages[0]?.placement
-  const width = canvasWidth * (placement?.width ?? 1)
-  const left = canvasWidth * (placement?.x ?? 0)
-  let top = placement?.y ?? 0
+function computePdfPageLayout(pdfPages: DrawingPdfPage[], canvasWidth: number): PdfPageBox[] {
+  const nextTop = new Map<string, number>()
   return pdfPages.map((p) => {
+    const width = canvasWidth * (p.placement?.width ?? 1)
+    const left = canvasWidth * (p.placement?.x ?? 0)
+    const top = nextTop.get(p.printoutId) ?? p.placement?.y ?? 0
     const height = canvasWidth > 0 ? (width * p.height) / p.width : 0
-    const box: PdfPageBox = { left, top, width, height }
-    top += height + PDF_PAGE_GAP
+    const box: PdfPageBox = { printoutId: p.printoutId, pageNumber: p.pageNumber, left, top, width, height }
+    nextTop.set(p.printoutId, top + height + PDF_PAGE_GAP)
     return box
   })
 }
@@ -130,10 +132,14 @@ function computePdfPageLayout(pdfPages: RenderedPdfPage[], canvasWidth: number):
 // Liefert die 1-indexierte (wie pdf.js) Seitennummer, auf der ein Punkt mit dieser absoluten
 // Y-Koordinate liegt - oder null, wenn er auf keiner PDF-Seite liegt (kein PDF geladen, oder Y
 // liegt im Papierbereich unterhalb der letzten Seite).
-function findPdfPageAt(x: number, y: number, pdfPages: RenderedPdfPage[], canvasWidth: number): number | null {
+function findPdfPageAt(x: number, y: number, pdfPages: DrawingPdfPage[], canvasWidth: number): { printoutId: string; pageNumber: number } | null {
   const layout = computePdfPageLayout(pdfPages, canvasWidth)
-  for (let i = 0; i < layout.length; i++) {
-    if (x >= layout[i].left && x <= layout[i].left + layout[i].width && y >= layout[i].top && y < layout[i].top + layout[i].height) return i + 1
+  // Rueckwaerts suchen: spaeter eingefuegte PDFs liegen im DOM oben und gewinnen deshalb auch
+  // beim Schreiben, falls zwei Ausdrucke bewusst ueberlappen.
+  for (let i = layout.length - 1; i >= 0; i--) {
+    if (x >= layout[i].left && x <= layout[i].left + layout[i].width && y >= layout[i].top && y < layout[i].top + layout[i].height) {
+      return { printoutId: layout[i].printoutId, pageNumber: layout[i].pageNumber }
+    }
   }
   return null
 }
@@ -146,15 +152,13 @@ function findPdfPageAt(x: number, y: number, pdfPages: RenderedPdfPage[], canvas
 // PDF hat weniger Seiten als das alte).
 function pdfPageBox(
   anchor: { printoutId: string; pageNumber: number },
-  activePrintoutId: string | undefined,
-  pdfPages: RenderedPdfPage[],
+  pdfPages: DrawingPdfPage[],
   canvasWidth: number,
 ): PdfPageBox | null {
-  if (!activePrintoutId || anchor.printoutId !== activePrintoutId) return null
-  const idx = anchor.pageNumber - 1
   const layout = computePdfPageLayout(pdfPages, canvasWidth)
-  if (idx < 0 || idx >= layout.length || canvasWidth <= 0 || layout[idx].height <= 0) return null
-  return layout[idx]
+  const box = layout.find((page) => page.printoutId === anchor.printoutId && page.pageNumber === anchor.pageNumber)
+  if (!box || canvasWidth <= 0 || box.height <= 0) return null
+  return box
 }
 
 // Wandelt einen GERADE FERTIG GEZEICHNETEN, an eine PDF-Seite gebundenen Strich von absoluten
@@ -171,11 +175,10 @@ function pdfPageBox(
 function strokeToStored(
   stroke: Stroke,
   canvasWidth: number,
-  pdfPages: RenderedPdfPage[],
-  activePrintoutId: string | undefined,
+  pdfPages: DrawingPdfPage[],
 ): Stroke | null {
   if (!stroke.pdfAnchor) return null
-  const box = pdfPageBox(stroke.pdfAnchor, activePrintoutId, pdfPages, canvasWidth)
+  const box = pdfPageBox(stroke.pdfAnchor, pdfPages, canvasWidth)
   if (!box) return null
   return {
     ...stroke,
@@ -193,13 +196,12 @@ function strokeToStored(
 function strokeToAbsolute(
   stroke: Stroke,
   canvasWidth: number,
-  pdfPages: RenderedPdfPage[],
-  activePrintoutId: string | undefined,
+  pdfPages: DrawingPdfPage[],
 ): Stroke {
   if (!stroke.pdfAnchor) {
     return { ...stroke, points: stroke.points.map((p) => ({ ...p, x: toAbsoluteX(p.x, canvasWidth) })) }
   }
-  const box = pdfPageBox(stroke.pdfAnchor, activePrintoutId, pdfPages, canvasWidth)
+  const box = pdfPageBox(stroke.pdfAnchor, pdfPages, canvasWidth)
   if (!box) return stroke // Seite (noch) nicht aufloesbar - Bruchteils-Werte unveraendert lassen (zeichnet unauffaellig nahe der Ecke statt an falscher Stelle).
   return {
     ...stroke,
@@ -213,10 +215,9 @@ function strokeToAbsolute(
 function toDrawableStrokes(
   strokes: Stroke[],
   canvasWidth: number,
-  pdfPages: RenderedPdfPage[],
-  activePrintoutId: string | undefined,
+  pdfPages: DrawingPdfPage[],
 ): Stroke[] {
-  return strokes.map((s) => strokeToAbsolute(s, canvasWidth, pdfPages, activePrintoutId))
+  return strokes.map((s) => strokeToAbsolute(s, canvasWidth, pdfPages))
 }
 
 // Baut die zu speichernde (Dexie/Sync-)Fassung aus strokesRef.current: PDF-gebundene Striche
@@ -252,12 +253,11 @@ function computeStrokesInLasso(
   strokes: Stroke[],
   lassoPoints: Point[],
   canvasWidth: number,
-  pdfPages: RenderedPdfPage[],
-  activePrintoutId: string | undefined,
+  pdfPages: DrawingPdfPage[],
 ): Set<number> {
   const selected = new Set<number>()
   strokes.forEach((stroke, idx) => {
-    const abs = strokeToAbsolute(stroke, canvasWidth, pdfPages, activePrintoutId)
+    const abs = strokeToAbsolute(stroke, canvasWidth, pdfPages)
     if (abs.points.some((p) => isPointInPolygon(p, lassoPoints))) selected.add(idx)
   })
   return selected
@@ -277,8 +277,7 @@ function computeSelectionBox(
   strokes: Stroke[],
   selectedIndices: Set<number>,
   canvasWidth: number,
-  pdfPages: RenderedPdfPage[],
-  activePrintoutId: string | undefined,
+  pdfPages: DrawingPdfPage[],
   dragDx: number,
   dragDy: number,
 ): SelectionBox | null {
@@ -289,7 +288,7 @@ function computeSelectionBox(
   for (const idx of selectedIndices) {
     const stroke = strokes[idx]
     if (!stroke) continue
-    const abs = strokeToAbsolute(stroke, canvasWidth, pdfPages, activePrintoutId)
+    const abs = strokeToAbsolute(stroke, canvasWidth, pdfPages)
     for (const p of abs.points) {
       const x = p.x + dragDx
       const y = p.y + dragDy
@@ -315,8 +314,7 @@ function computeDragClamp(
   strokes: Stroke[],
   selectedIndices: Set<number>,
   canvasWidth: number,
-  pdfPages: RenderedPdfPage[],
-  activePrintoutId: string | undefined,
+  pdfPages: DrawingPdfPage[],
 ): { dx: number; dy: number } {
   let minDx = -Infinity
   let maxDx = Infinity
@@ -325,9 +323,9 @@ function computeDragClamp(
   for (const idx of selectedIndices) {
     const stroke = strokes[idx]
     if (!stroke?.pdfAnchor) continue
-    const box = pdfPageBox(stroke.pdfAnchor, activePrintoutId, pdfPages, canvasWidth)
+    const box = pdfPageBox(stroke.pdfAnchor, pdfPages, canvasWidth)
     if (!box) continue
-    const abs = strokeToAbsolute(stroke, canvasWidth, pdfPages, activePrintoutId)
+    const abs = strokeToAbsolute(stroke, canvasWidth, pdfPages)
     const xs = abs.points.map((p) => p.x)
     const ys = abs.points.map((p) => p.y)
     const strokeMinX = Math.min(...xs)
@@ -358,15 +356,14 @@ function applySelectionMove(
   dx: number,
   dy: number,
   canvasWidth: number,
-  pdfPages: RenderedPdfPage[],
-  activePrintoutId: string | undefined,
+  pdfPages: DrawingPdfPage[],
 ): Stroke[] {
   return strokes.map((stroke, idx) => {
     if (!selectedIndices.has(idx)) return stroke
     if (stroke.pdfAnchor) {
-      const abs = strokeToAbsolute(stroke, canvasWidth, pdfPages, activePrintoutId)
+      const abs = strokeToAbsolute(stroke, canvasWidth, pdfPages)
       const moved = { ...abs, points: abs.points.map((p) => ({ ...p, x: p.x + dx, y: p.y + dy })) }
-      return strokeToStored(moved, canvasWidth, pdfPages, activePrintoutId) ?? stroke
+      return strokeToStored(moved, canvasWidth, pdfPages) ?? stroke
     }
     return { ...stroke, points: stroke.points.map((p) => ({ ...p, x: p.x + dx, y: p.y + dy })) }
   })
@@ -417,6 +414,12 @@ function describeTouch(t: Touch): { touchType: string; force: number } {
   const touchType = (t as unknown as { touchType?: string }).touchType ?? 'direct'
   const force = typeof t.force === 'number' && t.force > 0 ? t.force : 0.5
   return { touchType, force }
+}
+
+interface DrawingPdfPage extends RenderedPdfPage {
+  printoutId: string
+  pageNumber: number
+  placement?: PdfPlacement
 }
 
 interface ViewState {
@@ -1371,15 +1374,15 @@ interface Props {
   onMoveTextBlock?: (id: string, x: number, y: number) => void
   onResizeTextBlockWidth?: (id: string, width: number) => void
   onOpenPageLink?: (pageId: string) => void
-  // PDF-Dateiausdruck (siehe db/types.ts PdfPrintout, lib/pdfStorage.ts) - gleiches optionales
-  // Muster wie Task/Textfeld: pdfPrintout ist nur die (persistierte) Metadaten-Zeile, das
+  // PDF-Dateiausdrucke (siehe db/types.ts PdfPrintout, lib/pdfStorage.ts) - gleiches optionales
+  // Muster wie Task/Textfeld: pdfPrintouts enthaelt nur die persistierten Metadaten-Zeilen, das
   // eigentliche Laden/Rendern der Seiten passiert intern in DrawingCanvas (braucht canvasWidth,
   // das kennt nur diese Komponente). onAttachPdf/onRemovePdf uebernehmen Storage-Upload bzw.
   // Soft-Delete - beides lebt in lib/actions.ts, nicht hier.
-  pdfPrintout?: { id: string; fileName: string; storagePath: string; placement?: PdfPlacement } | null
-  onPdfPlacementChange?: (placement: PdfPlacement) => Promise<void>
-  onAttachPdf?: (file: File) => Promise<void> | void
-  onRemovePdf?: () => void
+  pdfPrintouts?: { id: string; fileName: string; storagePath: string; placement?: PdfPlacement }[]
+  onPdfPlacementChange?: (id: string, placement: PdfPlacement) => Promise<void>
+  onAttachPdf?: (file: File, placement: PdfPlacement) => Promise<void> | void
+  onRemovePdf?: (id: string) => void
   // Lasso-Auswahl fuer Handschrift-Striche - der Modus selbst wird wie taskMode/textBlockMode
   // von aussen gesteuert (PageEditor.tsx, gleiche gegenseitige Ausschluss-Logik), die Auswahl
   // selbst (welche Striche, Verschieben, Loeschen) ist reiner DrawingCanvas-interner Zustand,
@@ -1417,7 +1420,7 @@ export default function DrawingCanvas({
   onMoveTextBlock,
   onResizeTextBlockWidth,
   onOpenPageLink,
-  pdfPrintout = null,
+  pdfPrintouts = [],
   onAttachPdf,
   onPdfPlacementChange,
   onRemovePdf,
@@ -1487,18 +1490,39 @@ export default function DrawingCanvas({
   // gerenderten Canvases selbst sind weiterhin rein lokaler Zustand (nie gespeichert, siehe
   // PdfPageHost oben) - was sich mit der dauerhaften Speicherung aendert, ist nur WOHER die
   // Bytes kommen (siehe Lade-Effekt unten, reagiert auf die von aussen (PageEditor.tsx)
-  // uebergebene pdfPrintout-Metadaten-Zeile statt nur auf die lokale Dateiauswahl).
-  const [renderedPdfPages, setPdfPages] = useState<RenderedPdfPage[]>([])
+  // uebergebenen pdfPrintout-Metadaten-Zeilen statt nur auf die lokale Dateiauswahl).
+  const [renderedPdfPages, setRenderedPdfPages] = useState<Record<string, RenderedPdfPage[]>>({})
   const [pdfEditing, setPdfEditing] = useState(false)
-  const [placementDraft, setPlacementDraft] = useState<PdfPlacement | null>(null)
-  useEffect(() => { setPdfEditing(false) }, [pdfPrintout?.id])
-  const pdfGestureRef = useRef<{ x: number; y: number; placement: PdfPlacement } | null>(null)
-  const placement = placementDraft ?? pdfPrintout?.placement
-  const pdfPages = useMemo(() => renderedPdfPages.map(page => ({ ...page, placement })), [renderedPdfPages, placement])
-  useEffect(() => { setPlacementDraft(null) }, [pdfPrintout?.id, pdfPrintout?.placement])
-  async function savePlacement(next: PdfPlacement) {
-    setPlacementDraft(next)
-    try { await onPdfPlacementChange?.(next) } catch { setPdfError('PDF-Position konnte nicht gespeichert werden.'); setPlacementDraft(null) }
+  const [selectedPdfId, setSelectedPdfId] = useState<string | null>(null)
+  const [placementDrafts, setPlacementDrafts] = useState<Record<string, PdfPlacement>>({})
+  const pdfGestureRef = useRef<{ id: string; x: number; y: number; placement: PdfPlacement } | null>(null)
+  const pdfPrintoutIds = pdfPrintouts.map((printout) => printout.id).join(',')
+  useEffect(() => {
+    if (pdfPrintouts.length === 0) {
+      setSelectedPdfId(null)
+      setPdfEditing(false)
+      return
+    }
+    if (selectedPdfId && pdfPrintouts.some((printout) => printout.id === selectedPdfId)) return
+    setSelectedPdfId(pdfPrintouts.at(-1)?.id ?? null)
+  }, [pdfPrintoutIds, pdfPrintouts, selectedPdfId])
+  const pdfPages = useMemo<DrawingPdfPage[]>(() => pdfPrintouts.flatMap((printout) =>
+    (renderedPdfPages[printout.id] ?? []).map((page, index) => ({
+      ...page,
+      printoutId: printout.id,
+      pageNumber: index + 1,
+      placement: placementDrafts[printout.id] ?? printout.placement,
+    })),
+  ), [pdfPrintouts, renderedPdfPages, placementDrafts])
+  async function savePlacement(id: string, next: PdfPlacement) {
+    setPlacementDrafts((drafts) => ({ ...drafts, [id]: next }))
+    try {
+      await onPdfPlacementChange?.(id, next)
+      setPlacementDrafts((drafts) => { const copy = { ...drafts }; delete copy[id]; return copy })
+    } catch {
+      setPdfError('PDF-Position konnte nicht gespeichert werden.')
+      setPlacementDrafts((drafts) => { const copy = { ...drafts }; delete copy[id]; return copy })
+    }
   }
   const [pdfLoading, setPdfLoading] = useState(false)
   const [pdfError, setPdfError] = useState<string | null>(null)
@@ -1521,7 +1545,7 @@ export default function DrawingCanvas({
   // Bildschirmhoehe als echter Arbeitsbereich. Naehert sich der Nutzer dessen Ende, erhoeht
   // applyView canvasExtensionCount und erzeugt dadurch fortlaufend neues, beschreibbares Papier.
   const pdfLayout = computePdfPageLayout(pdfPages, canvasWidth)
-  const pdfContentHeight = pdfLayout.length > 0 ? pdfLayout[pdfLayout.length - 1].top + pdfLayout[pdfLayout.length - 1].height : 0
+  const pdfContentHeight = pdfLayout.reduce((bottom, page) => Math.max(bottom, page.top + page.height), 0)
   // Nach erneutem Oeffnen ist canvasExtensionCount wieder 0. Die Mindesthoehe deshalb auch aus
   // den tatsaechlich gespeicherten Inhalten ableiten, damit weit unten liegende Elemente sofort
   // erreichbar bleiben. PDF-gebundene Striche speichern y relativ zu ihrer PDF-Seite (0-1) und
@@ -1547,14 +1571,10 @@ export default function DrawingCanvas({
 
   // Refs fuer die Striche-PDF-Bindung, gebraucht im Mount-Effekt weiter unten (dort sind nur
   // Refs sicher aktuell, siehe colorRef/baseWidthRef-Muster) und in redrawCanvas.
-  const pdfPagesRef = useRef<RenderedPdfPage[]>(pdfPages)
+  const pdfPagesRef = useRef<DrawingPdfPage[]>(pdfPages)
   useEffect(() => {
     pdfPagesRef.current = pdfPages
   }, [pdfPages])
-  const pdfPrintoutRef = useRef(pdfPrintout)
-  useEffect(() => {
-    pdfPrintoutRef.current = pdfPrintout
-  }, [pdfPrintout])
 
   // Lasso-Auswahl: lassoModeRef fuer den Mount-Effekt (siehe colorRef-Muster). selectedIndices
   // sind Indizes in strokesRef.current statt einer stabilen Id (Strokes haben keine) - sicher,
@@ -1600,7 +1620,6 @@ export default function DrawingCanvas({
       selectedIndicesRef.current,
       canvasWidthRef.current,
       pdfPagesRef.current,
-      pdfPrintoutRef.current?.id,
       0,
       0,
     )
@@ -1634,7 +1653,6 @@ export default function DrawingCanvas({
         selectedIndicesRef.current,
         canvasWidthRef.current,
         pdfPagesRef.current,
-        pdfPrintoutRef.current?.id,
       )
       redrawCanvas()
     } else if (lassoGestureRef.current === 'drawing') {
@@ -1654,7 +1672,6 @@ export default function DrawingCanvas({
           offset.dy,
           canvasWidthRef.current,
           pdfPagesRef.current,
-          pdfPrintoutRef.current?.id,
         )
         onChangeRef.current(toSavedStrokes(strokesRef.current, canvasWidthRef.current))
       }
@@ -1663,7 +1680,7 @@ export default function DrawingCanvas({
     } else if (lassoGestureRef.current === 'drawing') {
       const path = lassoPathRef.current
       if (path.length >= 3) {
-        const selected = computeStrokesInLasso(strokesRef.current, path, canvasWidthRef.current, pdfPagesRef.current, pdfPrintoutRef.current?.id)
+        const selected = computeStrokesInLasso(strokesRef.current, path, canvasWidthRef.current, pdfPagesRef.current)
         selectedIndicesRef.current = selected
         setSelectedIndices(selected)
       }
@@ -1720,9 +1737,8 @@ export default function DrawingCanvas({
     if (!canvas || !ctx) return
     const width = canvasWidthRef.current
     const pages = pdfPagesRef.current
-    const activeId = pdfPrintoutRef.current?.id
     const offset = dragOffsetRef.current
-    let drawable = toDrawableStrokes(strokesRef.current, width, pages, activeId)
+    let drawable = toDrawableStrokes(strokesRef.current, width, pages)
     // Waehrend eines laufenden Verschiebens der Auswahl werden nur die ausgewaehlten Striche
     // fuer DIESEN Zeichenaufruf transient um den (bereits begrenzten) Versatz verschoben -
     // strokesRef.current selbst bleibt bis zum Loslassen unveraendert (siehe finishLassoGesture).
@@ -1738,7 +1754,7 @@ export default function DrawingCanvas({
       drawDashedPath(ctx, lassoPathRef.current)
     }
     if (selectedIndicesRef.current.size > 0) {
-      const box = computeSelectionBox(strokesRef.current, selectedIndicesRef.current, width, pages, activeId, offset?.dx ?? 0, offset?.dy ?? 0)
+      const box = computeSelectionBox(strokesRef.current, selectedIndicesRef.current, width, pages, offset?.dx ?? 0, offset?.dy ?? 0)
       if (box) drawSelectionBox(ctx, box)
     }
   }
@@ -1753,15 +1769,15 @@ export default function DrawingCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pdfPages])
 
-  // Laedt + rendert den aktuellen pdfPrintout, sobald er sich aendert (neu gesetzt, entfernt,
-  // oder durch einen anderen ersetzt - erkennbar an einer anderen id). loadPdfBlob (siehe
+  // Laedt + rendert alle aktiven PDF-Ausdrucke, sobald sich deren Liste aendert. loadPdfBlob (siehe
   // lib/pdfStorage.ts) nutzt zuerst den lokalen Blob-Cache und laedt nur bei einem Cache-Miss aus
   // Supabase Storage nach - dadurch funktioniert ein bereits einmal geoeffnetes PDF auch offline,
   // und ein normaler Seitenaufruf laedt die Datei nicht bei jedem Mal neu herunter.
   useEffect(() => {
-    if (!pdfPrintout) {
-      setPdfPages([])
+    if (pdfPrintouts.length === 0) {
+      setRenderedPdfPages({})
       setPdfError(null)
+      setPdfLoading(false)
       return
     }
     let cancelled = false
@@ -1774,10 +1790,22 @@ export default function DrawingCanvas({
         // angezeigt wird. lib/pdfStorage.ts ist dagegen winzig und steckt ueber lib/actions.ts
         // ohnehin schon im Hauptbundle, ein dynamischer Import haette dort keinen Vorteil.
         const { renderPdfPages } = await import('../lib/pdfRender')
-        const blob = await loadPdfBlob(pdfPrintout)
-        if (cancelled) return
-        const pages = await renderPdfPages(blob, canvasWidthRef.current || 800)
-        if (!cancelled) setPdfPages(pages)
+        const loaded = await Promise.all(pdfPrintouts.map(async (printout) => {
+          try {
+            const blob = await loadPdfBlob(printout)
+            const pages = await renderPdfPages(blob, canvasWidthRef.current || 800)
+            return { id: printout.id, pages }
+          } catch (error) {
+            console.error(error)
+            return { id: printout.id, pages: null }
+          }
+        }))
+        if (!cancelled) {
+          const available: Record<string, RenderedPdfPage[]> = {}
+          for (const item of loaded) if (item.pages) available[item.id] = item.pages
+          setRenderedPdfPages(available)
+          if (loaded.some((item) => !item.pages)) setPdfError('Mindestens ein PDF konnte nicht geladen werden.')
+        }
       } catch (err) {
         console.error(err)
         if (!cancelled) setPdfError('PDF konnte nicht geladen werden.')
@@ -1789,7 +1817,7 @@ export default function DrawingCanvas({
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pdfPrintout?.id])
+  }, [pdfPrintoutIds])
 
   async function handlePdfFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -1798,7 +1826,7 @@ export default function DrawingCanvas({
     setPdfLoading(true)
     setPdfError(null)
     try {
-      await onAttachPdf(file)
+      await onAttachPdf(file, { x: 0, y: pdfContentHeight > 0 ? pdfContentHeight + PDF_PAGE_GAP : 0, width: 1 })
     } catch (err) {
       console.error(err)
       setPdfError('PDF konnte nicht hochgeladen werden.')
@@ -1841,7 +1869,7 @@ export default function DrawingCanvas({
       // gezeichneten absoluten Position speichern als eine PDF-Bindung mit noch-absoluten,
       // spaeter falsch interpretierten Koordinaten zu persistieren.
       const finished = stroke.pdfAnchor
-        ? (strokeToStored(stroke, canvasWidthRef.current, pdfPagesRef.current, pdfPrintoutRef.current?.id) ?? { ...stroke, pdfAnchor: undefined })
+        ? (strokeToStored(stroke, canvasWidthRef.current, pdfPagesRef.current) ?? { ...stroke, pdfAnchor: undefined })
         : stroke
       strokesRef.current.push(finished)
       setStrokeCount(strokesRef.current.length)
@@ -2034,14 +2062,13 @@ export default function DrawingCanvas({
       // gesamte Dauer des Strichs, ein einzelner Pencil-Zug ueberquert in der Praxis nie eine
       // Seitengrenze. Ohne PDF an dieser Stelle (kein pdfPrintout oder Y liegt im Papierbereich)
       // bleibt der Strich komplett ungebunden - normale Tinte verhaelt sich dadurch unveraendert.
-      const printoutId = pdfPrintoutRef.current?.id
-      const pageNumber = printoutId ? findPdfPageAt(p.x, p.y, pdfPagesRef.current, canvasWidthRef.current) : null
+      const anchor = findPdfPageAt(p.x, p.y, pdfPagesRef.current, canvasWidthRef.current)
       currentStrokeRef.current = {
         points: [p],
         color: colorRef.current,
         width: baseWidthRef.current,
         eraser: eraserRef.current,
-        pdfAnchor: printoutId && pageNumber !== null ? { printoutId, pageNumber } : undefined,
+        pdfAnchor: anchor ?? undefined,
       }
     }
 
@@ -2338,6 +2365,11 @@ export default function DrawingCanvas({
     }
   }
 
+  const selectedPdf = pdfPrintouts.find((printout) => printout.id === selectedPdfId) ?? null
+  const selectedPlacement = selectedPdf
+    ? placementDrafts[selectedPdf.id] ?? selectedPdf.placement ?? { x: 0, y: 0, width: 1 }
+    : null
+
   return (
     <div className="drawing">
       <div className="drawing-toolbar">
@@ -2402,7 +2434,7 @@ export default function DrawingCanvas({
           onChange={handlePdfFileChange}
         />
         <button
-          className={`icon-button${pdfPrintout ? ' active' : ''}`}
+          className={`icon-button${pdfPrintouts.length > 0 ? ' active' : ''}`}
           onClick={() => pdfFileInputRef.current?.click()}
           disabled={pdfLoading}
           aria-label="PDF einfügen"
@@ -2410,13 +2442,13 @@ export default function DrawingCanvas({
         >
           <PdfIcon />
         </button>
-        {pdfPrintout && onPdfPlacementChange && (
+        {pdfPrintouts.length > 0 && onPdfPlacementChange && (
           <button aria-pressed={pdfEditing} onClick={() => setPdfEditing(value => !value)}>
             {pdfEditing ? "Fertig" : "PDF bearbeiten"}
           </button>
         )}
-        {pdfPrintout && (
-          <button className="icon-button" onClick={() => onRemovePdf?.()} aria-label="PDF entfernen" title="PDF entfernen">
+        {pdfEditing && selectedPdf && (
+          <button className="icon-button" onClick={() => onRemovePdf?.(selectedPdf.id)} aria-label="Ausgewähltes PDF entfernen" title="Ausgewähltes PDF entfernen">
             ✕
           </button>
         )}
@@ -2509,31 +2541,37 @@ export default function DrawingCanvas({
           }}
           onClick={handleTaskLayerClick}
         >
-          {pdfEditing && pdfPages.length > 0 && onPdfPlacementChange && (
-            <div className="pdf-controls" style={{ left: pdfLayout[0].left, top: pdfLayout[0].top, width: pdfLayout[0].width }} onClick={e => e.stopPropagation()}>
-              <button type="button" title="PDF verschieben" aria-label="PDF verschieben"
-                onPointerDown={e => {
-                  e.preventDefault(); e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId)
-                  pdfGestureRef.current = { x: e.clientX, y: e.clientY, placement: placement ?? { x: 0, y: 0, width: 1 } }
-                }}
-                onPointerMove={e => {
-                  const gesture = pdfGestureRef.current
-                  if (!gesture) return
-                  const width = gesture.placement.width
-                  setPlacementDraft({ width, x: Math.max(0, Math.min(1 - width, gesture.placement.x + (e.clientX - gesture.x) / viewRef.current.scale / canvasWidth)), y: Math.max(0, gesture.placement.y + (e.clientY - gesture.y) / viewRef.current.scale) })
-                }}
-                onPointerUp={e => {
-                  if (!pdfGestureRef.current) return
-                  const gesture = pdfGestureRef.current
-                  pdfGestureRef.current = null; e.currentTarget.releasePointerCapture(e.pointerId)
-                  const width = gesture.placement.width
-                  void savePlacement({ width, x: Math.max(0, Math.min(1 - width, gesture.placement.x + (e.clientX - gesture.x) / viewRef.current.scale / canvasWidth)), y: Math.max(0, gesture.placement.y + (e.clientY - gesture.y) / viewRef.current.scale) })
-                }}
-                onPointerCancel={() => { pdfGestureRef.current = null; setPlacementDraft(null) }}
-              >⠿ {pdfPrintout?.fileName}</button>
-
-            </div>
-          )}
+          {pdfEditing && onPdfPlacementChange && pdfPrintouts.map((printout) => {
+            const firstPageIndex = pdfPages.findIndex((page) => page.printoutId === printout.id && page.pageNumber === 1)
+            const box = firstPageIndex >= 0 ? pdfLayout[firstPageIndex] : null
+            if (!box) return null
+            const currentPlacement = placementDrafts[printout.id] ?? printout.placement ?? { x: 0, y: 0, width: 1 }
+            return (
+              <div key={printout.id} className={`pdf-controls${selectedPdfId === printout.id ? ' selected' : ''}`} style={{ left: box.left, top: box.top, width: box.width }} onClick={e => e.stopPropagation()}>
+                <button type="button" title="PDF verschieben" aria-label={`${printout.fileName} verschieben`}
+                  onPointerDown={e => {
+                    e.preventDefault(); e.stopPropagation(); setSelectedPdfId(printout.id); e.currentTarget.setPointerCapture(e.pointerId)
+                    pdfGestureRef.current = { id: printout.id, x: e.clientX, y: e.clientY, placement: currentPlacement }
+                  }}
+                  onPointerMove={e => {
+                    const gesture = pdfGestureRef.current
+                    if (!gesture || gesture.id !== printout.id) return
+                    const width = gesture.placement.width
+                    const next = { width, x: Math.max(0, Math.min(1 - width, gesture.placement.x + (e.clientX - gesture.x) / viewRef.current.scale / canvasWidth)), y: Math.max(0, gesture.placement.y + (e.clientY - gesture.y) / viewRef.current.scale) }
+                    setPlacementDrafts((drafts) => ({ ...drafts, [printout.id]: next }))
+                  }}
+                  onPointerUp={e => {
+                    const gesture = pdfGestureRef.current
+                    if (!gesture || gesture.id !== printout.id) return
+                    pdfGestureRef.current = null; e.currentTarget.releasePointerCapture(e.pointerId)
+                    const width = gesture.placement.width
+                    void savePlacement(printout.id, { width, x: Math.max(0, Math.min(1 - width, gesture.placement.x + (e.clientX - gesture.x) / viewRef.current.scale / canvasWidth)), y: Math.max(0, gesture.placement.y + (e.clientY - gesture.y) / viewRef.current.scale) })
+                  }}
+                  onPointerCancel={() => { pdfGestureRef.current = null; setPlacementDrafts((drafts) => { const copy = { ...drafts }; delete copy[printout.id]; return copy }) }}
+                >⠿ {printout.fileName}</button>
+              </div>
+            )
+          })}
           {textBlockAlignmentGuide && (
             <div
               className="text-block-alignment-guide"
@@ -2581,14 +2619,16 @@ export default function DrawingCanvas({
           ))}
         </div>
       </div>
-      {pdfEditing && pdfPrintout && onPdfPlacementChange && (
+      {pdfEditing && selectedPdf && selectedPlacement && onPdfPlacementChange && (
         <div className="pdf-edit-panel" role="region" aria-label="PDF bearbeiten">
-          <span className="pdf-edit-name">{pdfPrintout.fileName}</span>
-              <label>Größe <select aria-label="PDF-Größe" value={placement?.width ?? 1} onChange={e => {
+          <label>PDF <select aria-label="PDF auswählen" value={selectedPdf.id} onChange={(e) => setSelectedPdfId(e.target.value)}>
+            {pdfPrintouts.map((printout) => <option key={printout.id} value={printout.id}>{printout.fileName}</option>)}
+          </select></label>
+          <label>Größe <select aria-label="PDF-Größe" value={selectedPlacement.width} onChange={e => {
                 const width = Number(e.target.value)
-                void savePlacement({ x: Math.min(placement?.x ?? 0, 1 - width), y: placement?.y ?? 0, width })
+                void savePlacement(selectedPdf.id, { x: Math.min(selectedPlacement.x, 1 - width), y: selectedPlacement.y, width })
               }}>{[0.25, 0.4, 0.5, 0.6, 0.75, 1].map(width => <option key={width} value={width}>{width * 100} %</option>)}</select></label>
-          <span className="pdf-edit-hint">Am Griff verschieben · Beschriftung bleibt erhalten</span>
+          <span className="pdf-edit-hint">{pdfPrintouts.length} PDF{pdfPrintouts.length === 1 ? '' : 's'} · Am jeweiligen Griff verschieben</span>
           <button type="button" onClick={() => setPdfEditing(false)}>Fertig</button>
         </div>
       )}
