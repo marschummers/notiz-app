@@ -419,15 +419,6 @@ function describeTouch(t: Touch): { touchType: string; force: number } {
   return { touchType, force }
 }
 
-function hasStylusContact(t: Touch): boolean {
-  // Beim Abheben liefert WebKit vereinzelt noch ein letztes touchmove fuer den Pencil. Dessen
-  // Position kann bereits weit versetzt sein, force ist dabei aber 0. Dieser Sample darf nicht
-  // mit dem letzten echten Punkt verbunden werden (sonst entsteht ein langer gerader Strich).
-  // Auf Browsern ohne Force-Unterstuetzung ist Touch.force undefined; dort bleibt das bisherige
-  // Verhalten deshalb unveraendert.
-  return typeof t.force !== 'number' || t.force > 0
-}
-
 interface ViewState {
   scale: number
   x: number
@@ -444,6 +435,7 @@ interface PinchState {
   startMidY: number
   startPanX: number
   startPanY: number
+  mode: 'undecided' | 'pan' | 'zoom'
 }
 
 // Ein To-do, wie es auf der Seite platziert dargestellt wird - siehe db/types.ts Task, hier
@@ -1990,6 +1982,10 @@ export default function DrawingCanvas({
     function startPinch() {
       const pts = Array.from(fingersRef.current.values())
       if (pts.length !== 2) return
+      // Eine echte Zwei-Finger-Geste ist zugleich ein sicheres Signal, dass kein Pencil-Strich
+      // mehr fortgesetzt werden darf. Das raeumt auch einen von WebKit verschluckten touchend
+      // auf, bevor eine spaeter wiederverwendete Touch-ID Fingerbewegungen an Tinte anhaengt.
+      if (activeTouchIdRef.current !== null) finishCurrentStroke()
       const [a, b] = pts
       pinchStateRef.current = {
         startDist: Math.hypot(b.x - a.x, b.y - a.y),
@@ -1998,6 +1994,7 @@ export default function DrawingCanvas({
         startMidY: (a.y + b.y) / 2,
         startPanX: viewRef.current.x,
         startPanY: viewRef.current.y,
+        mode: 'undecided',
       }
     }
 
@@ -2008,7 +2005,19 @@ export default function DrawingCanvas({
       const midX = (ax + bx) / 2
       const midY = (ay + by) / 2
       const rect = overlay!.getBoundingClientRect()
-      const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, state.startScale * (dist / state.startDist)))
+      // Bei einem Zwei-Finger-Scroll schwankt der Fingerabstand immer leicht. Die Geste wird
+      // deshalb nach einer kleinen Totzone auf Pan ODER Zoom festgelegt. Ist sie als Scrollen
+      // erkannt, kann der unvermeidliche Abstandsjitter den Zoom fuer den Rest der Geste nicht
+      // mehr veraendern.
+      if (state.mode === 'undecided') {
+        const pinchDistance = Math.abs(dist - state.startDist)
+        const panDistance = Math.hypot(midX - state.startMidX, midY - state.startMidY)
+        if (pinchDistance >= 8 && pinchDistance > panDistance * 1.25) state.mode = 'zoom'
+        else if (panDistance >= 8) state.mode = 'pan'
+      }
+      const newScale = state.mode === 'zoom'
+        ? Math.min(MAX_SCALE, Math.max(MIN_SCALE, state.startScale * (dist / state.startDist)))
+        : state.startScale
       // Der Punkt unter der urspruenglichen Fingermitte soll unter der neuen Fingermitte bleiben
       // (klassisches Pinch-to-Point-Zoomverhalten statt Zoom immer zur Ecke hin).
       const startLocalX = state.startMidX - rect.left
@@ -2144,12 +2153,10 @@ export default function DrawingCanvas({
       for (const t of Array.from(e.changedTouches)) {
         if (t.identifier !== activeTouchIdRef.current) continue
         const { touchType, force } = describeTouch(t)
-        if (touchType === 'stylus' && !hasStylusContact(t)) {
-          // Der Kontakt ist physisch bereits beendet. Den Strich sofort abschliessen, auch wenn
-          // das zugehoerige touchend erst spaeter kommt oder von WebKit ganz verschluckt wird.
-          finishCurrentStroke()
-          continue
-        }
+        // Touch-IDs werden von WebKit nach dem Ende eines Kontakts wiederverwendet. Falls das
+        // touchend des Pencils verloren ging, darf ein Finger mit derselben ID den alten Strich
+        // unter keinen Umstaenden verlaengern.
+        if (touchType !== 'stylus') continue
         const p = pointFrom(t.clientX, t.clientY, force)
         extendStroke(p)
         updateDebug(touchType, force)
