@@ -1148,6 +1148,40 @@ function TextBlockItem({
     })
   }
 
+  function selectionListItem(): HTMLLIElement | null {
+    const editor = editorRef.current
+    const selection = window.getSelection()
+    if (!editor || !selection || selection.rangeCount === 0) return null
+    let element = selection.getRangeAt(0).startContainer
+    if (element.nodeType !== Node.ELEMENT_NODE) element = element.parentNode ?? element
+    const item = (element as Element).closest?.('li')
+    return item instanceof HTMLLIElement && editor.contains(item) ? item : null
+  }
+
+  function startListFromTypedMarker(): boolean {
+    const editor = editorRef.current
+    const selection = window.getSelection()
+    if (!editor || !selection || selection.rangeCount === 0 || !selection.isCollapsed) return false
+    const caret = selection.getRangeAt(0)
+    if (!(caret.startContainer instanceof Text)) return false
+    const textNode = caret.startContainer
+    const textBeforeCaret = textNode.data.slice(0, caret.startOffset)
+    const marker = textBeforeCaret === '-' ? '-' : textBeforeCaret === '1.' ? '1.' : null
+    if (marker !== '-' && marker !== '1.') return false
+
+    // Das bereits geschriebene Listenzeichen entfernen; der Browser erzeugt danach am selben
+    // Cursor eine echte Liste und kuemmert sich damit auch um Nummerierung und Verschachtelung.
+    const markerRange = document.createRange()
+    markerRange.setStart(textNode, caret.startOffset - marker.length)
+    markerRange.setEnd(textNode, caret.startOffset)
+    markerRange.deleteContents()
+    selection.removeAllRanges()
+    selection.addRange(markerRange)
+    document.execCommand(marker === '1.' ? 'insertOrderedList' : 'insertUnorderedList')
+    updateDraftFromEditor()
+    return true
+  }
+
   function handleDraftKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     if (linkTrigger && matchedPages.length > 0) {
       if (e.key === 'ArrowDown') {
@@ -1170,6 +1204,23 @@ function TextBlockItem({
         setLinkTrigger(null)
         return
       }
+    }
+    if (e.key === ' ' && startListFromTypedMarker()) {
+      e.preventDefault()
+      return
+    }
+    if (e.key === 'Tab' && selectionListItem()) {
+      e.preventDefault()
+      document.execCommand(e.shiftKey ? 'outdent' : 'indent')
+      updateDraftFromEditor()
+      return
+    }
+    if (e.key === 'Enter' && selectionListItem()) {
+      // Innerhalb einer Liste darf der Browser den naechsten Listenpunkt erzeugen. Nach dem
+      // zweiten Enter auf einem leeren Punkt verlaesst er die Liste; ein weiteres Enter nutzt
+      // dann wieder die bestehende Speichern-/Schliessen-Logik weiter unten.
+      requestAnimationFrame(updateDraftFromEditor)
+      return
     }
     if (e.key === 'Enter' && !e.shiftKey) {
       // Enter (ohne Shift) speichert - Shift+Enter erlaubt einen Zeilenumbruch, das Textfeld

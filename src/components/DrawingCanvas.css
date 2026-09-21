@@ -534,6 +534,31 @@
   word-break: break-word;
 }
 
+.text-block-input ol,
+.text-block-input ul,
+.text-block-content ol,
+.text-block-content ul {
+  margin: 0;
+  padding-left: 1.65em;
+}
+
+.text-block-input ol ol,
+.text-block-input ol ul,
+.text-block-input ul ol,
+.text-block-input ul ul,
+.text-block-content ol ol,
+.text-block-content ol ul,
+.text-block-content ul ol,
+.text-block-content ul ul {
+  margin-top: 0.15em;
+  padding-left: 1.5em;
+}
+
+.text-block-input li,
+.text-block-content li {
+  padding-left: 0.15em;
+}
+
 .text-block-input:empty::before {
   content: attr(data-placeholder);
   color: #8a7f6a;

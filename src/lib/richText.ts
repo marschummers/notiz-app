@@ -1,7 +1,9 @@
 export const RICH_TEXT_PREFIX = 'notiz-rich-v1:'
 
 const LINK_PATTERN = /\[\[([^\]:]+):([^\]]+)\]\]/g
-const ALLOWED_TAGS = new Set(['BR', 'DIV', 'P', 'STRONG', 'EM', 'U', 'SPAN'])
+// OL/UL/LI gehoeren zum gespeicherten Rich-Text-Format. Ohne diese Freigabe wuerden vom
+// contentEditable erzeugte Listen beim Speichern wieder zu unformatiertem Text reduziert.
+const ALLOWED_TAGS = new Set(['BR', 'DIV', 'P', 'STRONG', 'EM', 'U', 'SPAN', 'OL', 'UL', 'LI'])
 const ALLOWED_COLORS = /^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%]+\)|hsla?\([\d\s.,%]+\)|[a-z]+)$/i
 
 function cleanElement(source: Element, targetDocument: Document): Node {
@@ -58,7 +60,7 @@ function richTextHtmlToPlainText(html: string): string {
   const container = document.createElement('div')
   container.innerHTML = html
   for (const br of Array.from(container.querySelectorAll('br'))) br.replaceWith('\n')
-  for (const block of Array.from(container.querySelectorAll('div, p'))) block.append('\n')
+  for (const block of Array.from(container.querySelectorAll('div, p, li'))) block.append('\n')
   return (container.textContent ?? '').replace(/\n+$/g, '')
 }
 
