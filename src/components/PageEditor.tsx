@@ -234,6 +234,7 @@ export default function PageEditor({ pageId, sidebarOpen, onToggleSidebar, onBac
       <div className="page-editor-canvas">
         <DrawingCanvas
           key={pageId}
+          viewStorageKey={pageId}
           initialStrokes={page.strokes}
           background={pageBackground}
           title={page.title}

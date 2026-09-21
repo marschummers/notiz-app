@@ -37,4 +37,5 @@ jobs:
             node .github/scripts/check-migration-safety.mjs
           fi
       - run: npm run lint
+      - run: npm test
       - run: npm run build

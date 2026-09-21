@@ -96,13 +96,10 @@
   flex: 1;
   width: 100%;
   min-height: 0;
-  /* Frei verbreiterte Textfelder duerfen ueber die sichtbare Papierbreite hinausragen.
-     In diesem Fall erscheint am unteren Rand der Zeichenflaeche eine horizontale
-     Scrollleiste, damit auch der rechte Teil erreichbar bleibt. Vertikal wird die Seite
-     weiterhin ueber die bestehende Zoom-/Pan-Logik navigiert. */
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior-x: contain;
+  /* Die Welt wird ausschliesslich ueber ihre Kamera navigiert. Native Scrollleisten wuerden
+     mit Pan/Zoom konkurrieren und koennen negative Weltkoordinaten ohnehin nicht darstellen. */
+  overflow: hidden;
+  overscroll-behavior: contain;
   /* Sichtbar, wenn beim Herauszoomen/Verschieben Raender ausserhalb von Hintergrund/Canvas
      frei liegen - selbe Papierfarbe, damit das nicht als Luecke auffaellt. */
   background-color: #f3f0e7;
@@ -131,36 +128,22 @@
   pointer-events: none;
 }
 
-/* Liegen NICHT mehr auf .drawing-background selbst, sondern auf einzelnen
-   .drawing-background-chunk-Kindern (siehe dort) - deshalb ohne .drawing-background-Praefix,
-   damit dieselbe Regel fuer beide gilt. */
-/* Liniert: grosszuegiger Zeilenabstand zum Handschreiben. */
-.bg-lined {
-  background-image: repeating-linear-gradient(to bottom, transparent, transparent 39px, #d8d0ba 39px, #d8d0ba 40px);
+/* Das Papiermuster liegt auf der viewportgrossen Hintergrundebene. Groesse und Position werden
+   aus Zoom/Kamera abgeleitet, deshalb bleibt das Raster in allen Richtungen lueckenlos, ohne ein
+   tatsaechlich unendlich grosses DOM-Element anzulegen. */
+.drawing-background.bg-lined {
+  background-image: linear-gradient(to bottom, transparent calc(100% - var(--pattern-mark-size, 1px)), #d8d0ba 0);
+  background-repeat: repeat;
 }
 
 /* Gepunktetes Raster (Bullet-Journal-Stil). */
-.bg-dotted {
-  background-image: radial-gradient(#c7bfa4 1.2px, transparent 1.2px);
-  background-size: 24px 24px;
+.drawing-background.bg-dotted {
+  background-image: radial-gradient(circle, #c7bfa4 var(--pattern-mark-size, 1.2px), transparent calc(var(--pattern-mark-size, 1.2px) + .2px));
+  background-repeat: repeat;
 }
 
-.bg-blank {
+.drawing-background.bg-blank {
   background-image: none;
-}
-
-/* Ein Segment des liniert/gepunktet-Musters (siehe DrawingCanvas.tsx, PATTERN_CHUNK_HEIGHT) -
-   WebKit/Safari rastert einen CSS-Gradient-Hintergrund auf einem SEHR hohen Element (mehrseitige
-   PDFs koennen die Zeichenflaeche auf mehrere Tausend Pixel Hoehe bringen) manchmal nur
-   teilweise (leere Streifen ohne Muster, siehe Chat-Diagnose - Layout-Hoehe war nachweislich
-   korrekt, das Malen selbst schlug fehl). Das Muster deshalb nie auf einem einzigen, beliebig
-   hohen Element rendern, sondern auf mehrere ausreichend kleine, gestapelte Segmente verteilen -
-   PATTERN_CHUNK_HEIGHT ist ein gemeinsames Vielfaches von 40px (liniert) und 24px (gepunktet),
-   die Segmentgrenzen fallen dadurch exakt auf eine Musterperiode, die Naht ist unsichtbar. */
-.drawing-background-chunk {
-  position: absolute;
-  left: 0;
-  width: 100%;
 }
 
 /* Cornell-Layout: Titel, Subject-Box, zweispaltiger Details/Key-Points-Bereich, Summary-Box
@@ -271,6 +254,12 @@
    leerer Flaeche ab (zum Platzieren). Einzelne .task-block-Elemente sind IMMER bedienbar,
    unabhaengig vom Modus - siehe pointer-events-Override dort. */
 .task-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.task-world-layer {
   position: absolute;
   inset: 0;
   transform-origin: 0 0;
@@ -705,12 +694,12 @@
   color-scheme: dark;
 }
 
-.dark-paper .bg-lined {
-  background-image: repeating-linear-gradient(to bottom, transparent, transparent 39px, #3d3b32 39px, #3d3b32 40px);
+.dark-paper .drawing-background.bg-lined {
+  background-image: linear-gradient(to bottom, transparent calc(100% - var(--pattern-mark-size, 1px)), #3d3b32 0);
 }
 
-.dark-paper .bg-dotted {
-  background-image: radial-gradient(#575348 1.2px, transparent 1.2px);
+.dark-paper .drawing-background.bg-dotted {
+  background-image: radial-gradient(circle, #575348 var(--pattern-mark-size, 1.2px), transparent calc(var(--pattern-mark-size, 1.2px) + .2px));
 }
 
 .dark-paper .cornell-title,

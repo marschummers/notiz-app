@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import type { PageBackground, PdfPlacement, Point, Stroke } from '../db/types'
 import { formatRelativeTime } from '../lib/format'
+import { panInfiniteCanvas, paperPatternViewportStyle, zoomAroundPoint } from '../lib/canvasViewport'
 import { richTextToDisplayHtml, richTextToEditorHtml, richTextToPlainText, serializeRichText } from '../lib/richText'
 import type { RenderedPdfPage } from '../lib/pdfRender'
 import { loadPdfBlob } from '../lib/pdfStorage'
@@ -11,15 +12,6 @@ import './DrawingCanvas.css'
 // weiter unten) - eigene Konstante statt CSS-Margin, damit die JS-Berechnung der benoetigten
 // Gesamthoehe (siehe contentHeight) exakt mit der tatsaechlichen Darstellung uebereinstimmt.
 const PDF_PAGE_GAP = 14
-
-// Hoehe eines einzelnen Papiermuster-Segments (siehe .drawing-background-chunk in
-// DrawingCanvas.css) - WebKit rastert einen CSS-Gradient-Hintergrund auf einem sehr hohen
-// Element (bei mehrseitigen PDFs kann die Zeichenflaeche mehrere Tausend Pixel hoch werden)
-// manchmal nur teilweise. Das Papiermuster wird deshalb auf mehrere gestapelte, ausreichend
-// kleine Segmente verteilt statt auf ein einziges hohes Element gerendert. 2400 ist ein
-// gemeinsames Vielfaches von 40px (liniert) und 24px (gepunktet), Segmentgrenzen fallen dadurch
-// exakt auf eine Musterperiode und die Naht zwischen zwei Segmenten bleibt unsichtbar.
-const PATTERN_CHUNK_HEIGHT = 2400
 
 // Haengt ein bereits von pdf.js gerendertes <canvas> (siehe lib/pdfRender.ts) direkt in den DOM
 // statt es erneut ueber eine DataURL zu kodieren - das Original bleibt ein einziges, nur im
@@ -87,8 +79,15 @@ function drawSegment(ctx: CanvasRenderingContext2D, from: Point, control: Point,
   ctx.stroke()
 }
 
-function redrawAll(ctx: CanvasRenderingContext2D, width: number, height: number, strokes: Stroke[], darkPaper = false) {
-  ctx.clearRect(0, 0, width, height)
+function setCanvasWorldTransform(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, view: ViewState) {
+  const dpr = canvas.clientWidth > 0 ? canvas.width / canvas.clientWidth : window.devicePixelRatio || 1
+  ctx.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.x, dpr * view.y)
+}
+
+function redrawAll(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, strokes: Stroke[], view: ViewState, darkPaper = false) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  setCanvasWorldTransform(ctx, canvas, view)
   for (const stroke of strokes) {
     const pts = stroke.points
     if (pts.length === 1) {
@@ -430,6 +429,66 @@ interface ViewState {
 
 const MIN_SCALE = 0.5
 const MAX_SCALE = 4
+
+function applyPaperView(
+  element: HTMLDivElement,
+  pattern: 'lined' | 'dotted' | 'cornell' | 'blank',
+  view: ViewState,
+  contentHeight: number,
+) {
+  if (pattern === 'cornell') {
+    element.style.inset = '0 auto auto 0'
+    element.style.width = '100%'
+    element.style.height = `${contentHeight}px`
+    element.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.scale})`
+    element.style.removeProperty('background-size')
+    element.style.removeProperty('background-position')
+    return
+  }
+
+  // Blankes, liniertes und gepunktetes Papier bedecken immer den Viewport. Das Muster selbst
+  // wird verschoben/skaliert, nicht sein Element; dadurch koennen nie ungemusterte Raender
+  // ausserhalb eines endlichen Blatts sichtbar werden.
+  element.style.inset = '0'
+  element.style.width = '100%'
+  element.style.height = '100%'
+  element.style.transform = 'none'
+  if (pattern === 'lined' || pattern === 'dotted') {
+    const style = paperPatternViewportStyle(view, pattern)
+    element.style.backgroundSize = pattern === 'lined' ? `100% ${style.sizeY}px` : `${style.sizeX}px ${style.sizeY}px`
+    element.style.backgroundPosition = `${style.positionX}px ${style.positionY}px`
+    element.style.setProperty('--pattern-mark-size', `${style.markSize}px`)
+  } else {
+    element.style.removeProperty('background-size')
+    element.style.removeProperty('background-position')
+    element.style.removeProperty('--pattern-mark-size')
+  }
+}
+
+function loadSavedCanvasView(storageKey: string | undefined): ViewState {
+  if (!storageKey) return { scale: 1, x: 0, y: 0 }
+  try {
+    const parsed = JSON.parse(localStorage.getItem(`notiz-canvas-view:${storageKey}`) ?? '') as Partial<ViewState>
+    if ([parsed.scale, parsed.x, parsed.y].every(Number.isFinite)) {
+      return {
+        scale: Math.min(MAX_SCALE, Math.max(MIN_SCALE, parsed.scale as number)),
+        x: parsed.x as number,
+        y: parsed.y as number,
+      }
+    }
+  } catch {
+    // Fehlender oder alter/beschaedigter lokaler Kamerastand: sicher am Ursprung starten.
+  }
+  return { scale: 1, x: 0, y: 0 }
+}
+
+function saveCanvasView(storageKey: string, view: ViewState) {
+  try {
+    localStorage.setItem(`notiz-canvas-view:${storageKey}`, JSON.stringify(view))
+  } catch {
+    // Die Zeichenflaeche bleibt auch ohne lokalen Speicher voll funktionsfaehig.
+  }
+}
 
 interface PinchState {
   startDist: number
@@ -891,7 +950,7 @@ function TextBlockItem({
     if (!best) return { position, guide: null }
     const parsedTargetTop = Number.parseFloat(best.target.style.top)
     const targetTop = Number.isFinite(parsedTargetTop) ? parsedTargetTop : best.target.offsetTop
-    const guideTop = Math.max(0, Math.min(position.y, targetTop) - 12)
+    const guideTop = Math.min(position.y, targetTop) - 12
     const guideBottom = Math.max(position.y + cardHeight, targetTop + best.target.offsetHeight) + 12
     return {
       position: { x: best.snappedX, y: position.y },
@@ -1401,6 +1460,7 @@ function TextBlockItem({
 }
 
 interface Props {
+  viewStorageKey?: string
   initialStrokes: Stroke[]
   onChange: (strokes: Stroke[]) => void
   background: PageBackground
@@ -1450,6 +1510,7 @@ interface Props {
 }
 
 export default function DrawingCanvas({
+  viewStorageKey,
   initialStrokes,
   onChange,
   background,
@@ -1481,6 +1542,7 @@ export default function DrawingCanvas({
 }: Props) {
   const darkPaper = background.startsWith('dark-')
   const paperPattern = (darkPaper ? background.slice(5) : background) as 'lined' | 'dotted' | 'cornell' | 'blank'
+  const paperPatternRef = useRef(paperPattern)
   const darkPaperRef = useRef(darkPaper)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
@@ -1503,10 +1565,12 @@ export default function DrawingCanvas({
 
   // Zwei-Finger-Zoom/Pan: eigener Zustand getrennt von der Zeichen-Logik. fingersRef verfolgt
   // aktive Finger-Kontakte (nicht Stift), pinchStateRef nur waehrend einer aktiven Zoom-Geste.
-  const viewRef = useRef<ViewState>({ scale: 1, x: 0, y: 0 })
+  const viewRef = useRef<ViewState>(loadSavedCanvasView(viewStorageKey))
+  const viewSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const fingersRef = useRef<Map<number, { x: number; y: number }>>(new Map())
   const pinchStateRef = useRef<PinchState | null>(null)
   const resetZoomRef = useRef<() => void>(() => {})
+  const returnToOriginRef = useRef<() => void>(() => {})
 
   const [color, setColor] = useState(COLORS[0])
   const [baseWidth, setBaseWidth] = useState(3)
@@ -1514,7 +1578,8 @@ export default function DrawingCanvas({
   const [mousePenEnabled, setMousePenEnabled] = useState(false)
   const mousePenEnabledRef = useRef(false)
   const [strokeCount, setStrokeCount] = useState(initialStrokes.length)
-  const [zoomPercent, setZoomPercent] = useState(100)
+  const [zoomPercent, setZoomPercent] = useState(() => Math.round(viewRef.current.scale * 100))
+  const [awayFromOrigin, setAwayFromOrigin] = useState(() => Math.abs(viewRef.current.x) > 1 || Math.abs(viewRef.current.y) > 1)
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
   const [editingTextBlockId, setEditingTextBlockId] = useState<string | null>(null)
   const [textBlockAlignmentGuide, setTextBlockAlignmentGuide] = useState<TextBlockAlignmentGuide | null>(null)
@@ -1582,7 +1647,6 @@ export default function DrawingCanvas({
   // spaeter genau auf contentHeight unten waechst) - Basis fuer "wie hoch ist die Flaeche
   // mindestens, auch ohne PDF" (siehe contentHeight weiter unten).
   const [wrapHeight, setWrapHeight] = useState(0)
-  const [canvasExtensionCount, setCanvasExtensionCount] = useState(0)
   useLayoutEffect(() => {
     const wrap = wrapRef.current
     if (!wrap) return
@@ -1592,16 +1656,13 @@ export default function DrawingCanvas({
     return () => ro.disconnect()
   }, [])
 
-  // Gesamthoehe der Zeichenflaeche: Unter dem eigentlichen Inhalt bleibt mindestens eine weitere
-  // Bildschirmhoehe als echter Arbeitsbereich. Naehert sich der Nutzer dessen Ende, erhoeht
-  // applyView canvasExtensionCount und erzeugt dadurch fortlaufend neues, beschreibbares Papier.
+  // Die Hoehe bleibt fuer endliche Objekte wie PDFs und das Cornell-Blatt relevant. Freie
+  // Notizen selbst werden viewportbasiert gerendert und brauchen keine kuenstlich wachsende
+  // DOM-Flaeche mehr.
   const pdfLayout = computePdfPageLayout(pdfPages, canvasWidth)
   const pdfContentHeight = pdfLayout.reduce((bottom, page) => Math.max(bottom, page.top + page.height), 0)
-  // Nach erneutem Oeffnen ist canvasExtensionCount wieder 0. Die Mindesthoehe deshalb auch aus
-  // den tatsaechlich gespeicherten Inhalten ableiten, damit weit unten liegende Elemente sofort
-  // erreichbar bleiben. PDF-gebundene Striche speichern y relativ zu ihrer PDF-Seite (0-1) und
-  // duerfen hier nicht als absolute Dokumentkoordinate zaehlen; sie sind bereits vollstaendig in
-  // pdfContentHeight enthalten.
+  // Die Mindesthoehe aus gespeicherten Inhalten ableiten, damit endliche Ebenen weit unten
+  // liegende PDFs/Elemente weiterhin einschliessen.
   const deepestStrokeY = initialStrokes.reduce(
     (deepest, stroke) => (stroke.pdfAnchor ? deepest : stroke.points.reduce((maxY, point) => Math.max(maxY, point.y), deepest)),
     0,
@@ -1609,16 +1670,17 @@ export default function DrawingCanvas({
   const deepestTaskY = tasks.reduce((deepest, task) => Math.max(deepest, task.y), 0)
   const deepestTextBlockY = textBlocks.reduce((deepest, block) => Math.max(deepest, block.y), 0)
   const persistedContentBottom = Math.max(deepestStrokeY, deepestTaskY, deepestTextBlockY)
-  const contentHeight = Math.max(wrapHeight, pdfContentHeight, persistedContentBottom) + wrapHeight * (canvasExtensionCount + 1)
+  const contentHeight = Math.max(wrapHeight, pdfContentHeight, persistedContentBottom) + wrapHeight
   const contentHeightStyle = contentHeight > 0 ? `${contentHeight}px` : undefined
   // Fuer den Touch/Wheel-Mount-Effekt (dort sind nur Refs sicher aktuell, siehe
   // canvasWidthRef/colorRef-Muster) - applyView braucht die aktuelle Inhaltshoehe, um Pan/Zoom
   // auf den tatsaechlichen Inhalt zu begrenzen (siehe clampPan dort).
   const contentHeightRef = useRef(contentHeight)
-  const extensionRequestedAtHeightRef = useRef<number | null>(null)
   useEffect(() => {
     contentHeightRef.current = contentHeight
-  }, [contentHeight])
+    paperPatternRef.current = paperPattern
+    if (backgroundRef.current) applyPaperView(backgroundRef.current, paperPattern, viewRef.current, contentHeight)
+  }, [contentHeight, paperPattern])
 
   // Refs fuer die Striche-PDF-Bindung, gebraucht im Mount-Effekt weiter unten (dort sind nur
   // Refs sicher aktuell, siehe colorRef/baseWidthRef-Muster) und in redrawCanvas.
@@ -1785,7 +1847,7 @@ export default function DrawingCanvas({
   function redrawCanvas() {
     const canvas = canvasRef.current
     const ctx = ctxRef.current
-    if (!canvas || !ctx) return
+    if (!canvas || !ctx || !widthSettledRef.current) return
     const width = canvasWidthRef.current
     const pages = pdfPagesRef.current
     const offset = dragOffsetRef.current
@@ -1799,7 +1861,7 @@ export default function DrawingCanvas({
         selected.has(idx) ? { ...s, points: s.points.map((p) => ({ ...p, x: p.x + offset.dx, y: p.y + offset.dy })) } : s,
       )
     }
-    redrawAll(ctx, canvas.clientWidth, canvas.clientHeight, drawable, darkPaperRef.current)
+    redrawAll(ctx, canvas, drawable, viewRef.current, darkPaperRef.current)
 
     if (lassoGestureRef.current === 'drawing') {
       drawDashedPath(ctx, lassoPathRef.current)
@@ -1958,8 +2020,8 @@ export default function DrawingCanvas({
       canvas!.height = clientHeight * dpr
       const ctx = canvas!.getContext('2d')
       if (!ctx) return
-      ctx.scale(dpr, dpr)
       ctxRef.current = ctx
+      setCanvasWorldTransform(ctx, canvas!, viewRef.current)
       // Bei JEDER Groessenaenderung (nicht nur beim ersten Settle) neu zeichnen - PDF-gebundene
       // Striche werden dabei ueber toDrawableStrokes frisch aus der neuen Breite abgeleitet
       // (siehe redrawCanvas), bleiben also auch nach spaeteren Resizes/Rotationen exakt auf der
@@ -1991,66 +2053,40 @@ export default function DrawingCanvas({
     const resizeObserver = new ResizeObserver(() => resize())
     resizeObserver.observe(canvas)
 
-    // Zoom/Pan wird rein per CSS-Transform auf Hintergrund+Canvas dargestellt (das Overlay,
-    // also die Touch-Zielflaeche, bleibt unveraendert auf voller Groesse) - die Striche selbst
-    // bleiben in unskaliertem Koordinatenraum gespeichert, nur die Darstellung skaliert.
-    //
-    // Pan/Zoom war bisher komplett unbegrenzt (nur die Skalierung selbst wurde auf
-    // MIN_SCALE/MAX_SCALE geclampt) - normales Scrollen (siehe onWheel unten) konnte den
-    // Inhalt beliebig weit aus dem sichtbaren Bereich schieben. Dahinter blieb nur die
-    // einfarbige Papierfarbe von .drawing-canvas-wrap sichtbar (siehe CSS), die exakt der
-    // Hintergrundfarbe von .drawing-background entspricht - optisch nicht von "Papiermuster
-    // fehlt" zu unterscheiden. Das war die eigentliche Ursache des lange diagnostizierten
-    // Hintergrund-Bugs (reproduzierbar auch am PC/Chromium, nicht WebKit-spezifisch): "Zoomen
-    // und zurueck auf 100%" hat ihn nur scheinbar behoben, weil resetZoom() Pan UND Zoom auf
-    // (0,0)/100% zuruecksetzt und man dadurch wieder im tatsaechlichen Inhalt landet.
+    // Freie Notizen verwenden eine unbegrenzte Kamera. Das Zeichen-Canvas bleibt dabei so gross
+    // wie der Viewport und wird mit der Welttransformation neu gezeichnet; Hintergrundmuster
+    // werden prozedural ueber den Viewport gelegt. Es gibt deshalb keine physische Papierkante.
     function clampPan(scale: number, x: number, y: number) {
-      const rect = overlay!.getBoundingClientRect()
-      const viewW = rect.width
-      const viewH = rect.height
-      // Waehrend des ersten Layouts (Breite/Hoehe noch 0) nicht clampen, sonst wuerde x/y auf 0
-      // gezwungen, bevor ueberhaupt eine sinnvolle Groesse bekannt ist.
-      if (viewW <= 0 || viewH <= 0) return { x, y }
-
-      const contentW = canvasWidthRef.current * scale
-      const contentH = contentHeightRef.current * scale
-
-      const minX = contentW <= viewW ? 0 : viewW - contentW
-      const maxX = contentW <= viewW ? viewW - contentW : 0
-      const minY = contentH <= viewH ? 0 : viewH - contentH
-      const maxY = contentH <= viewH ? viewH - contentH : 0
-
-      return { x: Math.min(maxX, Math.max(minX, x)), y: Math.min(maxY, Math.max(minY, y)) }
+      return panInfiniteCanvas({ scale, x, y })
     }
 
     function applyView(scale: number, x: number, y: number) {
       const clamped = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale))
       const { x: clampedX, y: clampedY } = clampPan(clamped, x, y)
       viewRef.current = { scale: clamped, x: clampedX, y: clampedY }
+      setAwayFromOrigin(Math.abs(clampedX) > 1 || Math.abs(clampedY) > 1)
+      if (viewStorageKey) {
+        if (viewSaveTimerRef.current) clearTimeout(viewSaveTimerRef.current)
+        viewSaveTimerRef.current = setTimeout(() => {
+          saveCanvasView(viewStorageKey, viewRef.current)
+          viewSaveTimerRef.current = null
+        }, 180)
+      }
       const transform = `translate(${clampedX}px, ${clampedY}px) scale(${clamped})`
-      canvas!.style.transform = transform
-      background!.style.transform = transform
+      applyPaperView(background!, paperPatternRef.current, viewRef.current, contentHeightRef.current)
       if (taskLayerRef.current) taskLayerRef.current.style.transform = transform
       if (pdfLayerRef.current) pdfLayerRef.current.style.transform = transform
-
-      // Sobald nur noch etwa ein Drittel des sichtbaren Bereichs bis zum Papierende uebrig ist,
-      // eine weitere Bildschirmhoehe anhaengen. Pro aktueller Hoehe nur einmal anfordern, damit
-      // mehrere Wheel-/Touch-Events vor dem naechsten React-Render nicht mehrfach verlaengern.
-      const viewHeight = overlay!.getBoundingClientRect().height
-      const currentHeight = contentHeightRef.current
-      const visibleBottom = (viewHeight - clampedY) / clamped
-      const extensionThreshold = viewHeight / clamped / 3
-      if (currentHeight - visibleBottom <= extensionThreshold && extensionRequestedAtHeightRef.current !== currentHeight) {
-        extensionRequestedAtHeightRef.current = currentHeight
-        setCanvasExtensionCount((count) => count + 1)
-      }
+      redrawCanvas()
     }
 
     function resetZoom() {
-      applyView(1, 0, 0)
+      const rect = overlay!.getBoundingClientRect()
+      const next = zoomAroundPoint(viewRef.current, 1, { x: rect.width / 2, y: rect.height / 2 })
+      applyView(next.scale, next.x, next.y)
       setZoomPercent(100)
     }
     resetZoomRef.current = resetZoom
+    returnToOriginRef.current = () => applyView(viewRef.current.scale, 0, 0)
 
     function pointFrom(clientX: number, clientY: number, pressure: number): Point {
       const rect = overlay!.getBoundingClientRect()
@@ -2359,6 +2395,11 @@ export default function DrawingCanvas({
       window.removeEventListener('mousemove', onMouseMove)
       window.removeEventListener('mouseup', onMouseUp)
       wrap.removeEventListener('wheel', onWheel)
+      if (viewSaveTimerRef.current) {
+        clearTimeout(viewSaveTimerRef.current)
+        if (viewStorageKey) saveCanvasView(viewStorageKey, viewRef.current)
+        viewSaveTimerRef.current = null
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -2511,7 +2552,10 @@ export default function DrawingCanvas({
           </button>
         )}
         {zoomPercent !== 100 && (
-          <button onClick={() => resetZoomRef.current()}>Zoom {zoomPercent}% zurücksetzen</button>
+          <button onClick={() => resetZoomRef.current()}>Zoom {zoomPercent}% auf 100%</button>
+        )}
+        {awayFromOrigin && (
+          <button onClick={() => returnToOriginRef.current()}>Zum Ursprung</button>
         )}
         {toolbarExtra}
         <div className="drawing-status" ref={statusRef}>
@@ -2523,20 +2567,9 @@ export default function DrawingCanvas({
             den Compositor-Layer eines Canvas-Elements beim Klassenwechsel manchmal nicht
             zuverlässig (Papiermuster blieb nach "Leer" -> "Liniert" bis zum Neuladen falsch). */}
         <div
-          key={background}
           ref={backgroundRef}
-          className="drawing-background"
-          style={{
-            height: contentHeightStyle,
-            transform: `translate(${viewRef.current.x}px, ${viewRef.current.y}px) scale(${viewRef.current.scale})`,
-          }}
+          className={`drawing-background bg-${paperPattern}`}
         >
-          {(paperPattern === 'lined' || paperPattern === 'dotted') &&
-            Array.from({ length: Math.max(1, Math.ceil(contentHeight / PATTERN_CHUNK_HEIGHT)) }).map((_, i) => {
-              const top = i * PATTERN_CHUNK_HEIGHT
-              const height = Math.min(PATTERN_CHUNK_HEIGHT, contentHeight - top)
-              return <div key={i} className={`drawing-background-chunk bg-${paperPattern}`} style={{ top, height }} />
-            })}
           {paperPattern === 'cornell' && (
             <div className="cornell-page">
               <div className="cornell-title">{title || 'Ohne Titel'}</div>
@@ -2563,7 +2596,14 @@ export default function DrawingCanvas({
             bleibt. pointer-events:none (siehe CSS) - die Seiten sind reine Anzeige, nicht
             verschiebbar, Tipp-/Zeichen-Eingaben erreichen ungehindert das Overlay darunter. */}
         {pdfPages.length > 0 && (
-          <div ref={pdfLayerRef} className="pdf-layer" style={{ height: contentHeightStyle }}>
+          <div
+            ref={pdfLayerRef}
+            className="pdf-layer"
+            style={{
+              height: contentHeightStyle,
+              transform: `translate(${viewRef.current.x}px, ${viewRef.current.y}px) scale(${viewRef.current.scale})`,
+            }}
+          >
             {pdfPages.map((p, i) => (
               <PdfPageHost key={i} canvas={p.canvas} style={{ position: "absolute", left: pdfLayout[i].left, top: pdfLayout[i].top, width: pdfLayout[i].width, height: pdfLayout[i].height }} />
             ))}
@@ -2573,7 +2613,6 @@ export default function DrawingCanvas({
         <canvas
           ref={canvasRef}
           className="drawing-canvas"
-          style={{ height: contentHeightStyle }}
           draggable={false}
           onDragStart={(e) => e.preventDefault()}
         />
@@ -2584,14 +2623,17 @@ export default function DrawingCanvas({
             Der Layer selbst ist nur im Aufgaben-Modus antippbar (pointer-events), einzelne
             Task-Bloecke bleiben aber immer bedienbar. */}
         <div
-          ref={taskLayerRef}
           className={`task-layer${taskMode ? ' task-mode' : ''}${textBlockMode ? ' text-mode' : ''}`}
-          style={{
-            height: contentHeightStyle,
-            transform: `translate(${viewRef.current.x}px, ${viewRef.current.y}px) scale(${viewRef.current.scale})`,
-          }}
           onClick={handleTaskLayerClick}
         >
+          <div
+            ref={taskLayerRef}
+            className="task-world-layer"
+            style={{
+              height: contentHeightStyle,
+              transform: `translate(${viewRef.current.x}px, ${viewRef.current.y}px) scale(${viewRef.current.scale})`,
+            }}
+          >
           {pdfEditing && onPdfPlacementChange && pdfPrintouts.map((printout) => {
             const firstPageIndex = pdfPages.findIndex((page) => page.printoutId === printout.id && page.pageNumber === 1)
             const box = firstPageIndex >= 0 ? pdfLayout[firstPageIndex] : null
@@ -2668,6 +2710,7 @@ export default function DrawingCanvas({
               onAlignmentGuideChange={setTextBlockAlignmentGuide}
             />
           ))}
+          </div>
         </div>
       </div>
       {pdfEditing && selectedPdf && selectedPlacement && onPdfPlacementChange && (
