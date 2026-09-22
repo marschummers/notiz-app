@@ -119,6 +119,22 @@
   color: var(--text-faint);
 }
 
+.central-task-title.editable {
+  cursor: text;
+}
+
+.quick-task-edit {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 5px 7px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-control);
+  outline: none;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
 .central-task-source {
   font-size: 12px;
   color: var(--text-faint);
@@ -149,6 +165,21 @@
 .quick-task-delete:hover {
   background: var(--bg-hover, var(--border-soft));
   color: var(--text);
+}
+
+.completed-toggle {
+  margin-top: 10px;
+  padding: 7px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.completed-toggle:hover {
+  text-decoration: underline;
 }
 
 @media (max-width: 560px) {

@@ -1,8 +1,8 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
 import { toggleTask } from '../lib/actions'
-import { createQuickTask, deleteQuickTask, toggleQuickTask } from '../lib/quickTaskActions'
+import { createQuickTask, deleteExpiredCompletedQuickTasks, deleteQuickTask, toggleQuickTask, updateQuickTaskText } from '../lib/quickTaskActions'
 import { updateProjectTask } from '../lib/projectActions'
 import { projectDisplayName } from '../lib/projectDisplay'
 import type { ProjectTask, QuickTask, Task } from '../db/types'
@@ -18,6 +18,9 @@ interface Props {
 
 export default function TasksView({ sidebarOpen, onToggleSidebar, onOpenPage, onOpenProject, userId }: Props) {
   const [draft, setDraft] = useState('')
+  const [editingQuickTaskId, setEditingQuickTaskId] = useState<string>()
+  const [editingText, setEditingText] = useState('')
+  const [showAllCompleted, setShowAllCompleted] = useState(false)
   const tasks = useLiveQuery(() => db.tasks.filter((task) => !task.deletedAt).toArray(), [])
   const quickTasks = useLiveQuery(() => db.quickTasks.filter((task) => !task.deletedAt).toArray(), [])
   const projectTasks = useLiveQuery(
@@ -37,11 +40,37 @@ export default function TasksView({ sidebarOpen, onToggleSidebar, onOpenPage, on
   const isCompleted = (item: (typeof allTasks)[number]) => item.kind === 'project' ? item.task.status === 'completed' : item.task.completed
   const open = allTasks.filter((item) => !isCompleted(item)).sort((a, b) => b.task.updatedAt - a.task.updatedAt)
   const done = allTasks.filter(isCompleted).sort((a, b) => b.task.updatedAt - a.task.updatedAt)
+  const visibleDone = showAllCompleted ? done : done.slice(0, 3)
+
+  useEffect(() => {
+    void deleteExpiredCompletedQuickTasks()
+  }, [])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (await createQuickTask(draft)) setDraft('')
   }
+
+  function startEditingQuickTask(task: QuickTask) {
+    setEditingQuickTaskId(task.id)
+    setEditingText(task.text)
+  }
+
+  async function saveQuickTaskEdit() {
+    if (!editingQuickTaskId) return
+    if (await updateQuickTaskText(editingQuickTaskId, editingText)) setEditingQuickTaskId(undefined)
+  }
+
+  function handleQuickTaskEditKey(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      void saveQuickTaskEdit()
+    } else if (event.key === 'Escape') {
+      setEditingQuickTaskId(undefined)
+    }
+  }
+
+  const formatCreatedAt = (createdAt: number) => new Intl.DateTimeFormat('de-DE').format(createdAt)
 
   function renderPageTask(task: Task) {
     return (
@@ -71,8 +100,25 @@ export default function TasksView({ sidebarOpen, onToggleSidebar, onOpenPage, on
           aria-label={task.completed ? 'Aufgabe wieder öffnen' : 'Aufgabe erledigen'}
         />
         <div className="central-task-text">
-          <div className={task.completed ? 'central-task-title completed' : 'central-task-title'}>{task.text}</div>
-          <div className="central-task-source">Spontan</div>
+          {editingQuickTaskId === task.id ? (
+            <input
+              className="quick-task-edit"
+              value={editingText}
+              onChange={(event) => setEditingText(event.target.value)}
+              onBlur={() => void saveQuickTaskEdit()}
+              onKeyDown={handleQuickTaskEditKey}
+              onClick={(event) => event.stopPropagation()}
+              aria-label="Spontane Aufgabe bearbeiten"
+              autoFocus
+            />
+          ) : (
+            <div
+              className={task.completed ? 'central-task-title completed editable' : 'central-task-title editable'}
+              onClick={() => startEditingQuickTask(task)}
+              title="Zum Bearbeiten anklicken"
+            >{task.text}</div>
+          )}
+          <div className="central-task-source">Spontan · Erstellt am {formatCreatedAt(task.createdAt)}</div>
         </div>
         <button
           type="button"
@@ -130,7 +176,12 @@ export default function TasksView({ sidebarOpen, onToggleSidebar, onOpenPage, on
       <div className="task-list">{open.map(renderTask)}</div>
       <h2>Erledigt</h2>
       {done.length === 0 && <p className="tasks-hint">Noch nichts erledigt.</p>}
-      <div className="task-list">{done.map(renderTask)}</div>
+      <div className="task-list">{visibleDone.map(renderTask)}</div>
+      {done.length > 3 && (
+        <button className="completed-toggle" type="button" onClick={() => setShowAllCompleted((shown) => !shown)}>
+          {showAllCompleted ? 'Weniger anzeigen' : `${done.length - 3} weitere erledigte anzeigen`}
+        </button>
+      )}
     </div>
   )
 }
